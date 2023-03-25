@@ -13,3 +13,4 @@ staging repo for an GL-inet integration for homeassistant
 ## TODO
 - [ ] Auto detect IP for config flow
 - [ ] Add switches for wireguard and open vpn (client and server)
+- [ ] Support HACS
