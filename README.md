@@ -18,3 +18,6 @@ staging repo for an GL-inet integration for homeassistant
 ## Tested on
 - Beryl MT3000
 - Convexa B1300
+
+## Depends on
+https://github.com/HarvsG/gli_py
