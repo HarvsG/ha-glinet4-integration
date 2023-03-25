@@ -15,6 +15,7 @@ staging repo for an GL-inet integration for homeassistant
 - [ ] Add switches for wireguard and open vpn (client and server)
 - [ ] Support HACS
 - [ ] Allow deletion of entities
+- [ ] Add tests
 
 ## Tested on
 - Beryl MT3000
