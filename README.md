@@ -14,3 +14,7 @@ staging repo for an GL-inet integration for homeassistant
 - [ ] Auto detect IP for config flow
 - [ ] Add switches for wireguard and open vpn (client and server)
 - [ ] Support HACS
+
+## Tested on
+- Beryl MT3000
+- Convexa B1300
