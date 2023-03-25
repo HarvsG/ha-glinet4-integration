@@ -64,7 +64,7 @@ class TestingHub:
     async def authenticate(self, password: str) -> bool:
         """Test if we can authenticate with the host."""
         try:
-            await self.router.async_login(password)
+            await self.router.login(password)
             res = await self.router.router_mac()
             self.router_mac = res["factorymac"]
         except ConnectionRefusedError:

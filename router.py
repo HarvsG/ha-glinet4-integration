@@ -160,7 +160,7 @@ class GLinetRouter:
     async def renew_token(self):
         """Attempt to get a new token."""
         try:
-            await self._api.async_login(self._entry.data[CONF_PASSWORD])
+            await self._api.login(self._entry.data[CONF_PASSWORD])
             self._entry.data[CONF_API_TOKEN] = self._api.token
             _LOGGER.warning(
                 "GL-inet router %s token was renewed",
@@ -185,7 +185,7 @@ class GLinetRouter:
         try:
             if self._token_error:
                 await self.renew_token()
-            wrt_devices = await self._api.async_connected_clients()
+            wrt_devices = await self._api.connected_clients()
         except TimeoutError as exc:
             if not self._connect_error:
                 self._connect_error = True

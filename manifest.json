@@ -3,7 +3,7 @@
   "name": "GL-inet",
   "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/glinet",
-  "requirements": ["gli_py==0.0.13"],
+  "requirements": ["gli_py==0.0.14"],
   "version": "0.0.2",
   "ssdp": [],
   "zeroconf": [],
