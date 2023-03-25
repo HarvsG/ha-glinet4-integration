@@ -1,5 +1,5 @@
 # ha-glinet-integration
-staging repo for an GL-inet intergration for homeassistant
+staging repo for an GL-inet integration for homeassistant
 
 ## Instanll
 1. Create a new folder in `config/custom_components` called glinet
