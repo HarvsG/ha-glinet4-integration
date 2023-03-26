@@ -9,6 +9,7 @@ staging repo for an GL-inet integration for homeassistant
 
 ## Features
 - Device tracker for devices connected directly or indirectly to a Gl-inet router
+- Control a configured wireguard client with a switch
 
 ## TODO
 - [ ] Auto detect router IP for config flow - assume it is the default gateway, test an enpoint that doesn't require auth (/model or /hello), fallback to default `192.168.8.1`
