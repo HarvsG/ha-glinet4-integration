@@ -35,6 +35,7 @@ staging repo for an GL-inet integration for homeassistant
   - Sensor for firmware version (/hello)
   - Diagnostic sensors for stats in (/router/status) such as uptime, LAN IP and memory useage
 - [ ] Consider features
+  - Making changes to the VPN client policies would be cool to automate switching on/off VPN use per device in automations. Useful for bypassing geofilters for example
   - Firmware upgrades https://dev.gl-inet.com/api/#api-firmware (should have warnings)
   - Switch for LED control https://dev.gl-inet.com/api/#api-cloud-PostLedEnable
   - Router reboot button (/router/reboot) might be useful for some automations
