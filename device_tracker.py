@@ -112,6 +112,7 @@ class GLinetDevice(ScannerEntity):
         data: DeviceInfo = {
             "connections": {(CONNECTION_NETWORK_MAC, self._device.mac)},
             #TODO add router as a via device
+            #TODO add mac to device info
         }
         if self._device.name:
             data["default_name"] = self._device.name
