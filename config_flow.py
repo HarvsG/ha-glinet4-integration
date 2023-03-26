@@ -49,6 +49,7 @@ class TestingHub:
         try:
             res = await self.router.router_model()
             self.router_model = res["model"]
+            # TODO, on success we can/should probably store some immutable device info in the class.
             return True
         except ConnectionError:
             _LOGGER.error(
@@ -67,6 +68,7 @@ class TestingHub:
             await self.router.login(password)
             res = await self.router.router_mac()
             self.router_mac = res["factorymac"]
+            # TODO, on success we can/should probably store some immutable device info in the class.
         except ConnectionRefusedError:
             _LOGGER.error("Failed to authenticate with Gl-inet router during testing")
         return self.router.logged_in
@@ -86,7 +88,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     # )
 
     hub = TestingHub(data[CONF_HOST])
-
+    #TODO do we need more verbosity in errors here?
     if not await hub.connect():
         raise CannotConnect
 
@@ -100,6 +102,8 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
     # Return info that you want to store in the config entry.
     return {
+        # TODO, on success we can/should probably store some immutable device info in the class.
+        # TODO should we be using inbuilt literals and consts here?
         "title": "GL-inet " + hub.router_model,
         "mac": hub.router_mac,
         "data": {
@@ -138,9 +142,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
         else:
             unique_id: str = format_mac(info["mac"])
-            await self.async_set_unique_id(unique_id)
+            await self.async_set_unique_id(unique_id) #TODO are we creating a config entry here, should we be using this config entry to add the data to?
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(title=info["title"], data=info["data"])
+            return self.async_create_entry(title=info["title"], data=info["data"]) #TODO, are we creating a second config entry here?
 
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors

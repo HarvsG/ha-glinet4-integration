@@ -105,6 +105,7 @@ class GLinetRouter:
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize a GLinet router."""
+        # TODO, cleanup this class
         self.hass: HomeAssistant = hass
         self._entry: ConfigEntry = entry
 
@@ -117,7 +118,7 @@ class GLinetRouter:
         # self._devices should
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
-        self._on_close: list[Callable] = []
+        self._on_close: list[Callable] = [] # TODO what does this actually do?
         self._mac = ""
         self._model = ""
         self._options: dict = {}
@@ -139,8 +140,7 @@ class GLinetRouter:
                 exc,
             )
             raise ConfigEntryNotReady from exc
-
-        entity_registry = await self.hass.helpers.entity_registry.async_get_registry()
+        entity_registry = self.hass.helpers.entity_registry.async_get(self.hass)
         track_entries: list[
             RegistryEntry
         ] = self.hass.helpers.entity_registry.async_entries_for_config_entry(
@@ -157,12 +157,18 @@ class GLinetRouter:
         # TODO returns mac, factorymac, and remotemac
         # factorymac probably better for unique ID
         # But mac prbably better for device connection
+        # TODO error handling
+        await self.renew_token() #TODO should we be renewing token here, or just checking token validity?
         res= await self._api.router_mac()
         self._mac = res['factorymac']
         res = await self._api.router_model()
         self._model = res ['model']
         await self.update_all()
 
+        # TODO here we ask this to update all on the same scan interval
+        # but in future some sensors need to update less regularly than
+        # others
+        #TODO clarify what wrapping in async_on_close() achieves
         self.async_on_close(
             async_track_time_interval(self.hass, self.update_all, SCAN_INTERVAL)
         )
@@ -171,7 +177,7 @@ class GLinetRouter:
         """Attempt to get a new token."""
         try:
             await self._api.login(self._entry.data[CONF_PASSWORD])
-            self._entry.data[CONF_API_TOKEN] = self._api.token
+            self._entry.data[CONF_API_TOKEN] = self._api.token #TODO this sometimes produces 'mappingproxy' object does not support item assignment
             _LOGGER.warning(
                 "GL-inet router %s token was renewed",
                 self._host,
@@ -290,17 +296,19 @@ class GLinetRouter:
     @callback
     def async_on_close(self, func: CALLBACK_TYPE) -> None:
         """Add a function to call when router is closed."""
+        #TODO better docstring
         self._on_close.append(func)
 
     # @property
     # def device_info(self) -> DeviceInfo:
     #     """Return the device information."""
     #     data: DeviceInfo = {
-    #         "connections": {(CONNECTION_NETWORK_MAC, self._mac)}, #TODO implement using mac rather than factorymac
-    #         "identifiers": {(DOMAIN, "GL-inet")}, #TODO identifier should be unique within domain, this isn't ? use factorymac
-    #         "name": self._host, #TODO name is
-    #         "model": self._model,
-    #         "manufacturer": "GL-inet",
+    #       "connections": {(CONNECTION_NETWORK_MAC, self._router._mac)},#TODO implement using mac rather than factorymac
+    #       "identifiers": {(DOMAIN, self._router._mac)}, #TODO identifier should be unique within domain, this isn't ? use factorymac
+    #       "name": f'GL-inet {self._router._model.upper()}',
+    #       "model": self._router._model,
+    #       "manufacturer": "GL-inet",
+    # TODO add more fields like https://developers.home-assistant.io/docs/device_registry_index/#device-properties
     #     }
     #     return data
 

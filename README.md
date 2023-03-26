@@ -27,6 +27,7 @@ staging repo for an GL-inet integration for homeassistant
 - [ ] Allow deletion of unhelpful device tracker devices/entities, [docs](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices), [example](https://github.com/home-assistant/core/pull/73293/commits/9c253c6072cf60f92228051d918fd550d38b6ac3)
 - [ ] Clean, comment and refactor code
 - [ ] Add tests - will need to mock the API
+- [ ] Allow reconfig for password changes - currently have to delete and re-add integration
 - [ ] Add features:
   - Upload/Download sensors
   - Internet reachable sensors (remember that API timesout when internet not reachable)
@@ -39,10 +40,10 @@ staging repo for an GL-inet integration for homeassistant
   - Router reboot button (/router/reboot) might be useful for some automations
   - ?custom ping sensor(s)
   - Tethering controls:https://dev.gl-inet.com/api/#api-tethering
-  - Modem control (useful for failover internet automations
-  - ?SMS control - maybe a notify platform
+  - Modem control (useful for failover internet automations)
+  - ?SMS control - maybe a notify platform [see example](https://github.com/home-assistant/core/blob/dev/homeassistant/components/sms/notify.py)
   - Explore using the smarthome BLE endpoints: https://dev.gl-inet.com/api/#api-SmartHome
-  
+
 
 ## Tested on
 - Beryl MT3000
