@@ -36,10 +36,6 @@ async def async_setup_entry(
             router._wireguard_client_name
             )
         ]
-        #TODO delte me
-        _LOGGER.warning(
-                "Wireguard switch entity adding",
-            )
         async_add_entities(switches, True)
 
 
@@ -92,7 +88,4 @@ class WireGuardSwitch(SwitchEntity):
             "model": self._router._model,
             "manufacturer": "GL-inet",
         }
-        return data
-
-
         return data

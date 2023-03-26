@@ -42,10 +42,6 @@ _LOGGER = logging.getLogger(__name__)
 def add_entities(router: GLinetRouter, async_add_entities, tracked):
     """Add new tracker entities from the router."""
     new_tracked = []
-    #TODO delte me
-    _LOGGER.warning(
-            "Device tracker checking for entities to add",
-        )
     for mac, device in router.devices.items():
         if mac in tracked:
             continue
@@ -115,10 +111,10 @@ class GLinetDevice(ScannerEntity):
         """Return the device information."""
         data: DeviceInfo = {
             "connections": {(CONNECTION_NETWORK_MAC, self._device.mac)},
+            #TODO add router as a via device
         }
         if self._device.name:
             data["default_name"] = self._device.name
-        #TODO add router as a via device
         return data
 
     @property

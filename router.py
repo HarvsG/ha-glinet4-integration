@@ -277,12 +277,6 @@ class GLinetRouter:
         response = await self._update_platform(self._api.wireguard_client_state)
         self._wireguard_client_connected = response['enable']
         self._wireguard_client_name = response["main_server"]
-        #TODO delte me
-        _LOGGER.warning(
-                "Wireguard state %s for server %s",
-                self._wireguard_client_connected,
-                self._wireguard_client_name
-            )
 
     def update_options(self, new_options: dict) -> bool:
         """Update router options."""
