@@ -1,12 +1,14 @@
 # ha-glinet-integration
+A HomeAssistant custom component for GL-inet routers that uses [their API](https://dev.gl-inet.com/api/).
+
 Working - in alpha, breaking changes very likely
-Contributions welcome, for ideas see the TODO list below or the various TODOs in the code
+Contributions welcome, for ideas see the TODO list below or the various `#TODO`s in the code
 
 ## Features
 - Device tracker for devices connected directly or indirectly to a Gl-inet router
 - Control a configured wireguard client with a switch
 
-## Install
+## Installation
 1. Create a new folder in `config/custom_components` called glinet
 2. Copy manually, or clone the files in this repo into that folder `git clone https://github.com/HarvsG/ha-glinet-integration.git . ` (The `.` at the end is important)
 3. Reboot homeassistant
@@ -18,10 +20,10 @@ Contributions welcome, for ideas see the TODO list below or the various TODOs in
 1. Set up the vscode homeassistant core [dev setup](https://developers.home-assistant.io/docs/development_environment/)
   - Or you could just use a running install of homeassistant (restarts are required for a lot of changes)
 2. Run once to generate directories
-3. create a `config/custom_components/glinet` dir
-4. `git clone https://github.com/HarvsG/ha-glinet-integration.git .`
-5. Note, the vscode git tracker will track the parent repo, but command line git will still work in the dir
-6. You made need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwitten if you rebuild the container
+3. create a `config/custom_components/glinet` directory
+4. `git clone https://github.com/HarvsG/ha-glinet-integration.git . `
+5. Note, the vscode git tracker will track the parent repo (ha core), but command line git will still work within the `glinet` dir
+6. You may need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwitten if you rebuild the container
 
 ## TODO
 - [ ] Auto detect router IP for config flow - assume it is the default gateway, test an enpoint that doesn't require auth (/model or /hello), fallback to default `192.168.8.1`
