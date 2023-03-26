@@ -7,6 +7,14 @@ staging repo for an GL-inet integration for homeassistant
 3. Reboot homeassistant
 4. Add the new Glinet integration under Devices and services
 
+## Dev set up
+1. Set up the vscode homeassistant core [dev setup](https://developers.home-assistant.io/docs/development_environment/)
+2. Run once to generate directories
+3. create a `config/custom_components/glinet` dir
+4. `git clone https://github.com/HarvsG/ha-glinet-integration.git .`
+5. Note, the vscode git tracker will track the parent repo, but command line git will still work in the dir
+6. You made need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwitten if you rebuild the container
+
 ## Features
 - Device tracker for devices connected directly or indirectly to a Gl-inet router
 - Control a configured wireguard client with a switch
