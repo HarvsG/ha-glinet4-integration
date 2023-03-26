@@ -28,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 # TODO adjust the data schema to the data that you need
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_HOST, default="http://192.168.8.1"): str,
+        vol.Required(CONF_HOST, default="http://192.168.8.1"): str, #TODO move these literals into const.py
         vol.Required(CONF_PASSWORD, default="goodlife"): str,
     }
 )
@@ -133,6 +133,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         try:
             info = await validate_input(self.hass, user_input)
+            # TODO would it be sensible to do some checks here, e.g of API version and issue warnings for possibly unsupported versions?
         except CannotConnect:
             errors["base"] = "cannot_connect"
         except InvalidAuth:
@@ -168,7 +169,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Handle options flow."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
-
+        # TODO add options to reconfigure host name and password
         data_schema = vol.Schema(
             {
                 vol.Optional(

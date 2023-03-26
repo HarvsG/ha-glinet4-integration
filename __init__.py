@@ -66,7 +66,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry):
     """Update when config_entry options update."""
-    router = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
+    router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
 
-    if router.update_options(entry.options):
+    if router.update_options(entry.options): #TODO does this ever return True?
         await hass.config_entries.async_reload(entry.entry_id)

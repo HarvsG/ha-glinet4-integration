@@ -119,12 +119,14 @@ class GLinetRouter:
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
         self._on_close: list[Callable] = [] # TODO what does this actually do?
+        # Do we need to implement a close function that calls these like in
+        # https://github.com/home-assistant/core/blob/bec7bbeb9221e9f7c8c0e551ba6dacd6d41e1d97/homeassistant/components/asuswrt/router.py#L415
         self._mac = ""
         self._model = ""
         self._options: dict = {}
         self._options.update(entry.options)
         self._wireguard_client_name: str = ""
-        self._wireguard_client_connected: bool = False
+        self._wireguard_client_connected: bool = False # TODO this should probably be changed to Optional[str] of which client is connected.
 
     async def setup(self) -> None:
         """Set up a GL-inet router."""
@@ -198,7 +200,7 @@ class GLinetRouter:
         """Boilerplate to make update requests to api and handle errors."""
 
 
-        _LOGGER.debug("Checking client connect to GL-inet router %s", self._host)
+        _LOGGER.debug("Checking client can connect to GL-inet router %s", self._host)
         try:
             if self._token_error:
                 await self.renew_token()
@@ -283,15 +285,19 @@ class GLinetRouter:
 
     async def update_wireguard_client_state(self) -> None:
         """Make call to the API to get the wireguard client state"""
+        # TODO as part of changes to switch.py, this probably needs to become
+        # client/server/VPN type agnostic it may be that router/vpn/status
+        # is a better API endpoint to do it in only 1 call
         response = await self._update_platform(self._api.wireguard_client_state)
         self._wireguard_client_connected = response['enable']
         self._wireguard_client_name = response["main_server"]
 
     def update_options(self, new_options: dict) -> bool:
-        """Update router options."""
+        """Update router options. Called in __init__.py"""
+        # TODO better docstring
         req_reload = False
         self._options.update(new_options)
-        return req_reload
+        return req_reload #TODO Does this ever return True?
 
     @callback
     def async_on_close(self, func: CALLBACK_TYPE) -> None:

@@ -54,17 +54,23 @@ def add_entities(router: GLinetRouter, async_add_entities, tracked):
 
 
 class GLinetDevice(ScannerEntity):
-    """Representation of a GLinet device."""
+    """Representation of a GLinet tracked device."""
 
     def __init__(self, router: GLinetRouter, device: ClientDevInfo) -> None:
         """Initialize a GLinet device."""
         self._router = router
         self._device = device
+        self._icon = "mdi:radar" #TODO will need to be replaced with brand logo or similar
+
 
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
         return self._device.mac
+
+    @property
+    def icon(self):
+        return self._icon
 
     @property
     def name(self) -> str:
@@ -112,7 +118,7 @@ class GLinetDevice(ScannerEntity):
         data: DeviceInfo = {
             "connections": {(CONNECTION_NETWORK_MAC, self._device.mac)},
             #TODO add router as a via device
-            #TODO add mac to device info
+            #TODO add hostname, mac and IP to device info
         }
         if self._device.name:
             data["default_name"] = self._device.name

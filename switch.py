@@ -30,6 +30,8 @@ async def async_setup_entry(
     """Set up the Pi-hole switch."""
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
     if router._wireguard_client_name:
+        # TODO detect all configured wireguard, openvpn, shadowsocks and
+        # TOR clients & servers with router/vpn/status? and gen a switch for each
         switches = [
             WireGuardSwitch(
             router,
@@ -42,11 +44,15 @@ async def async_setup_entry(
 
 class WireGuardSwitch(SwitchEntity):
     """Representation of a VPN switch."""
+    # TODO make class, client/server/VPN type agnostic and appreciate >1 can be configured of each
+    # And also appreciates that some combinations of states are not permitted by Gl-inet
+    # such as can't have a server and a client active of the same VPN type, also can't have
+    # multiples of any one type etc etc
     def __init__(self, router: GLinetRouter, name: str) -> None:
         """Initialize a GLinet device."""
         self._router = router
         self._name = name
-    _attr_icon = "mdi:vpn"
+    _attr_icon = "mdi:vpn" #TODO would be better to have MDI style icons for each of the VPN types
 
     @property
     def name(self) -> str:
@@ -61,11 +67,14 @@ class WireGuardSwitch(SwitchEntity):
     @property
     def is_on(self) -> bool:
         """Return if the service is on."""
+        # TODO alter property to account for the fact that users can have
+        # > 1 client configured, but only one connected
         return self._router._wireguard_client_connected
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the service."""
         try:
+            # TODO test what happens if another client is already connected
             await self._router._api.wireguard_client_start(self.name)
             await self._router.update_wireguard_client_state()
         except:
