@@ -154,6 +154,9 @@ class GLinetRouter:
                 )
 
         # Update devices
+        # TODO returns mac, factorymac, and remotemac
+        # factorymac probably better for unique ID
+        # But mac prbably better for device connection
         res= await self._api.router_mac()
         self._mac = res['factorymac']
         res = await self._api.router_model()
@@ -293,9 +296,9 @@ class GLinetRouter:
     # def device_info(self) -> DeviceInfo:
     #     """Return the device information."""
     #     data: DeviceInfo = {
-    #         "connections": {(CONNECTION_NETWORK_MAC, self._mac)},
-    #         "identifiers": {(DOMAIN, "GL-inet")},
-    #         "name": self._host,
+    #         "connections": {(CONNECTION_NETWORK_MAC, self._mac)}, #TODO implement using mac rather than factorymac
+    #         "identifiers": {(DOMAIN, "GL-inet")}, #TODO identifier should be unique within domain, this isn't ? use factorymac
+    #         "name": self._host, #TODO name is
     #         "model": self._model,
     #         "manufacturer": "GL-inet",
     #     }
