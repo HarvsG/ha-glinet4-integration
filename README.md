@@ -6,6 +6,7 @@ Contributions welcome, for ideas see the TODO list below or the various `#TODO`s
 
 ## Features
 - Device tracker for devices connected directly or indirectly to a Gl-inet router
+  - Note, modern phones use MAC address randomisation when they connect to WiFis, you will need to disable this on [android](https://www.howtogeek.com/722653/how-to-disable-random-wi-fi-mac-address-on-android/) and [iphone](https://www.linksys.com/support-article?articleNum=317709)
 - Control a configured wireguard client with a switch
 
 ## Installation
