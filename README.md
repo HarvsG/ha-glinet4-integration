@@ -1,23 +1,27 @@
 # ha-glinet-integration
-staging repo for an GL-inet integration for homeassistant
+Working - in alpha, breaking changes very likely
+Contributions welcome, for ideas see the TODO list below or the various TODOs in the code
+
+## Features
+- Device tracker for devices connected directly or indirectly to a Gl-inet router
+- Control a configured wireguard client with a switch
 
 ## Install
 1. Create a new folder in `config/custom_components` called glinet
-2. Copy manually, or clone the files in this repo into that folder `git clone https://github.com/HarvsG/ha-glinet-integration.git .` (The `.` at the end is important)
+2. Copy manually, or clone the files in this repo into that folder `git clone https://github.com/HarvsG/ha-glinet-integration.git . ` (The `.` at the end is important)
 3. Reboot homeassistant
 4. Add the new Glinet integration under Devices and services
+5. Edit the host path with you router IP - ensure you keep the `https://`
+6. Add your router admin page login password (not your WIFI password). Placeholder is GL-inet's default `goodlife`, but this shoudld be changed.
 
 ## Dev set up
 1. Set up the vscode homeassistant core [dev setup](https://developers.home-assistant.io/docs/development_environment/)
+  - Or you could just use a running install of homeassistant (restarts are required for a lot of changes)
 2. Run once to generate directories
 3. create a `config/custom_components/glinet` dir
 4. `git clone https://github.com/HarvsG/ha-glinet-integration.git .`
 5. Note, the vscode git tracker will track the parent repo, but command line git will still work in the dir
 6. You made need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwitten if you rebuild the container
-
-## Features
-- Device tracker for devices connected directly or indirectly to a Gl-inet router
-- Control a configured wireguard client with a switch
 
 ## TODO
 - [ ] Auto detect router IP for config flow - assume it is the default gateway, test an enpoint that doesn't require auth (/model or /hello), fallback to default `192.168.8.1`
