@@ -16,6 +16,7 @@ staging repo for an GL-inet integration for homeassistant
   - worth considering you can have multiple clients, most of the API endpoints act on the last used client config. Can we get a list from the API and create switches for all? Maybe (router/vpn/status?)
 - [ ] Support HACS - lets get some more features working first
 - [ ] Allow deletion of unhelpful device tracker devices/entities
+- [ ] Clean, comment and refactor code
 - [ ] Add tests - will need to mock the API
 - [ ] Add features:
   - Upload/Download sensors
