@@ -21,6 +21,7 @@ from homeassistant.core import (  # callback,CALLBACK_TYPE
     callback,
 )
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_registry import RegistryEntry
@@ -58,7 +59,6 @@ class ClientDevInfo:
         now: datetime = dt_util.utcnow()
         if dev_info:
             if not self._name:
-                pass  # TODO access device name - GLinet usus '*' if unknown
                 if dev_info["name"] == "*":
                     self._name = self._mac.replace(":", "_")
                 else:
@@ -118,9 +118,12 @@ class GLinetRouter:
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
         self._on_close: list[Callable] = []
-
+        self._mac = ""
+        self._model = ""
         self._options: dict = {}
         self._options.update(entry.options)
+        self._wireguard_client_name: str = ""
+        self._wireguard_client_connected: bool = False
 
     async def setup(self) -> None:
         """Set up a GL-inet router."""
@@ -151,7 +154,11 @@ class GLinetRouter:
                 )
 
         # Update devices
-        await self.update_devices()
+        res= await self._api.router_mac()
+        self._mac = res['factorymac']
+        res = await self._api.router_model()
+        self._model = res ['model']
+        await self.update_all()
 
         self.async_on_close(
             async_track_time_interval(self.hass, self.update_all, SCAN_INTERVAL)
@@ -174,18 +181,19 @@ class GLinetRouter:
             )
 
     async def update_all(self, now: datetime | None = None) -> None:
-        """Update all AsusWrt platforms."""
-        await self.update_devices()
+        """Update all Gl-inet platforms."""
+        await self.update_device_trackers()
+        await self.update_wireguard_client_state()
 
-    async def update_devices(self) -> None:
-        """Update Gl-inet devices tracker."""
-        new_device = False
+    async def _update_platform(self, api_callable):
+        """Boilerplate to make update requests to api and handle errors."""
+
 
         _LOGGER.debug("Checking client connect to GL-inet router %s", self._host)
         try:
             if self._token_error:
                 await self.renew_token()
-            wrt_devices = await self._api.connected_clients()
+            response = await api_callable()
         except TimeoutError as exc:
             if not self._connect_error:
                 self._connect_error = True
@@ -231,6 +239,13 @@ class GLinetRouter:
             self._connect_error = False
             _LOGGER.info("Reconnected to Gl-inet router %s", self._host)
 
+        return response
+
+    async def update_device_trackers(self) -> None:
+        """Update the device trackers"""
+
+        new_device = False
+        wrt_devices = await self._update_platform(self._api.connected_clients)
         consider_home = self._options.get(
             CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()
         )
@@ -257,6 +272,18 @@ class GLinetRouter:
 
         self._connected_devices = len(wrt_devices)
 
+    async def update_wireguard_client_state(self) -> None:
+        """Make call to the API to get the wireguard client state"""
+        response = await self._update_platform(self._api.wireguard_client_state)
+        self._wireguard_client_connected = response['enable']
+        self._wireguard_client_name = response["main_server"]
+        #TODO delte me
+        _LOGGER.warning(
+                "Wireguard state %s for server %s",
+                self._wireguard_client_connected,
+                self._wireguard_client_name
+            )
+
     def update_options(self, new_options: dict) -> bool:
         """Update router options."""
         req_reload = False
@@ -268,16 +295,17 @@ class GLinetRouter:
         """Add a function to call when router is closed."""
         self._on_close.append(func)
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device information."""
-        return {
-            "identifiers": {(DOMAIN, "GL-inet")},
-            "name": self._host,
-            # "model": self._model,
-            "manufacturer": "GL-inet",
-            # "sw_version": self._sw_v,
-        }
+    # @property
+    # def device_info(self) -> DeviceInfo:
+    #     """Return the device information."""
+    #     data: DeviceInfo = {
+    #         "connections": {(CONNECTION_NETWORK_MAC, self._mac)},
+    #         "identifiers": {(DOMAIN, "GL-inet")},
+    #         "name": self._host,
+    #         "model": self._model,
+    #         "manufacturer": "GL-inet",
+    #     }
+    #     return data
 
     @property
     def signal_device_new(self) -> str:

@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from .const import DATA_GLINET, DOMAIN
 from .router import GLinetRouter
 
-PLATFORMS = ["device_tracker"]
+PLATFORMS = ["device_tracker","switch"]
 
 
 async def async_setup(hass, config):
@@ -43,7 +43,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     yaml_options = hass.data.get(DOMAIN, {}).pop("yaml_options", {})
     if not entry.options and yaml_options:
         hass.config_entries.async_update_entry(entry, options=yaml_options)
-    # TODO Store an API object for your platforms to access
+    # Store an API object for your platforms to access
     router = GLinetRouter(hass, entry)
     await router.setup()
     router.async_on_close(entry.add_update_listener(update_listener))
@@ -51,8 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {}
     hass.data[DOMAIN][entry.entry_id][DATA_GLINET] = router
 
-    hass.config_entries.async_setup_platforms(entry, PLATFORMS)
-    hass.config_entries
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 

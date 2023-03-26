@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import logging
 from homeassistant.components.device_tracker import SOURCE_TYPE_ROUTER
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
 from homeassistant.config_entries import ConfigEntry
@@ -35,12 +36,16 @@ async def async_setup_entry(
 
     update_router()
 
+_LOGGER = logging.getLogger(__name__)
 
 @callback
 def add_entities(router: GLinetRouter, async_add_entities, tracked):
     """Add new tracker entities from the router."""
     new_tracked = []
-
+    #TODO delte me
+    _LOGGER.warning(
+            "Device tracker checking for entities to add",
+        )
     for mac, device in router.devices.items():
         if mac in tracked:
             continue
@@ -113,7 +118,7 @@ class GLinetDevice(ScannerEntity):
         }
         if self._device.name:
             data["default_name"] = self._device.name
-
+        #TODO add router as a via device
         return data
 
     @property
