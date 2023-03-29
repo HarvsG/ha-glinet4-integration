@@ -4,7 +4,8 @@ from __future__ import annotations
 from typing import Any
 
 import logging
-from homeassistant.components.device_tracker import SOURCE_TYPE_ROUTER
+
+from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -85,7 +86,7 @@ class GLinetDevice(ScannerEntity):
     @property
     def source_type(self) -> str:
         """Return the source type."""
-        return SOURCE_TYPE_ROUTER
+        return SourceType.ROUTER
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -114,7 +115,12 @@ class GLinetDevice(ScannerEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return the device information."""
+        """Return the device information.
+        TODO Device tracker entities should not create device registry entries.
+        according to HomeAssistant so this will have to remain until merge
+        Perhaps an ideal scenario would be to only 'create' a device if it already
+        exists
+        """
         data: DeviceInfo = {
             "connections": {(CONNECTION_NETWORK_MAC, self._device.mac)},
             "via_device":((DOMAIN, self._router.factory_mac)),

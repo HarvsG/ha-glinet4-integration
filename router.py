@@ -25,7 +25,6 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.event import async_track_time_interval
 
@@ -82,11 +81,6 @@ class GLinetRouter:
         self._late_init_complete: bool = False
         self._connect_error: bool = False
         self._token_error: bool = False
-
-        # Other
-        self._on_close: list[Callable] = []  # TODO what does this actually do?
-        # Do we need to implement a close function that calls these like in
-        # https://github.com/home-assistant/core/blob/bec7bbeb9221e9f7c8c0e551ba6dacd6d41e1d97/homeassistant/components/asuswrt/router.py#L415
 
     async def async_init(self) -> None:
         """Set up a GL-inet router.
@@ -152,10 +146,7 @@ class GLinetRouter:
         # TODO here we ask this to update all on the same scan interval
         # but in future some sensors need to update less regularly than
         # others
-        # TODO clarify what wrapping in async_on_close() achieves
-        self.async_on_close(
-            async_track_time_interval(self.hass, self.update_all, SCAN_INTERVAL)
-        )
+        async_track_time_interval(self.hass, self.update_all, SCAN_INTERVAL)
 
     async def get_api(self) -> GLinet:
         """Optimistically returns a GLinet object
@@ -322,14 +313,8 @@ class GLinetRouter:
         self._options.update(new_options)
         return req_reload  # TODO Does this ever return True?
 
-    @callback
-    def async_on_close(self, func: CALLBACK_TYPE) -> None:
-        """Add a function to call when router is closed."""
-        # TODO better docstring
-        self._on_close.append(func)
-
     def add_to_device_registry(self):
-        """Since this router device doesn't have its
+        """Since this router device doesn't always have its
         own entities we need to manually add it to
         the device registry
         """
