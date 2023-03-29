@@ -124,7 +124,6 @@ class GLinetDevice(ScannerEntity):
         data: DeviceInfo = {
             "connections": {(CONNECTION_NETWORK_MAC, self._device.mac)},
             "via_device":((DOMAIN, self._router.factory_mac)),
-            # TODO we could set a default manufacturer based on a mac address lookup
         }
         if self._device.name:
             data["default_name"] = self._device.name

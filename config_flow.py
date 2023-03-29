@@ -8,7 +8,7 @@ from gli_py import GLinet
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.components.device_tracker.const import (
+from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
     DEFAULT_CONSIDER_HOME,
 )
@@ -18,18 +18,17 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import format_mac
 
-from .const import DOMAIN
+from .const import API_PATH, DOMAIN, GLINET_DEFAULT_PW, GLINET_DEFAULT_URL
 
 # from homeassistant.helpers import config_validation as cv
 
 
 _LOGGER = logging.getLogger(__name__)
 
-# TODO adjust the data schema to the data that you need
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_HOST, default="http://192.168.8.1"): str, #TODO move these literals into const.py
-        vol.Required(CONF_PASSWORD, default="goodlife"): str,
+        vol.Required(CONF_HOST, default=GLINET_DEFAULT_URL): str,
+        vol.Required(CONF_PASSWORD, default=GLINET_DEFAULT_PW): str,
     }
 )
 
@@ -40,7 +39,7 @@ class TestingHub:
     def __init__(self, host: str) -> None:
         """Initialize."""
         self.host: str = host
-        self.router: GLinet = GLinet(base_url=self.host + "/cgi-bin/api/", sync=False)
+        self.router: GLinet = GLinet(base_url=self.host + API_PATH, sync=False)
         self.router_model: str = ""
         self.router_mac: str = ""
 
@@ -79,7 +78,6 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
-    # TODO validate the data can be used to set up a connection.
 
     # If your PyPI package is not built with async, pass your methods
     # to the executor:
@@ -88,23 +86,18 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     # )
 
     hub = TestingHub(data[CONF_HOST])
-    #TODO do we need more verbosity in errors here?
+
     if not await hub.connect():
         raise CannotConnect
 
     if not await hub.authenticate(data[CONF_PASSWORD]):
         raise InvalidAuth
 
-    # If you cannot connect:
-    # throw CannotConnect
-    # If the authentication is wrong:
-    # InvalidAuth
-
     # Return info that you want to store in the config entry.
     return {
         # TODO, on success we can/should probably store some immutable device info in the class.
         # TODO should we be using inbuilt literals and consts here?
-        "title": "GL-inet " + hub.router_model,
+        "title": "GL-inet " + hub.router_model.upper(),
         "mac": hub.router_mac,
         "data": {
             CONF_HOST: data[CONF_HOST],
@@ -143,9 +136,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
         else:
             unique_id: str = format_mac(info["mac"])
-            await self.async_set_unique_id(unique_id) #TODO are we creating a config entry here, should we be using this config entry to add the data to?
+            await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(title=info["title"], data=info["data"]) #TODO, are we creating a second config entry here?
+            return self.async_create_entry(title=info["title"], data=info["data"])
 
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
