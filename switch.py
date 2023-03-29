@@ -93,8 +93,5 @@ class WireGuardSwitch(SwitchEntity):
         data: DeviceInfo = {
             "connections": {(CONNECTION_NETWORK_MAC, self._router.factory_mac)},
             "identifiers": {(DOMAIN, self._router.factory_mac)},
-            "name": f"GL-inet {self._router.name}",
-            "model": self._router.model,
-            "manufacturer": "GL-inet",
         }
         return data

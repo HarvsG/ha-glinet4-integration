@@ -22,8 +22,10 @@ from homeassistant.core import (  # callback,CALLBACK_TYPE
     callback,
 )
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.event import async_track_time_interval
 
@@ -144,6 +146,8 @@ class GLinetRouter:
         await self.renew_token()
 
         await self.update_all()
+
+        self.add_to_device_registry()
 
         # TODO here we ask this to update all on the same scan interval
         # but in future some sensors need to update less regularly than
@@ -324,16 +328,33 @@ class GLinetRouter:
         # TODO better docstring
         self._on_close.append(func)
 
+    def add_to_device_registry(self):
+        """Since this router device doesn't have its
+        own entities we need to manually add it to
+        the device registry
+        """
+        device_registry = dr.async_get(self.hass)
+
+        device_registry.async_get_or_create(
+            config_entry_id=self._entry.entry_id,
+            connections={(CONNECTION_NETWORK_MAC, self.factory_mac)},#TODO implement using mac rather than factorymac
+            identifiers={(DOMAIN, self.factory_mac)},
+            manufacturer="GL-inet",
+            name=self.name,
+            model=self.model,
+            sw_version=self._sw_v,
+        )
+
     # @property
     # def device_info(self) -> DeviceInfo:
     #     """Return the device information."""
     #     data: DeviceInfo = {
-    #       "connections": {(CONNECTION_NETWORK_MAC, self._router._mac)},#TODO implement using mac rather than factorymac
-    #       "identifiers": {(DOMAIN, self._factory_mac)}, #TODO identifier should be unique within domain, this isn't ? use factorymac
+    #       "connections": {(CONNECTION_NETWORK_MAC, self.factory_mac)},
+    #       "identifiers": {(DOMAIN, self.factory_mac)},
     #       "name": self.name,
-    #       "model": self._model.upper(),
+    #       "model": self.model,
     #       "manufacturer": "GL-inet",
-    # TODO add more fields like https://developers.home-assistant.io/docs/device_registry_index/#device-properties
+    # #TODO add more fields like https://developers.home-assistant.io/docs/device_registry_index/#device-properties
     #     }
     #     return data
 
