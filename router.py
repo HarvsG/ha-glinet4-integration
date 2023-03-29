@@ -9,7 +9,7 @@ from typing import Callable
 from gli_py import GLinet
 from gli_py.error_handling import NonZeroResponse, TokenError
 
-from homeassistant.components.device_tracker.const import (
+from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
     DEFAULT_CONSIDER_HOME,
     DOMAIN as TRACKER_DOMAIN,
@@ -24,7 +24,6 @@ from homeassistant.core import (  # callback,CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.event import async_track_time_interval
 
@@ -105,7 +104,7 @@ class GLinetRouter:
             self._factory_mac = router_info["mac"]
             self._model = router_info["model"]
             self._sw_v = router_info["version"]
-        except Exception as exc:
+        except Exception as exc: # pylint: disable=broad-except
             # The late initialized variables will remain in
             # their default 'UNKNOWN' state
             _LOGGER.error(
@@ -236,7 +235,7 @@ class GLinetRouter:
                 exc,
             )
             return
-        except Exception as exc:
+        except Exception as exc: # pylint: disable=broad-except
             if not self._connect_error:
                 self._connect_error = True
             _LOGGER.error(
@@ -404,7 +403,7 @@ class WireGuardClient:
 class ClientDevInfo:
     """Representation of a device connected to the router."""
 
-    def __init__(self, mac: str, name=None):
+    def __init__(self, mac: str, name=None) -> None:
         """Initialize a connected device."""
         self._mac: str = mac
         self._name: str | None = name

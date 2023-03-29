@@ -4,13 +4,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -39,9 +36,9 @@ async def async_setup_entry(
         async_add_entities(switches, True)
 
 
-
 class WireGuardSwitch(SwitchEntity):
     """Representation of a VPN switch."""
+
     # TODO make class, client/server/VPN type agnostic and appreciate >1 can be configured of each
     # And also appreciates that some combinations of states are not permitted by Gl-inet
     # such as can't have a server and a client active of the same VPN type, also can't have
@@ -50,12 +47,13 @@ class WireGuardSwitch(SwitchEntity):
         """Initialize a GLinet device."""
         self._router = router
         self._client = client
-    _attr_icon = "mdi:vpn" #TODO would be better to have MDI style icons for each of the VPN types
+
+    _attr_icon = "mdi:vpn"  # TODO would be better to have MDI style icons for each of the VPN types
 
     @property
     def name(self) -> str:
         """Return the name of the switch."""
-        return f'WG Client {self._client.name}'
+        return f"WG Client {self._client.name}"
 
     @property
     def unique_id(self) -> str:
@@ -74,10 +72,10 @@ class WireGuardSwitch(SwitchEntity):
         try:
             if self._router.connected_wireguard_client not in [self._client, None]:
                 await self._router.api.wireguard_client_stop()
-                #TODO may need to introduce a delay here, or await confirmation of the stop
+                # TODO may need to introduce a delay here, or await confirmation of the stop
             await self._router.api.wireguard_client_start(self._client.name)
             await self._router.update_wireguard_client_state()
-        except:
+        except OSError:
             _LOGGER.error("Unable to enable WG client")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -85,17 +83,17 @@ class WireGuardSwitch(SwitchEntity):
         try:
             await self._router.api.wireguard_client_stop()
             await self._router.update_wireguard_client_state()
-        except:
+        except OSError:
             _LOGGER.error("Unable to stop WG client")
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device information."""
-        #TODO this should probably be defined in the router device not here in the switch
+        # TODO this should probably be defined in the router device not here in the switch
         data: DeviceInfo = {
             "connections": {(CONNECTION_NETWORK_MAC, self._router.factory_mac)},
             "identifiers": {(DOMAIN, self._router.factory_mac)},
-            "name": f'GL-inet {self._router.name}',
+            "name": f"GL-inet {self._router.name}",
             "model": self._router.model,
             "manufacturer": "GL-inet",
         }
