@@ -19,7 +19,7 @@ from .const import (
     DOMAIN,
     DATA_GLINET,
 )
-from .router import GLinetRouter
+from .router import GLinetRouter, WireGuardClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,14 +29,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Pi-hole switch."""
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
-    if router._wireguard_client_name:
+    if router.wireguard_clients:
         # TODO detect all configured wireguard, openvpn, shadowsocks and
         # TOR clients & servers with router/vpn/status? and gen a switch for each
         switches = [
-            WireGuardSwitch(
-            router,
-            router._wireguard_client_name
-            )
+            WireGuardSwitch(router, client)
+            for client in router.wireguard_clients.values()
         ]
         async_add_entities(switches, True)
 
@@ -48,53 +46,57 @@ class WireGuardSwitch(SwitchEntity):
     # And also appreciates that some combinations of states are not permitted by Gl-inet
     # such as can't have a server and a client active of the same VPN type, also can't have
     # multiples of any one type etc etc
-    def __init__(self, router: GLinetRouter, name: str) -> None:
+    def __init__(self, router: GLinetRouter, client: WireGuardClient) -> None:
         """Initialize a GLinet device."""
         self._router = router
-        self._name = name
+        self._client = client
     _attr_icon = "mdi:vpn" #TODO would be better to have MDI style icons for each of the VPN types
 
     @property
     def name(self) -> str:
         """Return the name of the switch."""
-        return f'WG Client {self._name}'
+        return f'WG Client {self._client.name}'
 
     @property
     def unique_id(self) -> str:
         """Return the unique id of the switch."""
-        return f"glinet_switch/{self._name}/wireguard_client"
+        return f"glinet_switch/{self._client.name}/wireguard_client"
 
     @property
     def is_on(self) -> bool:
         """Return if the service is on."""
         # TODO alter property to account for the fact that users can have
         # > 1 client configured, but only one connected
-        return self._router._wireguard_client_connected
+        return self._client.connected
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the service."""
         try:
-            # TODO test what happens if another client is already connected
-            await self._router._api.wireguard_client_start(self.name)
+            if self._router.connected_wireguard_client not in [self._client, None]:
+                await self._router.api.wireguard_client_stop()
+                #TODO may need to introduce a delay here, or await confirmation of the stop
+            await self._router.api.wireguard_client_start(self._client.name)
             await self._router.update_wireguard_client_state()
         except:
             _LOGGER.error("Unable to enable WG client")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the service."""
-        await self._router._api.wireguard_client_stop()
-        await self._router.update_wireguard_client_state()
-        #TODO handle errors
+        try:
+            await self._router.api.wireguard_client_stop()
+            await self._router.update_wireguard_client_state()
+        except:
+            _LOGGER.error("Unable to stop WG client")
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device information."""
         #TODO this should probably be defined in the router device not here in the switch
         data: DeviceInfo = {
-            "connections": {(CONNECTION_NETWORK_MAC, self._router._mac)},
-            "identifiers": {(DOMAIN, self._router._mac)},
-            "name": f'GL-inet {self._router._model.upper()}',
-            "model": self._router._model,
+            "connections": {(CONNECTION_NETWORK_MAC, self._router.factory_mac)},
+            "identifiers": {(DOMAIN, self._router.factory_mac)},
+            "name": f'GL-inet {self._router.name}',
+            "model": self._router.model,
             "manufacturer": "GL-inet",
         }
         return data

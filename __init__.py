@@ -39,10 +39,15 @@ async def async_setup(hass, config):
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up GL-inet from a config entry."""
-    yaml_options = hass.data.get(DOMAIN, {}).pop("yaml_options", {})
-    if not entry.options and yaml_options:
-        hass.config_entries.async_update_entry(entry, options=yaml_options)
+    """Set up GL-inet from a config entry.
+    Called by home assistant on initial config, restart and
+    componenet reload
+    """
+    # No need to support YAML
+    # yaml_options = hass.data.get(DOMAIN, {}).pop("yaml_options", {})
+    # if not entry.options and yaml_options:
+    #     hass.config_entries.async_update_entry(entry, options=yaml_options)
+
     # Store an API object for your platforms to access
     router = GLinetRouter(hass, entry)
     await router.setup()

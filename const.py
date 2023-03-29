@@ -2,3 +2,4 @@
 
 DOMAIN = "glinet"
 DATA_GLINET = "glinet"
+API_PATH = "/cgi-bin/api/"
