@@ -67,10 +67,12 @@ class GLinetDevice(ScannerEntity):
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
+        #TODO do we need to prepend DOMAIN to make this unique or does HA do this already?
         return self._device.mac
 
     @property
     def icon(self) -> str:
+        #TODO theoretically HA should give the default device tracker icon
         return self._icon
 
     @property
