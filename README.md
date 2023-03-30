@@ -41,7 +41,6 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
   - Upload/Download sensors
   - Internet reachable sensors (remember that API timesout when internet not reachable)
   - Public IP sensor
-  - Sensor for firmware version (/hello)
   - Diagnostic sensors for stats in (/router/status) such as uptime, LAN IP and memory useage
 - [ ] Consider features
   - Making changes to the VPN client policies would be cool to automate switching on/off VPN use per device in automations. Useful for bypassing geofilters for example
