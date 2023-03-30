@@ -1,20 +1,21 @@
 # ha-glinet-integration
 A HomeAssistant custom component for GL-inet routers that uses [their API](https://dev.gl-inet.com/api/).
 
-Working - in alpha, breaking changes very likely
-Contributions welcome, for ideas see the TODO list below or the various `#TODO`s in the code
+Working - in alpha, breaking changes very likely.
+
+Contributions are welcome, for ideas see the TODO list below or the various `#TODO`s in the code.
 
 ## Features
-- Device tracker for devices connected directly or indirectly to a Gl-inet router
-  - Note, modern phones use MAC address randomisation when they connect to WiFis, you will need to disable this for your home wifi only on [android](https://www.howtogeek.com/722653/how-to-disable-random-wi-fi-mac-address-on-android/) and [iphone](https://www.linksys.com/support-article?articleNum=317709)
-- Control a configured wireguard client with a switch
+- Device tracker for devices connected directly or indirectly to a Gl-inet router.
+  - Note, modern phones use MAC address randomisation when they connect to WiFi, you will need to disable this for your home wifi only on [android](https://www.howtogeek.com/722653/how-to-disable-random-wi-fi-mac-address-on-android/) and [iphone](https://www.linksys.com/support-article?articleNum=317709)
+- Control all configured wireguard clients with a switch.
 
 ## Installation
 1. Create a new folder in `config/custom_components` called glinet
 2. Copy manually, or clone the files in this repo into that folder `git clone https://github.com/HarvsG/ha-glinet-integration.git . ` (The `.` at the end is important)
 3. Reboot homeassistant
 4. Add the new Glinet integration under Devices and services
-5. Edit the host path with you router IP - ensure you keep the `https://`
+5. Edit the host path with you router IP - ensure you keep the `http://`
 6. Add your router admin page login password (not your WIFI password). Placeholder is GL-inet's default `goodlife`, but this shoudld be changed.
 
 ## Dev set up
@@ -35,6 +36,7 @@ Contributions welcome, for ideas see the TODO list below or the various `#TODO`s
 - [ ] Clean, comment and refactor code
 - [ ] Add tests - will need to mock the API
 - [ ] Allow reconfig for password changes - currently have to delete and re-add integration
+- [ ] Look into using `https` instead of `http`
 - [ ] Add features:
   - Upload/Download sensors
   - Internet reachable sensors (remember that API timesout when internet not reachable)
