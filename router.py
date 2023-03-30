@@ -17,9 +17,7 @@ from homeassistant.components.device_tracker import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_PASSWORD
 from homeassistant.core import (  # callback,CALLBACK_TYPE
-    CALLBACK_TYPE,
     HomeAssistant,
-    callback,
 )
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
@@ -144,7 +142,7 @@ class GLinetRouter:
         self.add_to_device_registry()
 
         # TODO here we ask this to update all on the same scan interval
-        # but in future some sensors need to update less regularly than
+        # but in future some sensors e.g WANip need to update less regularly than
         # others
         async_track_time_interval(self.hass, self.update_all, SCAN_INTERVAL)
 
@@ -297,6 +295,7 @@ class GLinetRouter:
         # is a better API endpoint to do it in only 1 call
         response: dict = await self._update_platform(self._api.wireguard_client_list)
         # TODO wireguard_client_list outputs some private info, we don't want it to end up in the logs.
+        # May be best to redact it in gli_py.
         for config in response["peers"]:
             self._wireguard_clients[config["name"]] = WireGuardClient(
                 name=config["name"], connected=False
@@ -307,11 +306,14 @@ class GLinetRouter:
         self._wireguard_clients[response["main_server"]].connected = response["enable"]
 
     def update_options(self, new_options: dict) -> bool:
-        """Update router options. Called in __init__.py"""
-        # TODO better docstring
+        """Update router options. Returns True if a reload is required
+        Called in __init__.py
+        placeholder function because it may become
+        neccessary to reload in future.
+        """
         req_reload = False
         self._options.update(new_options)
-        return req_reload  # TODO Does this ever return True?
+        return req_reload
 
     def add_to_device_registry(self):
         """Since this router device doesn't always have its
@@ -322,7 +324,7 @@ class GLinetRouter:
 
         device_registry.async_get_or_create(
             config_entry_id=self._entry.entry_id,
-            connections={(CONNECTION_NETWORK_MAC, self.factory_mac)},#TODO implement using mac rather than factorymac
+            connections={(CONNECTION_NETWORK_MAC, self.factory_mac)},#TODO In my test local lan uses MAC - 1, 2.4G MAC + 1 and 5G MAC +2
             identifiers={(DOMAIN, self.factory_mac)},
             manufacturer="GL-inet",
             name=self.name,
@@ -339,7 +341,6 @@ class GLinetRouter:
     #       "name": self.name,
     #       "model": self.model,
     #       "manufacturer": "GL-inet",
-    # #TODO add more fields like https://developers.home-assistant.io/docs/device_registry_index/#device-properties
     #     }
     #     return data
 
