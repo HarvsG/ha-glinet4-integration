@@ -59,8 +59,8 @@ class GLinetDevice(ScannerEntity):
 
     def __init__(self, router: GLinetRouter, device: ClientDevInfo) -> None:
         """Initialize a GLinet device."""
-        self._router = router
-        self._device = device
+        self._router: GLinetRouter = router
+        self._device: ClientDevInfo = device
         self._icon = "mdi:radar" #TODO will need to be replaced with brand logo or similar
 
 
@@ -70,7 +70,7 @@ class GLinetDevice(ScannerEntity):
         return self._device.mac
 
     @property
-    def icon(self):
+    def icon(self) -> str:
         return self._icon
 
     @property
@@ -79,12 +79,12 @@ class GLinetDevice(ScannerEntity):
         return self._device.name or DEFAULT_DEVICE_NAME
 
     @property
-    def is_connected(self):
+    def is_connected(self) -> bool:
         """Return true if the device is connected to the network."""
         return self._device.is_connected
 
     @property
-    def source_type(self) -> str:
+    def source_type(self) -> SourceType:
         """Return the source type."""
         return SourceType.ROUTER
 
@@ -104,7 +104,7 @@ class GLinetDevice(ScannerEntity):
         return self._device.name
 
     @property
-    def ip_address(self) -> str:
+    def ip_address(self) -> str | None:
         """Return the primary ip address of the device."""
         return self._device.ip_address
 
@@ -135,12 +135,12 @@ class GLinetDevice(ScannerEntity):
         return False
 
     @callback
-    def async_on_demand_update(self):
+    def async_on_demand_update(self) -> None:
         """Update state."""
         self._device = self._router.devices[self._device.mac]
         self.async_write_ha_state()
 
-    async def async_added_to_hass(self):
+    async def async_added_to_hass(self) -> None:
         """Register state update callback."""
         self.async_on_remove(
             async_dispatcher_connect(
