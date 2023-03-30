@@ -324,7 +324,11 @@ class GLinetRouter:
 
         device_registry.async_get_or_create(
             config_entry_id=self._entry.entry_id,
-            connections={(CONNECTION_NETWORK_MAC, self.factory_mac)},#TODO In my test local lan uses MAC - 1, 2.4G MAC + 1 and 5G MAC +2
+            #TODO In my test local lan uses MAC - 1, 2.4G MAC + 1 and 5G MAC +2.
+            # Huwawei LTE does this
+            # https://github.com/home-assistant/core/blob/8d21e2b168c995346c8c6af7fe077ca0e97e6ab3/homeassistant/components/huawei_lte/__init__.py#L181
+            # https://github.com/home-assistant/core/blob/8d21e2b168c995346c8c6af7fe077ca0e97e6ab3/homeassistant/components/huawei_lte/__init__.py#L404
+            connections={(CONNECTION_NETWORK_MAC, self.factory_mac)},
             identifiers={(DOMAIN, self.factory_mac)},
             manufacturer="GL-inet",
             name=self.name,
