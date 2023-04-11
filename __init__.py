@@ -51,7 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Store an API object for your platforms to access
     router = GLinetRouter(hass, entry)
     await router.setup()
-    router.async_on_close(entry.add_update_listener(update_listener))
+    #router.async_on_close(entry.add_update_listener(update_listener))
     hass.data[DOMAIN] = {}
     hass.data[DOMAIN][entry.entry_id] = {}
     hass.data[DOMAIN][entry.entry_id][DATA_GLINET] = router
