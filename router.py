@@ -94,7 +94,7 @@ class GLinetRouter:
             )
             raise ConfigEntryNotReady from exc
         try:
-            router_info = await self._update_platform(self._api.router_hello)
+            router_info = await self._update_platform(self._api.router_hello) # TODO seems to always throw unexpected err on first boot
             self._factory_mac = router_info["mac"]
             self._model = router_info["model"]
             self._sw_v = router_info["version"]
@@ -106,6 +106,7 @@ class GLinetRouter:
                 self._host,
                 exc,
             )
+            raise ConfigEntryNotReady from exc # TODO probably shouldnt raise this after logging an error
 
         self._late_init_complete = True
 
