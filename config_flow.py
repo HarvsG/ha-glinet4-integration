@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from gli_py import GLinet
+from gli4py import GLinet
 import voluptuous as vol
 
 from homeassistant import config_entries

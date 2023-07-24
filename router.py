@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 import logging
 from typing import Callable
 
-from gli_py import GLinet
-from gli_py.error_handling import NonZeroResponse, TokenError
+from gli4py import GLinet
+from gli4py.error_handling import NonZeroResponse, TokenError
 
 from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
@@ -43,7 +43,7 @@ SCAN_INTERVAL = timedelta(seconds=30)
 
 class GLinetRouter:
     """representation of a GLinet router.
-    Should comprise: A method to access the gli_py API
+    Should comprise: A method to access the gli4py API
     Basic data and properties about the router
     Configure a home assistant device
     ?TODO make calls to the sensors and device trackers
@@ -61,7 +61,7 @@ class GLinetRouter:
         self._options: dict = {}
         self._options.update(entry.options)
 
-        # gli_py API
+        # gli4py API
         self._api: GLinet = None
         self._host: str = entry.data[CONF_HOST]
 
@@ -268,7 +268,7 @@ class GLinetRouter:
         )
         # track_unknown = self._options.get(CONF_TRACK_UNKNOWN, DEFAULT_TRACK_UNKNOWN)
 
-        # TODO - ensure the output of gli_py devices has the correct data structure
+        # TODO - ensure the output of gli4py devices has the correct data structure
         for device_mac, device in self._devices.items():
             dev_info = wrt_devices.get(device_mac)
             device.update(dev_info, consider_home)
@@ -296,7 +296,7 @@ class GLinetRouter:
         # is a better API endpoint to do it in only 1 call
         response: dict = await self._update_platform(self._api.wireguard_client_list)
         # TODO wireguard_client_list outputs some private info, we don't want it to end up in the logs.
-        # May be best to redact it in gli_py.
+        # May be best to redact it in gli4py.
         for config in response["peers"]:
             self._wireguard_clients[config["name"]] = WireGuardClient(
                 name=config["name"], connected=False

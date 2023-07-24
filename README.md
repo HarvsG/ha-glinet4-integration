@@ -1,5 +1,5 @@
-# ha-glinet-integration
-A HomeAssistant custom component for GL-inet routers that uses [their API](https://dev.gl-inet.com/api/).
+# ha-glinet4-integration
+A HomeAssistant custom component for GL-inet routers that uses [their API] version 4(https://dev.gl-inet.com/api/).
 
 Working - in alpha, breaking changes very likely.
 
@@ -59,4 +59,4 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 - Convexa B1300
 
 ## Depends on
-https://github.com/HarvsG/gli_py
+https://github.com/HarvsG/gli4py
