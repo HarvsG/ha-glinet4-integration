@@ -15,7 +15,7 @@ from homeassistant.components.device_tracker import (
     DOMAIN as TRACKER_DOMAIN,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_PASSWORD
+from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import (  # callback,CALLBACK_TYPE
     HomeAssistant,
 )
@@ -94,10 +94,10 @@ class GLinetRouter:
             )
             raise ConfigEntryNotReady from exc
         try:
-            router_info = await self._update_platform(self._api.router_hello) # TODO seems to always throw unexpected err on first boot
-            self._factory_mac = router_info["mac"]
+            router_info = await self._update_platform(self._api.router_info) # TODO seems to always throw unexpected err on first boot
             self._model = router_info["model"]
-            self._sw_v = router_info["version"]
+            self._sw_v = router_info["firmware_version"]
+            self._factory_mac = router_info["mac"]
         except Exception as exc: # pylint: disable=broad-except
             # The late initialized variables will remain in
             # their default 'UNKNOWN' state
@@ -159,7 +159,7 @@ class GLinetRouter:
             )
         if CONF_PASSWORD in conf:
             router = GLinet(sync=False, base_url=conf[CONF_HOST] + API_PATH)
-            await router.login(conf[CONF_PASSWORD])
+            await router.login(CONF_USERNAME, conf[CONF_PASSWORD])
             return router
         else:
             _LOGGER.error(
@@ -170,7 +170,7 @@ class GLinetRouter:
     async def renew_token(self):
         """Attempt to get a new token."""
         try:
-            await self._api.login(self._entry.data[CONF_PASSWORD])
+            await self._api.login(self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD])
 
         except Exception as exc:
             _LOGGER.error(
@@ -298,7 +298,7 @@ class GLinetRouter:
         # TODO wireguard_client_list outputs some private info, we don't want it to end up in the logs.
         # May be best to redact it in gli4py.
         for config in response["peers"]:
-            self._wireguard_clients[config["name"]] = WireGuardClient(
+            self._wireguard_clients[config["peer_id"]] = WireGuardClient(
                 name=config["name"], connected=False
             )
 
@@ -306,7 +306,7 @@ class GLinetRouter:
         response: dict = await self._update_platform(self._api.wireguard_client_state)
 
         # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
-        self._wireguard_clients[response["main_server"]].connected = response["enable"]
+        self._wireguard_clients[response["peer_id"]].connected = (response["status"] == 1)
 
     def update_options(self, new_options: dict) -> bool:
         """Update router options. Returns True if a reload is required
