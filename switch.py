@@ -73,7 +73,7 @@ class WireGuardSwitch(SwitchEntity):
             if self._router.connected_wireguard_client not in [self._client, None]:
                 await self._router.api.wireguard_client_stop()
                 # TODO may need to introduce a delay here, or await confirmation of the stop
-            await self._router.api.wireguard_client_start(self._client.name)
+            await self._router.api.wireguard_client_start(self._client.group_id, self._client.peer_id) #TODO not working
             await self._router.update_wireguard_client_state()
         except OSError:
             _LOGGER.error("Unable to enable WG client")
@@ -82,6 +82,7 @@ class WireGuardSwitch(SwitchEntity):
         """Turn off the service."""
         try:
             await self._router.api.wireguard_client_stop()
+            # TODO may need to introduce a delay here, or await confirmation of the stop
             await self._router.update_wireguard_client_state()
         except OSError:
             _LOGGER.error("Unable to stop WG client")

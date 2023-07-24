@@ -301,16 +301,16 @@ class GLinetRouter:
         # TODO as part of changes to switch.py, this probably needs to become
         # client/server/VPN type agnostic it may be that router/vpn/status
         # is a better API endpoint to do it in only 1 call
-        response: list = await self._update_platform(self._api.wireguard_client_list)
+        response: dict = await self._update_platform(self._api.wireguard_client_list)
         # TODO wireguard_client_list outputs some private info, we don't want it to end up in the logs.
         # May be best to redact it in gli4py.
         for config in response:
             self._wireguard_clients[config["peer_id"]] = WireGuardClient(
-                name=config["name"], connected=False
+                name=config["name"], connected=False, group_id=config["group_id"], peer_id=config["group_id"]
             )
 
         # update wether the currently selected WG client is connected
-        response: dict = await self._update_platform(self._api.wireguard_client_state)
+        response: list = await self._update_platform(self._api.wireguard_client_state)
 
         # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
         self._wireguard_clients[response["peer_id"]].connected = (response["status"] == 1)
@@ -416,9 +416,10 @@ class GLinetRouter:
 @dataclass
 class WireGuardClient:
     """Class for keeping track of WireGuard Client Configs."""
-
     name: str
     connected: bool
+    group_id: int
+    peer_id:int
 
 
 class ClientDevInfo:
