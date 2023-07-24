@@ -12,13 +12,13 @@ from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
     DEFAULT_CONSIDER_HOME,
 )
-from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_PASSWORD
+from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import format_mac
 
-from .const import API_PATH, DOMAIN, GLINET_DEFAULT_PW, GLINET_DEFAULT_URL
+from .const import API_PATH, DOMAIN, GLINET_DEFAULT_PW, GLINET_DEFAULT_URL, GLINET_DEFAULT_USERNAME
 
 # from homeassistant.helpers import config_validation as cv
 
@@ -27,6 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
+        vol.Required(CONF_USERNAME, default=GLINET_DEFAULT_USERNAME): str,
         vol.Required(CONF_HOST, default=GLINET_DEFAULT_URL): str,
         vol.Required(CONF_PASSWORD, default=GLINET_DEFAULT_PW): str,
     }
@@ -36,20 +37,19 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 class TestingHub:
     """Testing class to test connection and authentication."""
 
-    def __init__(self, host: str) -> None:
+    def __init__(self, username: str, host: str) -> None:
         """Initialize."""
         self.host: str = host
-        self.router: GLinet = GLinet(base_url=self.host + API_PATH, sync=False)
-        self.router_model: str = ""
+        self.username: str = username
+        self.router: GLinet = GLinet(base_url=self.host + API_PATH)
         self.router_mac: str = ""
 
     async def connect(self) -> bool:
         """Test if we can communicate with the host."""
         try:
-            res = await self.router.router_model()
-            self.router_model = res["model"]
+            res = await self.test_connection(username)
             # TODO, on success we can/should probably store some immutable device info in the class.
-            return True
+            return res
         except ConnectionError:
             _LOGGER.error(
                 "Failed to connect to %s, is it really a GL-inet router?", self.host
@@ -61,12 +61,12 @@ class TestingHub:
             )
         return False
 
-    async def authenticate(self, password: str) -> bool:
+    async def authenticate(self, password: str, username: str) -> bool:
         """Test if we can authenticate with the host."""
         try:
-            await self.router.login(password)
+            await self.router.login(username, password)
             res = await self.router.router_mac()
-            self.router_mac = res["factorymac"]
+            self.router_mac = res["factory_mac"]
             # TODO, on success we can/should probably store some immutable device info in the class.
         except ConnectionRefusedError:
             _LOGGER.error("Failed to authenticate with Gl-inet router during testing")
@@ -90,7 +90,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     if not await hub.connect():
         raise CannotConnect
 
-    if not await hub.authenticate(data[CONF_PASSWORD]):
+    if not await hub.authenticate(data[GLINET_DEFAULT_USERNAME], data[CONF_PASSWORD]):
         raise InvalidAuth
 
     # Return info that you want to store in the config entry.
@@ -100,6 +100,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         "title": "GL-inet " + hub.router_model.upper(),
         "mac": hub.router_mac,
         "data": {
+            GLINET_DEFAULT_USERNAME: data[GLINET_DEFAULT_USERNAME]
             CONF_HOST: data[CONF_HOST],
             CONF_API_TOKEN: hub.router.token,
             CONF_PASSWORD: data[CONF_PASSWORD],
