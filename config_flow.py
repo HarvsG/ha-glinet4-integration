@@ -43,12 +43,16 @@ class TestingHub:
         self.username: str = username
         self.router: GLinet = GLinet(base_url=self.host + API_PATH)
         self.router_mac: str = ""
+        self.router_model: str = ""
 
     async def connect(self) -> bool:
         """Test if we can communicate with the host."""
         try:
-            res = await self.test_connection(username)
+            res = await self.router.router_reachable(self.username)
             # TODO, on success we can/should probably store some immutable device info in the class.
+            _LOGGER.warn(
+                "Attempting to connect to router, success:%s", res
+            )
             return res
         except ConnectionError:
             _LOGGER.error(
@@ -61,12 +65,13 @@ class TestingHub:
             )
         return False
 
-    async def authenticate(self, password: str, username: str) -> bool:
+    async def authenticate(self, password: str) -> bool:
         """Test if we can authenticate with the host."""
         try:
-            await self.router.login(username, password)
-            res = await self.router.router_mac()
-            self.router_mac = res["factory_mac"]
+            await self.router.login(self.username, password)
+            res = await self.router.router_info()
+            self.router_mac = res["mac"]
+            self.router_model = res["model"]
             # TODO, on success we can/should probably store some immutable device info in the class.
         except ConnectionRefusedError:
             _LOGGER.error("Failed to authenticate with Gl-inet router during testing")
@@ -85,24 +90,24 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     #     your_validate_func, data["username"], data["password"]
     # )
 
-    hub = TestingHub(data[CONF_HOST])
+    hub = TestingHub(data[CONF_USERNAME], data[CONF_HOST])
 
     if not await hub.connect():
         raise CannotConnect
 
-    if not await hub.authenticate(data[GLINET_DEFAULT_USERNAME], data[CONF_PASSWORD]):
+    if not await hub.authenticate(data[CONF_PASSWORD]):
         raise InvalidAuth
 
     # Return info that you want to store in the config entry.
     return {
         # TODO, on success we can/should probably store some immutable device info in the class.
         # TODO should we be using inbuilt literals and consts here?
-        "title": "GL-inet " + hub.router_model.upper(),
+        "title": "GL-inet " + hub.router_model.capitalize(),
         "mac": hub.router_mac,
         "data": {
-            GLINET_DEFAULT_USERNAME: data[GLINET_DEFAULT_USERNAME]
+            CONF_USERNAME: data[CONF_USERNAME],
             CONF_HOST: data[CONF_HOST],
-            CONF_API_TOKEN: hub.router.token,
+            CONF_API_TOKEN: hub.router.sid,
             CONF_PASSWORD: data[CONF_PASSWORD],
         },
     }

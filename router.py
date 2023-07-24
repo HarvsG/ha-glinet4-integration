@@ -86,6 +86,7 @@ class GLinetRouter:
 
         try:
             self._api: GLinet = await self.get_api()
+            await self._api.login(self._entry.data[CONF_USERNAME],self._entry.data[CONF_PASSWORD])
         except OSError as exc:
             _LOGGER.error(
                 "Error connecting to GL-inet router %s for setup: %s",
@@ -95,16 +96,22 @@ class GLinetRouter:
             raise ConfigEntryNotReady from exc
         try:
             router_info = await self._update_platform(self._api.router_info) # TODO seems to always throw unexpected err on first boot
+            _LOGGER.warning(
+                "Router info retrieved: %s",
+                router_info
+            )
             self._model = router_info["model"]
             self._sw_v = router_info["firmware_version"]
             self._factory_mac = router_info["mac"]
+            #self._entry.data[CONF_API_TOKEN] = self._api.sid # cant update like this
         except Exception as exc: # pylint: disable=broad-except
             # The late initialized variables will remain in
             # their default 'UNKNOWN' state
             _LOGGER.error(
-                "Error getting basic device info from GL-inet router %s for setup: %s",
+                "Error getting basic device info from GL-inet router %s for setup: %s, trace %s",
                 self._host,
                 exc,
+                exc.with_traceback
             )
             raise ConfigEntryNotReady from exc # TODO probably shouldnt raise this after logging an error
 
@@ -154,7 +161,7 @@ class GLinetRouter:
         if CONF_API_TOKEN in conf:
             return GLinet(
                 sync=False,
-                token=conf[CONF_API_TOKEN],
+                sid=conf[CONF_API_TOKEN],
                 base_url=conf[CONF_HOST] + API_PATH,
             )
         if CONF_PASSWORD in conf:
@@ -180,7 +187,7 @@ class GLinetRouter:
             )
             raise ConfigEntryAuthFailed from exc
         new_data = dict(self._entry.data)
-        new_data[CONF_API_TOKEN] = self._api.token
+        new_data[CONF_API_TOKEN] = self._api.sid
         # Update the configuration entry with the new data
         self.hass.config_entries.async_update_entry(self._entry, data=new_data)
         _LOGGER.info(
@@ -294,10 +301,10 @@ class GLinetRouter:
         # TODO as part of changes to switch.py, this probably needs to become
         # client/server/VPN type agnostic it may be that router/vpn/status
         # is a better API endpoint to do it in only 1 call
-        response: dict = await self._update_platform(self._api.wireguard_client_list)
+        response: list = await self._update_platform(self._api.wireguard_client_list)
         # TODO wireguard_client_list outputs some private info, we don't want it to end up in the logs.
         # May be best to redact it in gli4py.
-        for config in response["peers"]:
+        for config in response:
             self._wireguard_clients[config["peer_id"]] = WireGuardClient(
                 name=config["name"], connected=False
             )
