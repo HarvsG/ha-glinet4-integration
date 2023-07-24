@@ -1,5 +1,5 @@
 # ha-glinet4-integration
-A HomeAssistant custom component for GL-inet routers that uses [their API] version 4(https://dev.gl-inet.com/api/).
+A HomeAssistant custom component for GL-inet routers that uses [their API version 4](https://dev.gl-inet.com/api/).
 
 Working - in alpha, breaking changes very likely.
 
