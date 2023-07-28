@@ -96,7 +96,7 @@ class GLinetRouter:
             raise ConfigEntryNotReady from exc
         try:
             router_info = await self._update_platform(self._api.router_info) # TODO seems to always throw unexpected err on first boot
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "Router info retrieved: %s",
                 router_info
             )
