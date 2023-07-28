@@ -178,7 +178,14 @@ class GLinetRouter:
         """Attempt to get a new token."""
         try:
             await self._api.login(self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD])
-
+            new_data = dict(self._entry.data)
+            new_data[CONF_API_TOKEN] = self._api.sid
+            # Update the configuration entry with the new data
+            self.hass.config_entries.async_update_entry(self._entry, data=new_data)
+            _LOGGER.info(
+                "GL-inet router %s token was renewed",
+                self._host,
+            )
         except Exception as exc:
             _LOGGER.error(
                 "GL-inet %s failed to renew the token, have you changed your router password?: %s",
@@ -186,14 +193,6 @@ class GLinetRouter:
                 exc,
             )
             raise ConfigEntryAuthFailed from exc
-        new_data = dict(self._entry.data)
-        new_data[CONF_API_TOKEN] = self._api.sid
-        # Update the configuration entry with the new data
-        self.hass.config_entries.async_update_entry(self._entry, data=new_data)
-        _LOGGER.info(
-            "GL-inet router %s token was renewed",
-            self._host,
-        )
 
     async def update_all(self, now: datetime | None = None) -> None:
         """Update all Gl-inet platforms."""
@@ -206,7 +205,9 @@ class GLinetRouter:
         _LOGGER.debug("Checking client can connect to GL-inet router %s", self._host)
         try:
             if self._token_error:
+                _LOGGER.debug("The last requested resulted in a token error - so renewing token")
                 await self.renew_token()
+            _LOGGER.debug("Making api call %s from _update_platform()", Callable.__name__)
             response = await api_callable()
         except TimeoutError as exc:
             if not self._connect_error:
@@ -257,12 +258,12 @@ class GLinetRouter:
 
         if self._token_error:
             self._token_error = False
-            _LOGGER.info("Gl-inet %s token is now renewed", self._host)
+            _LOGGER.info("Gl-inet %s new token has successfully made an API call, marked as valid", self._host)
 
         if self._connect_error:
             self._connect_error = False
             _LOGGER.info("Reconnected to Gl-inet router %s", self._host)
-
+        _LOGGER.debug("_update_platform() completed without error for callable %s, returning response: %s", Callable.__name__,str(response))
         return response
 
     async def update_device_trackers(self) -> None:
