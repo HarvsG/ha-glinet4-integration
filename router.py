@@ -271,6 +271,11 @@ class GLinetRouter:
 
         new_device = False
         wrt_devices = await self._update_platform(self._api.connected_clients)
+        if not wrt_devices:
+            _LOGGER.warning("Router returned no valid connected devices. It returned %s of type %s", str(wrt_devices), type(wrt_devices))
+            if wrt_devices == []
+                self._connected_devices = 0
+            return
         consider_home = self._options.get(
             CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()
         )
