@@ -319,7 +319,7 @@ class GLinetRouter:
         response: list = await self._update_platform(self._api.wireguard_client_state)
 
         # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
-        if self._wireguard_clients[response["peer_id"]]
+        if self._wireguard_clients[response["peer_id"]]:
             self._wireguard_clients[response["peer_id"]].connected = (response["status"] == 1)
 
     def update_options(self, new_options: dict) -> bool:
