@@ -12,7 +12,7 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 
 ## Installation
 1. Create a new folder in `config/custom_components` called `glinet`
-2. Copy manually, or clone the files in this repo into that folder `git clone https://github.com/HarvsG/ha-glinet-integration.git . ` (The `.` at the end is important)
+2. Copy manually, or clone the files in this repo into that folder `git clone https://github.com/HarvsG/ha-glinet4-integration.git . ` (The `.` at the end is important)
 3. Reboot homeassistant
 4. Add the new Glinet integration under Devices and services
 5. Edit the host path with you router IP - ensure you keep the `http://`
@@ -23,7 +23,7 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
   - Or you could just use a running install of homeassistant (restarts are required for a lot of changes)
 2. Run once to generate directories
 3. create a `config/custom_components/glinet` directory
-4. `git clone https://github.com/HarvsG/ha-glinet-integration.git . `
+4. `git clone https://github.com/HarvsG/ha-glinet4-integration.git . `
 5. Note, the vscode git tracker will track the parent repo (ha core), but command line git will still work within the `glinet` dir
 6. You may need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwitten if you rebuild the container
 
