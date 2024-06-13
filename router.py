@@ -24,6 +24,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_registry import RegistryEntry
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_time_interval
 
 # from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -127,10 +128,10 @@ class GLinetRouter:
 
         # On setup we may already have saved tracker entities
         # Load them in and save them to the class
-        er_helper = self.hass.helpers.entity_registry
-        entity_registry = er_helper.async_get(self.hass)
+        entity_registry = er.async_get(self.hass)
+        #entity_registry = er_helper.async_get(self.hass)
 
-        track_entries: list[RegistryEntry] = er_helper.async_entries_for_config_entry(
+        track_entries: list[RegistryEntry] = er.async_entries_for_config_entry(
             entity_registry, self._entry.entry_id
         )
 
