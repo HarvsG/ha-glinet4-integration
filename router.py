@@ -1,10 +1,12 @@
 """Represent the GLinet router."""
-from __future__ import annotations
-from dataclasses import dataclass
 
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
-from typing import Callable
+from typing import Optional
 
 from gli4py import GLinet
 from gli4py.error_handling import NonZeroResponse, TokenError
@@ -16,21 +18,18 @@ from homeassistant.components.device_tracker import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import (  # callback,CALLBACK_TYPE
-    HomeAssistant,
-)
+from homeassistant.core import HomeAssistant  # callback,CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_registry import RegistryEntry
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_time_interval
 
 # from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, API_PATH
+from .const import API_PATH, DOMAIN
 
 # from typing import Any
 
@@ -44,17 +43,19 @@ SCAN_INTERVAL = timedelta(seconds=30)
 
 class GLinetRouter:
     """representation of a GLinet router.
+
     Should comprise: A method to access the gli4py API
     Basic data and properties about the router
     Configure a home assistant device
     ?TODO make calls to the sensors and device trackers
-    that are connected to it
+    that are connected to it.
     """
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize a GLinet router.
+
         Should not be called directly,
-        unless then calling async_init()
+        unless then calling async_init().
         """
         # Context info
         self.hass: HomeAssistant = hass
@@ -83,11 +84,15 @@ class GLinetRouter:
 
     async def async_init(self) -> None:
         """Set up a GL-inet router.
-        Do some late initialization"""
+
+        Do some late initialization
+        """
 
         try:
             self._api: GLinet = await self.get_api()
-            await self._api.login(self._entry.data[CONF_USERNAME],self._entry.data[CONF_PASSWORD])
+            await self._api.login(
+                self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD]
+            )
         except OSError as exc:
             _LOGGER.error(
                 "Error connecting to GL-inet router %s for setup: %s",
@@ -96,32 +101,29 @@ class GLinetRouter:
             )
             raise ConfigEntryNotReady from exc
         try:
-            router_info = await self._update_platform(self._api.router_info) # TODO seems to always throw unexpected err on first boot
-            _LOGGER.debug(
-                "Router info retrieved: %s",
-                router_info
-            )
+            router_info = await self._update_platform(
+                self._api.router_info
+            )  # TODO seems to always throw unexpected err on first boot
+            _LOGGER.debug("Router info retrieved: %s", router_info)
             self._model = router_info["model"]
             self._sw_v = router_info["firmware_version"]
             self._factory_mac = router_info["mac"]
-            #self._entry.data[CONF_API_TOKEN] = self._api.sid # cant update like this
-        except Exception as exc: # pylint: disable=broad-except
+            # self._entry.data[CONF_API_TOKEN] = self._api.sid # cant update like this
+        except Exception as exc:  # pylint: disable=broad-except
             # The late initialized variables will remain in
             # their default 'UNKNOWN' state
             _LOGGER.error(
                 "Error getting basic device info from GL-inet router %s for setup: %s, trace %s",
                 self._host,
                 exc,
-                exc.with_traceback
+                exc.with_traceback,
             )
-            raise ConfigEntryNotReady from exc # TODO probably shouldnt raise this after logging an error
+            raise ConfigEntryNotReady from exc  # TODO probably shouldnt raise this after logging an error
 
         self._late_init_complete = True
 
     async def setup(self) -> None:
-        """Load in old and new entities
-        and establish a new session token
-        """
+        """Load in old and new entities and establish a new session token."""
 
         if not self._late_init_complete:
             await self.async_init()
@@ -129,7 +131,7 @@ class GLinetRouter:
         # On setup we may already have saved tracker entities
         # Load them in and save them to the class
         entity_registry = er.async_get(self.hass)
-        #entity_registry = er_helper.async_get(self.hass)
+        # entity_registry = er_helper.async_get(self.hass)
 
         track_entries: list[RegistryEntry] = er.async_entries_for_config_entry(
             entity_registry, self._entry.entry_id
@@ -156,8 +158,7 @@ class GLinetRouter:
         async_track_time_interval(self.hass, self.update_all, SCAN_INTERVAL)
 
     async def get_api(self) -> GLinet:
-        """Optimistically returns a GLinet object
-        for connection to the API, no test included"""
+        """Optimistically returns a GLinet object for connection to the API, no test included."""
         conf = self._entry.data
         if CONF_API_TOKEN in conf:
             return GLinet(
@@ -169,16 +170,17 @@ class GLinetRouter:
             router = GLinet(sync=False, base_url=conf[CONF_HOST] + API_PATH)
             await router.login(CONF_USERNAME, conf[CONF_PASSWORD])
             return router
-        else:
-            _LOGGER.error(
-                "Error setting up GL-inet router, no auth details found in configuration"
-            )
-            raise ConfigEntryAuthFailed
+        _LOGGER.error(
+            "Error setting up GL-inet router, no auth details found in configuration"
+        )
+        raise ConfigEntryAuthFailed
 
     async def renew_token(self):
         """Attempt to get a new token."""
         try:
-            await self._api.login(self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD])
+            await self._api.login(
+                self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD]
+            )
             new_data = dict(self._entry.data)
             new_data[CONF_API_TOKEN] = self._api.sid
             # Update the configuration entry with the new data
@@ -206,9 +208,13 @@ class GLinetRouter:
         _LOGGER.debug("Checking client can connect to GL-inet router %s", self._host)
         try:
             if self._token_error:
-                _LOGGER.debug("The last requested resulted in a token error - so renewing token")
+                _LOGGER.debug(
+                    "The last requested resulted in a token error - so renewing token"
+                )
                 await self.renew_token()
-            _LOGGER.debug("Making api call %s from _update_platform()", Callable.__name__)
+            _LOGGER.debug(
+                "Making api call %s from _update_platform()", Callable.__name__
+            )
             response = await api_callable()
         except TimeoutError as exc:
             if not self._connect_error:
@@ -238,7 +244,7 @@ class GLinetRouter:
                 exc,
             )
             return
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             if not self._connect_error:
                 self._connect_error = True
             _LOGGER.error(
@@ -259,21 +265,32 @@ class GLinetRouter:
 
         if self._token_error:
             self._token_error = False
-            _LOGGER.info("Gl-inet %s new token has successfully made an API call, marked as valid", self._host)
+            _LOGGER.info(
+                "Gl-inet %s new token has successfully made an API call, marked as valid",
+                self._host,
+            )
 
         if self._connect_error:
             self._connect_error = False
             _LOGGER.info("Reconnected to Gl-inet router %s", self._host)
-        _LOGGER.debug("_update_platform() completed without error for callable %s, returning response: %s", Callable.__name__,str(response))
+        _LOGGER.debug(
+            "_update_platform() completed without error for callable %s, returning response: %s",
+            Callable.__name__,
+            str(response),
+        )
         return response
 
     async def update_device_trackers(self) -> None:
-        """Update the device trackers"""
+        """Update the device trackers."""
 
         new_device = False
         wrt_devices = await self._update_platform(self._api.connected_clients)
         if not wrt_devices:
-            _LOGGER.warning("Router returned no valid connected devices. It returned %s of type %s", str(wrt_devices), type(wrt_devices))
+            _LOGGER.warning(
+                "Router returned no valid connected devices. It returned %s of type %s",
+                str(wrt_devices),
+                type(wrt_devices),
+            )
             if wrt_devices == []:
                 self._connected_devices = 0
             return
@@ -304,7 +321,7 @@ class GLinetRouter:
         self._connected_devices = len(wrt_devices)
 
     async def update_wireguard_client_state(self) -> None:
-        """Make call to the API to get the wireguard client state"""
+        """Make call to the API to get the wireguard client state."""
         # TODO as part of changes to switch.py, this probably needs to become
         # client/server/VPN type agnostic it may be that router/vpn/status
         # is a better API endpoint to do it in only 1 call
@@ -313,7 +330,10 @@ class GLinetRouter:
         # May be best to redact it in gli4py.
         for config in response:
             self._wireguard_clients[config["peer_id"]] = WireGuardClient(
-                name=config["name"], connected=False, group_id=config["group_id"], peer_id=config["group_id"]
+                name=config["name"],
+                connected=False,
+                group_id=config["group_id"],
+                peer_id=config["group_id"],
             )
 
         # update wether the currently selected WG client is connected
@@ -321,10 +341,14 @@ class GLinetRouter:
 
         # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
         if self._wireguard_clients[response["peer_id"]]:
-            self._wireguard_clients[response["peer_id"]].connected = (response["status"] == 1)
+            self._wireguard_clients[response["peer_id"]].connected = (
+                response["status"] == 1
+            )
 
     def update_options(self, new_options: dict) -> bool:
-        """Update router options. Returns True if a reload is required
+        """Update router options.
+
+        Returns True if a reload is required
         Called in __init__.py
         placeholder function because it may become
         neccessary to reload in future.
@@ -334,15 +358,17 @@ class GLinetRouter:
         return req_reload
 
     def add_to_device_registry(self):
-        """Since this router device doesn't always have its
+        """Asynchronysly adds to the registry.
+
+        Since this router device doesn't always have its
         own entities we need to manually add it to
-        the device registry
+        the device registry.
         """
         device_registry = dr.async_get(self.hass)
 
         device_registry.async_get_or_create(
             config_entry_id=self._entry.entry_id,
-            #TODO In my test local lan uses MAC - 1, 2.4G MAC + 1 and 5G MAC +2.
+            # TODO In my test local lan uses MAC - 1, 2.4G MAC + 1 and 5G MAC +2.
             # Huwawei LTE does this
             # https://github.com/home-assistant/core/blob/8d21e2b168c995346c8c6af7fe077ca0e97e6ab3/homeassistant/components/huawei_lte/__init__.py#L181
             # https://github.com/home-assistant/core/blob/8d21e2b168c995346c8c6af7fe077ca0e97e6ab3/homeassistant/components/huawei_lte/__init__.py#L404
@@ -398,7 +424,7 @@ class GLinetRouter:
 
     @property
     def model(self) -> str:
-        """Return router model"""
+        """Return router model."""
         return self._model.upper()
 
     @property
@@ -424,10 +450,11 @@ class GLinetRouter:
 @dataclass
 class WireGuardClient:
     """Class for keeping track of WireGuard Client Configs."""
+
     name: str
     connected: bool
     group_id: int
-    peer_id:int
+    peer_id: int
 
 
 class ClientDevInfo:
@@ -441,7 +468,7 @@ class ClientDevInfo:
         self._last_activity: datetime = dt_util.utcnow() - timedelta(days=1)
         self._connected: bool = False
 
-    def update(self, dev_info: dict = None, consider_home=0):
+    def update(self, dev_info: dict | None = None, consider_home=0):
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
         if dev_info:
