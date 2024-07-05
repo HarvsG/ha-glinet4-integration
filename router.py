@@ -9,6 +9,7 @@ import logging
 from typing import Optional
 
 from gli4py import GLinet
+from gli4py.enums import TailscaleConnection
 from gli4py.error_handling import NonZeroResponse, TokenError
 
 from homeassistant.components.device_tracker import (
@@ -64,7 +65,7 @@ class GLinetRouter:
         self._options.update(entry.options)
 
         # gli4py API
-        self._api: GLinet = None
+        # self._api: GLinet
         self._host: str = entry.data[CONF_HOST]
 
         # Stable properties
@@ -76,6 +77,8 @@ class GLinetRouter:
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
         self._wireguard_clients: dict[str, WireGuardClient] = {}
+        self._tailscale_config: dict = {}
+        self._tailscale_connection: bool | None = None
 
         # Flow control
         self._late_init_complete: bool = False
@@ -201,6 +204,7 @@ class GLinetRouter:
         """Update all Gl-inet platforms."""
         await self.update_device_trackers()
         await self.update_wireguard_client_state()
+        await self.update_tailscale_state()
 
     async def _update_platform(self, api_callable: Callable):
         """Boilerplate to make update requests to api and handle errors."""
@@ -319,6 +323,25 @@ class GLinetRouter:
             async_dispatcher_send(self.hass, self.signal_device_new)
 
         self._connected_devices = len(wrt_devices)
+
+    async def update_tailscale_state(self):
+        """Make a call to the API to get the tailscale state."""
+
+        if not await self._api.tailscale_configured():
+            self._tailscale_config = {}
+            return
+        ##TODO this is a placeholder that needs to be replaced with a pulic method that combines usefull info in _tailscale_status and _tailscale_get_config
+        self._tailscale_config = await self._update_platform(
+            self._api._tailscale_get_config
+        )
+        response: TailscaleConnection = await self._update_platform(
+            self._api.tailscale_connection_state
+        )
+
+        if response == TailscaleConnection.Connected:
+            self._tailscale_connection = True
+        else:
+            self._tailscale_connection = False
 
     async def update_wireguard_client_state(self) -> None:
         """Make call to the API to get the wireguard client state."""
@@ -449,6 +472,22 @@ class GLinetRouter:
             if client.connected:
                 return client
         return None
+
+    @property
+    def tailscale_configured(self) -> bool:
+        """Is tailscale configured."""
+        return self._tailscale_config != {}
+
+    @property
+    def tailscale_connection(self) -> bool:
+        """Property for tailscale connection."""
+        return self._tailscale_connection
+
+    @property
+    def tailscale_config(self) -> dict:
+        """Property for tailscale connection."""
+        # TODO, we need a non private API method that returns some usefull config info
+        return self._tailscale_config
 
 
 @dataclass
