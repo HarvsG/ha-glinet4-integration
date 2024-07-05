@@ -1,4 +1,5 @@
 """Config flow for GL-inet integration."""
+
 from __future__ import annotations
 
 import logging
@@ -18,7 +19,13 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import format_mac
 
-from .const import API_PATH, DOMAIN, GLINET_DEFAULT_PW, GLINET_DEFAULT_URL, GLINET_DEFAULT_USERNAME
+from .const import (
+    API_PATH,
+    DOMAIN,
+    GLINET_DEFAULT_PW,
+    GLINET_DEFAULT_URL,
+    GLINET_DEFAULT_USERNAME,
+)
 
 # from homeassistant.helpers import config_validation as cv
 
@@ -50,9 +57,7 @@ class TestingHub:
         try:
             res = await self.router.router_reachable(self.username)
             # TODO, on success we can/should probably store some immutable device info in the class.
-            _LOGGER.warn(
-                "Attempting to connect to router, success:%s", res
-            )
+            _LOGGER.warning("Attempting to connect to router, success:%s", res)
             return res
         except ConnectionError:
             _LOGGER.error(

@@ -1,9 +1,9 @@
 """Support for GLinet routers."""
+
 from __future__ import annotations
 
-from typing import Any
-
 import logging
+from typing import Any
 
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
@@ -31,13 +31,15 @@ async def async_setup_entry(
         """Update the values of the router."""
         add_entities(router, async_add_entities, tracked)
 
-    #router.async_on_close(
+    # router.async_on_close(
     #    async_dispatcher_connect(hass, router.signal_device_new, update_router)
-    #)
+    # )
 
     update_router()
 
+
 _LOGGER = logging.getLogger(__name__)
+
 
 @callback
 def add_entities(router: GLinetRouter, async_add_entities, tracked):
@@ -61,18 +63,20 @@ class GLinetDevice(ScannerEntity):
         """Initialize a GLinet device."""
         self._router: GLinetRouter = router
         self._device: ClientDevInfo = device
-        self._icon = "mdi:radar" #TODO will need to be replaced with brand logo or similar
-
+        self._icon = (
+            "mdi:radar"  # TODO will need to be replaced with brand logo or similar
+        )
 
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
-        #TODO do we need to prepend DOMAIN to make this unique or does HA do this already?
+        # TODO do we need to prepend DOMAIN to make this unique or does HA do this already?
         return self._device.mac
 
     @property
     def icon(self) -> str:
-        #TODO theoretically HA should give the default device tracker icon
+        """Icon."""
+        # TODO theoretically HA should give the default device tracker icon
         return self._icon
 
     @property
@@ -125,7 +129,7 @@ class GLinetDevice(ScannerEntity):
         """
         data: DeviceInfo = {
             "connections": {(CONNECTION_NETWORK_MAC, self._device.mac)},
-            "via_device":((DOMAIN, self._router.factory_mac)),
+            "via_device": ((DOMAIN, self._router.factory_mac)),
         }
         if self._device.name:
             data["default_name"] = self._device.name

@@ -244,7 +244,7 @@ class GLinetRouter:
                 exc,
             )
             return
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except  # noqa: BLE001
             if not self._connect_error:
                 self._connect_error = True
             _LOGGER.error(
@@ -255,8 +255,8 @@ class GLinetRouter:
             return
 
         if not response:
-            _LOGGER.error(
-                "Response from %s to request %s is of type %s, Response: %s",
+            _LOGGER.debug(
+                "Empty response from %s to request %s is of type %s, Response: %s",
                 self._host,
                 api_callable.__name__,
                 str(type(response)),
@@ -335,6 +335,10 @@ class GLinetRouter:
                 group_id=config["group_id"],
                 peer_id=config["group_id"],
             )
+
+        if len(self._wireguard_clients) == 0:
+            _LOGGER.debug("No wireguard clients, there is nothing to update")
+            return
 
         # update wether the currently selected WG client is connected
         response: list = await self._update_platform(self._api.wireguard_client_state)
