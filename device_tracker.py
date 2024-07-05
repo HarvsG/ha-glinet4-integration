@@ -122,6 +122,7 @@ class GLinetDevice(ScannerEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device information.
+
         TODO Device tracker entities should not create device registry entries.
         according to HomeAssistant so this will have to remain until merge
         Perhaps an ideal scenario would be to only 'create' a device if it already
