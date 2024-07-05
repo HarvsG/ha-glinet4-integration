@@ -7,6 +7,7 @@ from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.entity import DeviceInfo
@@ -86,6 +87,21 @@ class TailscaleSwitch(SwitchEntity):
         return self._router.tailscale_config["lan_enabled"]
 
     @property
+    def entity_category(self) -> EntityCategory:
+        """A config entity."""
+        return EntityCategory.CONFIG
+
+    @property
+    def entity_registry_enabled_default(self) -> bool:
+        """Enabled by default."""
+        return self._router.tailscale_configured
+
+    @property
+    def entity_registry_visible_default(self) -> bool:
+        """Enabled by default."""
+        return self._router.tailscale_configured
+
+    @property
     def device_info(self) -> DeviceInfo:
         """Return the device information."""
         # TODO this should probably be defined in the router device not here in the switch
@@ -148,6 +164,11 @@ class WireGuardSwitch(SwitchEntity):
             await self._router.update_wireguard_client_state()
         except OSError:
             _LOGGER.error("Unable to stop WG client")
+
+    @property
+    def entity_category(self) -> EntityCategory:
+        """A config entity."""
+        return EntityCategory.CONFIG
 
     @property
     def device_info(self) -> DeviceInfo:
