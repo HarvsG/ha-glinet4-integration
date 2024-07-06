@@ -152,7 +152,6 @@ class WireGuardSwitch(SwitchEntity):
             await self._router.api.wireguard_client_start(
                 self._client.group_id, self._client.peer_id
             )  # TODO not working
-            await self._router.update_wireguard_client_state()
         except OSError:
             _LOGGER.error("Unable to enable WG client")
 
@@ -161,7 +160,6 @@ class WireGuardSwitch(SwitchEntity):
         try:
             await self._router.api.wireguard_client_stop()
             # TODO may need to introduce a delay here, or await confirmation of the stop
-            await self._router.update_wireguard_client_state()
         except OSError:
             _LOGGER.error("Unable to stop WG client")
 
