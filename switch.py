@@ -141,7 +141,7 @@ class WireGuardSwitch(SwitchEntity):
         """Return if the service is on."""
         # TODO alter property to account for the fact that users can have
         # > 1 client configured, but only one connected
-        return self._client.connected
+        return self._router.wireguard_connection == self._client
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the service."""
