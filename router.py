@@ -217,7 +217,7 @@ class GLinetRouter:
                 )
                 await self.renew_token()
             _LOGGER.debug(
-                "Making api call %s from _update_platform()", Callable.__name__
+                "Making api call %s from _update_platform()", api_callable.__name__
             )
             response = await api_callable()
         except TimeoutError as exc:
@@ -279,7 +279,7 @@ class GLinetRouter:
             _LOGGER.info("Reconnected to Gl-inet router %s", self._host)
         _LOGGER.debug(
             "_update_platform() completed without error for callable %s, returning response: %s",
-            Callable.__name__,
+            api_callable.__name__,
             str(response),
         )
         return response
@@ -350,6 +350,7 @@ class GLinetRouter:
         # is a better API endpoint to do it in only 1 call
         response: dict = await self._update_platform(self._api.wireguard_client_list)
         # TODO wireguard_client_list outputs some private info, we don't want it to end up in the logs.
+        # TODO we need to do some validation before we start accessing dictionary keys, I've had errors before
         # May be best to redact it in gli4py.
         for config in response:
             self._wireguard_clients[config["peer_id"]] = WireGuardClient(
