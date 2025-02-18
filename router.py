@@ -108,6 +108,8 @@ class GLinetRouter:
                 self._api.router_info
             )  # TODO seems to always throw unexpected err on first boot
             _LOGGER.debug("Router info retrieved: %s", router_info)
+
+
             self._model = router_info["model"]
             self._sw_v = router_info["firmware_version"]
             self._factory_mac = router_info["mac"]
@@ -309,10 +311,16 @@ class GLinetRouter:
             device.update(dev_info, consider_home)
 
         for device_mac, dev_info in wrt_devices.items():
+            # Skip if we've already have this device
             if device_mac in self._devices:
                 continue
-            if not dev_info["name"]:
+
+            alias = dev_info.get("alias", "").strip()
+            name = dev_info.get("name", "").strip()
+            # Skip if both alias and name are empty
+            if not alias and not name:
                 continue
+
             new_device = True
             device = ClientDevInfo(device_mac)
             device.update(dev_info)
@@ -527,11 +535,17 @@ class ClientDevInfo:
         now: datetime = dt_util.utcnow()
         if dev_info:
             if not self._name:
-                # GLinet router name unknown devices "*"
-                if dev_info["name"] == "*" or dev_info["name"] == "":
-                    self._name = self._mac.replace(":", "_")
+                # Prefer the user-defined alias as a name
+                alias = dev_info.get("alias")
+                if alias and alias.strip():
+                    self._name = alias
                 else:
-                    self._name = dev_info["name"]
+                    # If no alias, fallback to auto-assigned name field
+                    name = dev_info.get("name", "")
+                    if name == "*" or not name.strip():
+                        self._name = self._mac.replace(":", "_")
+                    else:
+                        self._name = name
             self._ip_address = dev_info["ip"]
             self._last_activity = now
             self._connected = dev_info["online"]
