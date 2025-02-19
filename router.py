@@ -534,18 +534,17 @@ class ClientDevInfo:
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
         if dev_info:
-            if not self._name:
-                # Prefer the user-defined alias as a name
-                alias = dev_info.get("alias")
-                if alias and alias.strip():
-                    self._name = alias
+            # Prefer the user-defined alias as a name
+            alias = dev_info.get("alias")
+            if alias and alias.strip():
+                self._name = alias
+            else:
+                # If no alias, fallback to auto-assigned name field
+                name = dev_info.get("name", "")
+                if name == "*" or not name.strip():
+                    self._name = self._mac.replace(":", "_")
                 else:
-                    # If no alias, fallback to auto-assigned name field
-                    name = dev_info.get("name", "")
-                    if name == "*" or not name.strip():
-                        self._name = self._mac.replace(":", "_")
-                    else:
-                        self._name = name
+                    self._name = name
             self._ip_address = dev_info["ip"]
             self._last_activity = now
             self._connected = dev_info["online"]
