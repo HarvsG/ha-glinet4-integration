@@ -75,6 +75,7 @@ class GLinetRouter:
         # State
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
+        self._system_status: dict = {}
         self._wireguard_clients: dict[str, WireGuardClient] = {}
         self._wireguard_connection: WireGuardClient | None = None
         self._tailscale_config: dict = {}
@@ -202,6 +203,7 @@ class GLinetRouter:
 
     async def update_all(self, now: datetime | None = None) -> None:
         """Update all Gl-inet platforms."""
+        await self.update_system_status()
         await self.update_device_trackers()
         await self.update_wireguard_client_state()
         await self.update_tailscale_state()
@@ -283,6 +285,11 @@ class GLinetRouter:
             str(response),
         )
         return response
+
+    async def update_system_status(self) -> None:
+        status = await self._update_platform(self._api.router_get_status)
+        # For now only the content of the `system` field seems of use
+        self._system_status = status.get("system")
 
     async def update_device_trackers(self) -> None:
         """Update the device trackers."""

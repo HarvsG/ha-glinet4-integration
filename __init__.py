@@ -1,4 +1,5 @@
 """The GL-inet integration."""
+
 from __future__ import annotations
 
 from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
@@ -8,7 +9,11 @@ from homeassistant.core import HomeAssistant
 from .const import DATA_GLINET, DOMAIN
 from .router import GLinetRouter
 
-PLATFORMS = ["device_tracker","switch"] #TODO add other services such as sensor.py
+PLATFORMS = [
+    "device_tracker",
+    "sensor",
+    "switch",
+]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigEntry):
