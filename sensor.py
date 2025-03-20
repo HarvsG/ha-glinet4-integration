@@ -15,7 +15,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.entity import DeviceInfo
@@ -116,8 +116,8 @@ def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> d
     return last_value
 
 
-class SystemStatusSensor(SensorEntity):
-    """GL-inet system status sensor class."""
+class GliSensorBase(SensorEntity):
+    """GL-inet sensor base class."""
 
     def __init__(
         self,
@@ -129,23 +129,34 @@ class SystemStatusSensor(SensorEntity):
         self.entity_description = entity_description
 
     @property
+    def unique_id(self) -> str:
+        """Return the unique id of the switch."""
+        return f"glinet_sensor/{self.router.factory_mac}/system_{self.entity_description.key}"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device information."""
+        # TODO this should probably be defined in the router device not here in the switch
+        data: DeviceInfo = {
+            "connections": {(CONNECTION_NETWORK_MAC, self.router.factory_mac)},
+            "identifiers": {(DOMAIN, self.router.factory_mac)},
+        }
+        return data
+
+
+class SystemStatusSensor(GliSensorBase):
+    """GL-inet system status sensor class."""
+
+    @property
     def native_value(self) -> int | float | None:
         """Return the native value of the sensor."""
         return self.entity_description.value_fn(self.router._system_status)
 
 
-class SystemUptimeSensor(SensorEntity):
+class SystemUptimeSensor(GliSensorBase):
     """GL-inet system uptime sensor class."""
 
-    def __init__(
-        self,
-        router: GLinetRouter,
-        entity_description: SystemStatusEntityDescription,
-    ) -> None:
-        """Initialize the sensor class."""
-        self.router = router
-        self.entity_description = entity_description
-        self._current_value = None
+    _current_value = None
 
     @property
     def native_value(self) -> datetime | None:
