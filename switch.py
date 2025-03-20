@@ -24,7 +24,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Pi-hole switch."""
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
-    switches: list[WireGuardSwitch | TailscaleSwitch] = []
+    switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch] = []
     if router.wireguard_clients:
         # TODO detect all configured wireguard, openvpn, shadowsocks and
         # TOR clients & servers with router/vpn/status? and gen a switch for each
@@ -34,8 +34,65 @@ async def async_setup_entry(
         ]
     if router.tailscale_configured:
         switches.append(TailscaleSwitch(router))
+    for iface in router._wifi_ifaces:
+        switches.append(WifiApSwitch(router, iface))
     if switches:
         async_add_entities(switches, True)
+
+class WifiApSwitch(SwitchEntity):
+    """A WiFi AccessPoint switch."""
+    
+    def __init__(self, router: GLinetRouter, iface_name: str) -> None:
+        """Initialize a GLinet device."""
+        self._router = router
+        self._iface_name = iface_name
+
+    @property
+    def icon(self) -> str:
+        """Return AP state icon."""
+        if self.is_on:
+            return "mdi:wifi"
+        return "mdi:wifi-off"
+
+    @property
+    def name(self) -> str:
+        """Return the name of the switch."""
+        return self._iface_name
+
+    @property
+    def unique_id(self) -> str:
+        """Return the unique id of the switch."""
+        return f"glinet_switch/{self._router.factory_mac}/iface_{self._iface_name}"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the attributes."""
+        attrs = {}
+        for attr in ['guest', 'ssid']:
+            if val := self._router._wifi_ifaces.get(self._iface_name, {}).get(attr):
+                attrs[attr] = val
+        return attrs
+
+    @property
+    def is_on(self) -> bool:
+        """Return if the AP is on."""
+        return self._router._wifi_ifaces.get(self._iface_name, {}).get('enabled', False)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn on the AP."""
+        try:
+            await self._router.api.wifi_iface_set_enabled(self._iface_name, True)
+            await self._router.update_wifi_ifaces_state()
+        except OSError:
+            _LOGGER.error("Unable to enable WiFi interface %s", self._iface_name)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off the AP."""
+        try:
+            await self._router.api.wifi_iface_set_enabled(self._iface_name, False)
+            await self._router.update_wifi_ifaces_state()
+        except OSError:
+            _LOGGER.error("Unable to disable WiFi interface %s", self._iface_name)
 
 
 class TailscaleSwitch(SwitchEntity):

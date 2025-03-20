@@ -75,6 +75,7 @@ class GLinetRouter:
         # State
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
+        self._wifi_ifaces: dict = {}
         self._wireguard_clients: dict[str, WireGuardClient] = {}
         self._wireguard_connection: WireGuardClient | None = None
         self._tailscale_config: dict = {}
@@ -203,6 +204,7 @@ class GLinetRouter:
     async def update_all(self, now: datetime | None = None) -> None:
         """Update all Gl-inet platforms."""
         await self.update_device_trackers()
+        await self.update_wifi_ifaces_state()
         await self.update_wireguard_client_state()
         await self.update_tailscale_state()
 
@@ -323,6 +325,12 @@ class GLinetRouter:
             async_dispatcher_send(self.hass, self.signal_device_new)
 
         self._connected_devices = len(wrt_devices)
+
+    async def update_wifi_ifaces_state(self):
+        """Make a call to the API to get the WiFi ifaces config state."""
+        self._wifi_ifaces = await self._update_platform(
+            self._api.wifi_ifaces_get
+        )
 
     async def update_tailscale_state(self):
         """Make a call to the API to get the tailscale state."""
