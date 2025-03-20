@@ -39,12 +39,38 @@ async def async_setup_entry(
     if switches:
         async_add_entities(switches, True)
 
-class WifiApSwitch(SwitchEntity):
-    """A WiFi AccessPoint switch."""
-    
-    def __init__(self, router: GLinetRouter, iface_name: str) -> None:
+
+class GliSwitchBase(SwitchEntity):
+    """GL-inet switch base class."""
+
+    def __init__(self, router: GLinetRouter) -> None:
         """Initialize a GLinet device."""
         self._router = router
+
+    _attr_has_entity_name = True
+
+    @property
+    def entity_category(self) -> EntityCategory:
+        """A config entity."""
+        return EntityCategory.CONFIG
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device information."""
+        # TODO this should probably be defined in the router device not here in the switch
+        data: DeviceInfo = {
+            "connections": {(CONNECTION_NETWORK_MAC, self._router.factory_mac)},
+            "identifiers": {(DOMAIN, self._router.factory_mac)},
+        }
+        return data
+
+
+class WifiApSwitch(GliSwitchBase):
+    """A WiFi AccessPoint switch."""
+
+    def __init__(self, router: GLinetRouter, iface_name: str) -> None:
+        """Initialize a GLinet device."""
+        super().__init__(router)
         self._iface_name = iface_name
 
     @property
@@ -68,7 +94,7 @@ class WifiApSwitch(SwitchEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the attributes."""
         attrs = {}
-        for attr in ['guest', 'ssid']:
+        for attr in ["guest", "ssid"]:
             if val := self._router._wifi_ifaces.get(self._iface_name, {}).get(attr):
                 attrs[attr] = val
         return attrs
@@ -76,7 +102,7 @@ class WifiApSwitch(SwitchEntity):
     @property
     def is_on(self) -> bool:
         """Return if the AP is on."""
-        return self._router._wifi_ifaces.get(self._iface_name, {}).get('enabled', False)
+        return self._router._wifi_ifaces.get(self._iface_name, {}).get("enabled", False)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the AP."""
@@ -95,13 +121,8 @@ class WifiApSwitch(SwitchEntity):
             _LOGGER.error("Unable to disable WiFi interface %s", self._iface_name)
 
 
-class TailscaleSwitch(SwitchEntity):
+class TailscaleSwitch(GliSwitchBase):
     """A tailscale switch."""
-
-    def __init__(self, router: GLinetRouter) -> None:
-        """Initialize a GLinet device."""
-        self._router = router
-        # self._client = client
 
     _attr_icon = "mdi:vpn"  # TODO would be better to have MDI style icons for each of the VPN types
 
@@ -144,11 +165,6 @@ class TailscaleSwitch(SwitchEntity):
         return self._router.tailscale_config["lan_enabled"]
 
     @property
-    def entity_category(self) -> EntityCategory:
-        """A config entity."""
-        return EntityCategory.CONFIG
-
-    @property
     def entity_registry_enabled_default(self) -> bool:
         """Enabled by default."""
         return self._router.tailscale_configured
@@ -158,18 +174,8 @@ class TailscaleSwitch(SwitchEntity):
         """Enabled by default."""
         return self._router.tailscale_configured
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device information."""
-        # TODO this should probably be defined in the router device not here in the switch
-        data: DeviceInfo = {
-            "connections": {(CONNECTION_NETWORK_MAC, self._router.factory_mac)},
-            "identifiers": {(DOMAIN, self._router.factory_mac)},
-        }
-        return data
 
-
-class WireGuardSwitch(SwitchEntity):
+class WireGuardSwitch(GliSwitchBase):
     """Representation of a VPN switch."""
 
     # TODO make class, client/server/VPN type agnostic and appreciate >1 can be configured of each
@@ -178,7 +184,7 @@ class WireGuardSwitch(SwitchEntity):
     # multiples of any one type etc etc
     def __init__(self, router: GLinetRouter, client: WireGuardClient) -> None:
         """Initialize a GLinet device."""
-        self._router = router
+        super().__init__(router)
         self._client = client
 
     _attr_icon = "mdi:vpn"  # TODO would be better to have MDI style icons for each of the VPN types
@@ -219,18 +225,3 @@ class WireGuardSwitch(SwitchEntity):
             # TODO may need to introduce a delay here, or await confirmation of the stop
         except OSError:
             _LOGGER.error("Unable to stop WG client")
-
-    @property
-    def entity_category(self) -> EntityCategory:
-        """A config entity."""
-        return EntityCategory.CONFIG
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device information."""
-        # TODO this should probably be defined in the router device not here in the switch
-        data: DeviceInfo = {
-            "connections": {(CONNECTION_NETWORK_MAC, self._router.factory_mac)},
-            "identifiers": {(DOMAIN, self._router.factory_mac)},
-        }
-        return data
