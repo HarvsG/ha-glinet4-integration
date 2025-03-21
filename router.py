@@ -40,6 +40,16 @@ from .const import API_PATH, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
 
+DeviceInterfaceType = [
+    "2.4GHz",
+    "5GHz",
+    "LAN",
+    "2.4GHz Guest",
+    "5GHz Guest",
+    "Unknown",
+    "Dongle",
+    "Bypass Route"
+]
 
 class GLinetRouter:
     """representation of a GLinet router.
@@ -521,6 +531,7 @@ class ClientDevInfo:
         self._ip_address: str | None = None
         self._last_activity: datetime = dt_util.utcnow() - timedelta(days=1)
         self._connected: bool = False
+        self._if_type: int = 5
 
     def update(self, dev_info: dict | None = None, consider_home=0):
         """Update connected device info."""
@@ -535,6 +546,7 @@ class ClientDevInfo:
             self._ip_address = dev_info["ip"]
             self._last_activity = now
             self._connected = dev_info["online"]
+            self._if_type = dev_info["type"]
 
         # a device might not actually be online but we want to consider it home
         elif self._connected:
@@ -547,6 +559,14 @@ class ClientDevInfo:
     def is_connected(self):
         """Return connected status."""
         return self._connected
+
+    @property
+    def interface_type(self) -> str:
+        """Return device interface type."""
+        try:
+            return DeviceInterfaceType[self._if_type]
+        except IndexError:
+            return DeviceInterfaceType[5]
 
     @property
     def mac(self):
