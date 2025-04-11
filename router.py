@@ -108,8 +108,6 @@ class GLinetRouter:
                 self._api.router_info
             )  # TODO seems to always throw unexpected err on first boot
             _LOGGER.debug("Router info retrieved: %s", router_info)
-
-
             self._model = router_info["model"]
             self._sw_v = router_info["firmware_version"]
             self._factory_mac = router_info["mac"]
