@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from .const import DATA_GLINET, DOMAIN
 from .router import GLinetRouter
 
-PLATFORMS = ["device_tracker","switch"] #TODO add other services such as sensor.py
+PLATFORMS = ["button", "device_tracker","switch"] #TODO add other services such as sensor.py
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigEntry):

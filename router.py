@@ -216,6 +216,9 @@ class GLinetRouter:
                     "The last requested resulted in a token error - so renewing token"
                 )
                 await self.renew_token()
+            if self._connect_error:
+                _LOGGER.debug("Got pending connect error - attempting to renew token")
+                await self.renew_token()
             _LOGGER.debug(
                 "Making api call %s from _update_platform()", api_callable.__name__
             )
