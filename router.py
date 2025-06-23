@@ -530,7 +530,7 @@ class ClientDevInfo:
         self._ip_address: str | None = None
         self._last_activity: datetime = dt_util.utcnow() - timedelta(days=1)
         self._connected: bool = False
-        self._if_type: int = 5
+        self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN 
 
     def update(self, dev_info: dict | None = None, consider_home=0):
         """Update connected device info."""
