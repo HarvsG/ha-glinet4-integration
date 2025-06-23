@@ -40,16 +40,15 @@ from .const import API_PATH, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
 
-DeviceInterfaceType = [
-    "2.4GHz",
-    "5GHz",
-    "LAN",
-    "2.4GHz Guest",
-    "5GHz Guest",
-    "Unknown",
-    "Dongle",
-    "Bypass Route"
-]
+class DeviceInterfaceType(StrEnum):
+    WIFI_24 = "2.4GHz"
+    WIFI_5 = "5GHz"
+    LAN = "LAN"
+    WIFI_24_GUEST = "2.4GHz Guest"
+    WIFI_5_GUEST = "5GHz Guest"
+    UNKNOWN = "Unknown"
+    DONGLE = "Dongle"
+    BYPASS_ROUTE = "Bypass Route"
 
 class GLinetRouter:
     """representation of a GLinet router.
