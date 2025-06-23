@@ -313,8 +313,8 @@ class GLinetRouter:
             if device_mac in self._devices:
                 continue
 
-            alias = dev_info.get("alias", "").strip()
-            name = dev_info.get("name", "").strip()
+            alias = dev_info.get("alias").strip()
+            name = dev_info.get("name").strip()
             # Skip if both alias and name are empty
             if not alias and not name:
                 continue
