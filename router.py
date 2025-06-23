@@ -560,12 +560,9 @@ class ClientDevInfo:
         return self._connected
 
     @property
-    def interface_type(self) -> str:
+    def interface_type(self) -> DeviceInterfaceType:
         """Return device interface type."""
-        try:
-            return DeviceInterfaceType[self._if_type]
-        except IndexError:
-            return DeviceInterfaceType[5]
+        return self._if_type
 
     @property
     def mac(self):
