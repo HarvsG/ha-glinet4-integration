@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 import logging
 
 from gli4py import GLinet
@@ -25,22 +26,16 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.event import async_track_time_interval
-
-# from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import API_PATH, DOMAIN
-
-# from typing import Any
-
-
-# from homeassistant.helpers.event import async_track_time_interval
-
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
 
 class DeviceInterfaceType(StrEnum):
+    """Enum for the possible interface types reported by glipy."""
+
     WIFI_24 = "2.4GHz"
     WIFI_5 = "5GHz"
     LAN = "LAN"
@@ -530,7 +525,7 @@ class ClientDevInfo:
         self._ip_address: str | None = None
         self._last_activity: datetime = dt_util.utcnow() - timedelta(days=1)
         self._connected: bool = False
-        self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN 
+        self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN
 
     def update(self, dev_info: dict | None = None, consider_home=0):
         """Update connected device info."""
