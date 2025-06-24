@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DATA_GLINET, DOMAIN
@@ -36,6 +33,7 @@ class RebootButton(ButtonEntity):
     def __init__(self, router: GLinetRouter) -> None:
         """Initialize a GLinet device."""
         self._router = router
+        self._attr_device_info = router.device_info
 
     _attr_icon = "mdi:restart"
     _attr_has_entity_name = True
@@ -58,13 +56,3 @@ class RebootButton(ButtonEntity):
     def entity_category(self) -> EntityCategory:
         """A config entity."""
         return EntityCategory.CONFIG
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device information."""
-        # TODO this should probably be defined in the router device not here in the switch
-        data: DeviceInfo = {
-            "connections": {(CONNECTION_NETWORK_MAC, self._router.factory_mac)},
-            "identifiers": {(DOMAIN, self._router.factory_mac)},
-        }
-        return data
