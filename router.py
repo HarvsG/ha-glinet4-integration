@@ -554,8 +554,9 @@ class ClientDevInfo:
             self._ip_address = dev_info["ip"]
             self._last_activity = now
             self._connected = dev_info["online"]
-            self._if_type = dev_info["type"]
-
+            self._if_type = list(DeviceInterfaceType)[
+                dev_info["type"]
+            ]  # TODO be more index safe
         # a device might not actually be online but we want to consider it home
         elif self._connected:
             self._connected = (
