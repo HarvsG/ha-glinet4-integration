@@ -24,6 +24,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
@@ -425,17 +426,19 @@ class GLinetRouter:
             sw_version=self._sw_v,
         )
 
-    # @property
-    # def device_info(self) -> DeviceInfo:
-    #     """Return the device information."""
-    #     data: DeviceInfo = {
-    #       "connections": {(CONNECTION_NETWORK_MAC, self.factory_mac)},
-    #       "identifiers": {(DOMAIN, self.factory_mac)},
-    #       "name": self.name,
-    #       "model": self.model,
-    #       "manufacturer": "GL-inet",
-    #     }
-    #     return data
+    # TODO this doesn't seem to do anything yet
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device information."""
+
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry.unique_id or self.factory_mac)},
+            connections={(CONNECTION_NETWORK_MAC, self.factory_mac)},
+            name=self.name,
+            model=self.model or "GL-inet Router",
+            manufacturer="GL-inet",
+            configuration_url=f"http://{self.host}",
+        )
 
     @property
     def signal_device_new(self) -> str:
@@ -451,6 +454,11 @@ class GLinetRouter:
     def host(self) -> str:
         """Return router host."""
         return self._host
+
+    @property
+    def unique_id(self) -> str:
+        """Return router unique id."""
+        return self._entry.unique_id or self._entry.entry_id
 
     @property
     def devices(self) -> dict[str, ClientDevInfo]:

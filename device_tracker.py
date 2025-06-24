@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from propcache.api import cached_property
+
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DATA_GLINET, DOMAIN
 from .router import ClientDevInfo, GLinetRouter
@@ -59,6 +59,11 @@ def add_entities(router: GLinetRouter, async_add_entities, tracked):
 class GLinetDevice(ScannerEntity):
     """Representation of a GLinet tracked device."""
 
+    _attr_hostname: str | None
+    _attr_ip_address: str | None
+    _attr_mac_address: str | None
+    _attr_source_type: SourceType = SourceType.ROUTER
+
     def __init__(self, router: GLinetRouter, device: ClientDevInfo) -> None:
         """Initialize a GLinet device."""
         self._router: GLinetRouter = router
@@ -66,12 +71,18 @@ class GLinetDevice(ScannerEntity):
         self._icon = (
             "mdi:radar"  # TODO will need to be replaced with brand logo or similar
         )
+        self._attr_hostname: str | None = self._device.name or DEFAULT_DEVICE_NAME
+        self._attr_ip_address: str | None = self._device.ip_address
+        self._attr_mac_address: str | None = self._device.mac
+        self._attr_device_info = (
+            router.device_info
+        )  # This is currently ignored for ScannerEntities
 
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
         # TODO do we need to prepend DOMAIN to make this unique or does HA do this already?
-        return self._device.mac
+        return self._attr_mac_address
 
     @property
     def icon(self) -> str:
@@ -82,7 +93,7 @@ class GLinetDevice(ScannerEntity):
     @property
     def name(self) -> str:
         """Return the name."""
-        return self._device.name or DEFAULT_DEVICE_NAME
+        return self._attr_hostname
 
     @property
     def is_connected(self) -> bool:
@@ -97,7 +108,9 @@ class GLinetDevice(ScannerEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the attributes."""
+
         attrs = {}
+
         attrs["interface_type"] = str(self._device.interface_type)
         if self._device.last_activity:
             attrs["last_time_reachable"] = self._device.last_activity.isoformat(
@@ -105,42 +118,25 @@ class GLinetDevice(ScannerEntity):
             )
         return attrs
 
-    @property
+    @cached_property
     def hostname(self) -> str:
         """Return the hostname of device."""
-        return self._device.name
+        return self._attr_hostname
 
-    @property
+    @cached_property
     def ip_address(self) -> str | None:
         """Return the primary ip address of the device."""
-        return self._device.ip_address
+        return self._attr_ip_address
 
-    @property
-    def mac_address(self) -> str:
+    @cached_property
+    def mac_address(self) -> str | None:
         """Return the mac address of the device."""
-        return self._device.mac
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device information.
-
-        TODO Device tracker entities should not create device registry entries.
-        according to HomeAssistant so this will have to remain until merge
-        Perhaps an ideal scenario would be to only 'create' a device if it already
-        exists
-        """
-        data: DeviceInfo = {
-            "connections": {(CONNECTION_NETWORK_MAC, self._device.mac)},
-            "via_device": ((DOMAIN, self._router.factory_mac)),
-        }
-        if self._device.name:
-            data["default_name"] = self._device.name
-        return data
+        return self._attr_mac_address
 
     @property
     def should_poll(self) -> bool:
         """No polling needed."""
-        return False
+        return True
 
     @callback
     def async_on_demand_update(self) -> None:
