@@ -156,11 +156,10 @@ class GLinetRouter:
                     entry.unique_id, entry.original_name
                 )
 
-        # TODO, should we load in the switch entities?
-
         # Each new setup should renew the token
         await self.renew_token()
 
+        # Update device tracker and switch entities
         await self.update_all()
 
         self.add_to_device_registry()
@@ -449,12 +448,12 @@ class GLinetRouter:
     @property
     def signal_device_new(self) -> str:
         """Event specific per GL-inet entry to signal new device."""
-        return f"{DOMAIN}-device-new"
+        return f"{DOMAIN}-device-new-{self._factory_mac}"
 
     @property
     def signal_device_update(self) -> str:
         """Event specific per GL-inet entry to signal updates in devices."""
-        return f"{DOMAIN}-device-update"
+        return f"{DOMAIN}-device-update-{self._factory_mac}"
 
     @property
     def host(self) -> str:
