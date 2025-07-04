@@ -1,5 +1,6 @@
 """Utility functions for GL-iNet routers."""
 
+
 def increment_mac(mac: str, sep: str = ':') -> str:
     """Increment a MAC address by 1.
 
@@ -20,4 +21,4 @@ def increment_mac(mac: str, sep: str = ':') -> str:
     new_hex = f"{value:012x}"
 
     # Reinsert the separator every two hex digits
-    return sep.join(new_hex[i:i+2] for i in range(0, 12, 2)).upper()
+    return sep.join(new_hex[i : i + 2] for i in range(0, 12, 2)).upper()

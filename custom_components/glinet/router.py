@@ -42,6 +42,7 @@ from .utils import increment_mac
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
 
+
 class DeviceInterfaceType(StrEnum):
     """Enum for the possible interface types reported by glipy."""
 
@@ -53,6 +54,7 @@ class DeviceInterfaceType(StrEnum):
     UNKNOWN = "Unknown"
     DONGLE = "Dongle"
     BYPASS_ROUTE = "Bypass Route"
+
 
 class GLinetRouter:
     """representation of a GLinet router.
@@ -334,8 +336,8 @@ class GLinetRouter:
             if device_mac in self._devices:
                 continue
 
-            alias = dev_info.get("alias","").strip()
-            name = dev_info.get("name","").strip()
+            alias = dev_info.get("alias", "").strip()
+            name = dev_info.get("name", "").strip()
             # Skip if both alias and name are empty
             if not alias and not name:
                 continue
@@ -359,7 +361,7 @@ class GLinetRouter:
             return
         # TODO this is a placeholder that needs to be replaced with a pulic method that combines usefull info in _tailscale_status and _tailscale_get_config
         self._tailscale_config = await self._update_platform(
-            self._api._tailscale_get_config #pylint: disable=protected-access  # noqa: SLF001
+            self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
         )
         response: TailscaleConnection = await self._update_platform(
             self._api.tailscale_connection_state
@@ -519,6 +521,7 @@ class GLinetRouter:
         """Property for system status"""
 
         return self._system_status
+
 
 @dataclass
 class WireGuardClient:

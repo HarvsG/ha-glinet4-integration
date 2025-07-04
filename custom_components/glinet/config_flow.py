@@ -41,10 +41,18 @@ _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_USERNAME, default=GLINET_DEFAULT_USERNAME): selector.TextSelector(),
-        vol.Required(CONF_HOST, default=GLINET_DEFAULT_URL): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.URL)),
-        vol.Required(CONF_PASSWORD, default=GLINET_DEFAULT_PW): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
-        vol.Optional(CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900))
+        vol.Required(
+            CONF_USERNAME, default=GLINET_DEFAULT_USERNAME
+        ): selector.TextSelector(),
+        vol.Required(CONF_HOST, default=GLINET_DEFAULT_URL): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.URL)
+        ),
+        vol.Required(CONF_PASSWORD, default=GLINET_DEFAULT_PW): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        ),
+        vol.Optional(
+            CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()
+        ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900)),
     }
 )
 
@@ -114,7 +122,7 @@ async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
             CONF_HOST: data[CONF_HOST],
             CONF_API_TOKEN: hub.router.sid,
             CONF_PASSWORD: data[CONF_PASSWORD],
-            CONF_CONSIDER_HOME: data[CONF_CONSIDER_HOME]
+            CONF_CONSIDER_HOME: data[CONF_CONSIDER_HOME],
         },
     }
 
@@ -147,10 +155,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 unique_id: str = format_mac(info[CONF_MAC])
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=info[CONF_TITLE], data=info["data"])
+                return self.async_create_entry(
+                    title=info[CONF_TITLE], data=info["data"]
+                )
 
         return self.async_show_form(
-            step_id="user", data_schema=self.add_suggested_values_to_schema(STEP_USER_DATA_SCHEMA,user_input), errors=errors
+            step_id="user",
+            data_schema=self.add_suggested_values_to_schema(
+                STEP_USER_DATA_SCHEMA, user_input
+            ),
+            errors=errors,
         )
 
     @staticmethod
@@ -184,9 +198,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                return self.async_create_entry(title="", data=self.config_entry.options | info["data"])
+                return self.async_create_entry(
+                    title="", data=self.config_entry.options | info["data"]
+                )
         # This exposes the API key back to the user
-        data_schema = self.add_suggested_values_to_schema(STEP_USER_DATA_SCHEMA,self.config_entry.data)
+        data_schema = self.add_suggested_values_to_schema(
+            STEP_USER_DATA_SCHEMA, self.config_entry.data
+        )
         return self.async_show_form(step_id="init", data_schema=data_schema)
 
 

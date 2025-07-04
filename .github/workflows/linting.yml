@@ -19,7 +19,7 @@ jobs:
           use-mypy: true
           use-isort: true
           extra-pylint-options: ""
-          extra-pycodestyle-options: "--ignore=E501"
+          extra-pycodestyle-options: "--ignore=E501,W503"
           extra-flake8-options: ""
           extra-black-options: ""
           extra-mypy-options: ""
