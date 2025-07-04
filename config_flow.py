@@ -20,7 +20,7 @@ from homeassistant.const import (
     CONF_PASSWORD,
     CONF_USERNAME,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
@@ -73,7 +73,7 @@ class TestingHub:
                 self.host,
             )
         else:
-            _LOGGER.warning("Attempting to connect to router, success:%s", res)
+            _LOGGER.info("Attempting to connect to router, success:%s", res)
             return res
         return False
 
@@ -89,7 +89,7 @@ class TestingHub:
         return self.router.logged_in
 
 
-async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect.
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
@@ -131,7 +131,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             try:
-                info = await validate_input(self.hass, user_input)
+                info = await validate_input(user_input)
                 # In future we could do additional checks such as
                 # decting API version warning about unsupported versions
             except CannotConnect:
@@ -171,7 +171,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         errors = {}
         if user_input is not None:
             try:
-                info = await validate_input(self.hass, user_input)
+                info = await validate_input(user_input)
                 # In future we could do additional checks such as
                 # decting API version warning about unsupported versions
             except CannotConnect:

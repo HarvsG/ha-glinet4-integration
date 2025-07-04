@@ -17,7 +17,13 @@ from homeassistant.components.device_tracker import (
     DOMAIN as TRACKER_DOMAIN,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import (
+    CONF_API_TOKEN,
+    CONF_HOST,
+    CONF_MAC,
+    CONF_PASSWORD,
+    CONF_USERNAME,
+)
 from homeassistant.core import HomeAssistant  # callback,CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -30,12 +36,6 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
 from .const import API_PATH, DOMAIN
-
-# from typing import Any
-
-
-# from homeassistant.helpers.event import async_track_time_interval
-
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
@@ -64,7 +64,7 @@ class GLinetRouter:
         self._options.update(entry.options)
 
         # gli4py API
-        # self._api: GLinet
+        self._api: GLinet | None = None
         self._host: str = entry.data[CONF_HOST]
 
         # Stable properties
@@ -106,12 +106,7 @@ class GLinetRouter:
         try:
             router_info = await self._update_platform(
                 self._api.router_info
-            )  # TODO seems to always throw unexpected err on first boot
-            _LOGGER.debug("Router info retrieved: %s", router_info)
-            self._model = router_info["model"]
-            self._sw_v = router_info["firmware_version"]
-            self._factory_mac = router_info["mac"]
-            # self._entry.data[CONF_API_TOKEN] = self._api.sid # cant update like this
+            )
         except Exception as exc:  # pylint: disable=broad-except
             # The late initialized variables will remain in
             # their default 'UNKNOWN' state
@@ -121,7 +116,12 @@ class GLinetRouter:
                 exc,
                 exc.with_traceback,
             )
-            raise ConfigEntryNotReady from exc  # TODO probably shouldnt raise this after logging an error
+            raise ConfigEntryNotReady from exc
+
+        _LOGGER.debug("Router info retrieved: %s", router_info)
+        self._model = router_info["model"]
+        self._sw_v = router_info["firmware_version"]
+        self._factory_mac = router_info[CONF_MAC]
 
         self._late_init_complete = True
 
@@ -134,7 +134,6 @@ class GLinetRouter:
         # On setup we may already have saved tracker entities
         # Load them in and save them to the class
         entity_registry = er.async_get(self.hass)
-        # entity_registry = er_helper.async_get(self.hass)
 
         track_entries: list[RegistryEntry] = er.async_entries_for_config_entry(
             entity_registry, self._entry.entry_id
@@ -146,7 +145,7 @@ class GLinetRouter:
                     entry.unique_id, entry.original_name
                 )
 
-        # TODO, should we load in the switch entities
+        # TODO, should we load in the switch entities?
 
         # Each new setup should renew the token
         await self.renew_token()
@@ -200,13 +199,13 @@ class GLinetRouter:
             )
             raise ConfigEntryAuthFailed from exc
 
-    async def update_all(self, now: datetime | None = None) -> None:
+    async def update_all(self) -> None:
         """Update all Gl-inet platforms."""
         await self.update_device_trackers()
         await self.update_wireguard_client_state()
         await self.update_tailscale_state()
 
-    async def _update_platform(self, api_callable: Callable):
+    async def _update_platform(self, api_callable: Callable) -> str | None:
         """Boilerplate to make update requests to api and handle errors."""
 
         _LOGGER.debug("Checking client can connect to GL-inet router %s", self._host)
@@ -228,7 +227,7 @@ class GLinetRouter:
                 self._host,
                 exc,
             )
-            return
+            return None
         except TokenError as exc:
             self._token_error = True
             if not self._connect_error:
@@ -238,7 +237,7 @@ class GLinetRouter:
                 self._host,
                 exc,
             )
-            return
+            return None
         except NonZeroResponse as exc:
             if not self._connect_error:
                 self._connect_error = True
@@ -247,7 +246,7 @@ class GLinetRouter:
                 self._host,
                 exc,
             )
-            return
+            return None
         except Exception as exc:  # pylint: disable=broad-except  # noqa: BLE001
             if not self._connect_error:
                 self._connect_error = True
@@ -256,7 +255,7 @@ class GLinetRouter:
                 self._host,
                 exc,
             )
-            return
+            return None
 
         if not response:
             _LOGGER.debug(
@@ -330,9 +329,9 @@ class GLinetRouter:
         if not await self._api.tailscale_configured():
             self._tailscale_config = {}
             return
-        ##TODO this is a placeholder that needs to be replaced with a pulic method that combines usefull info in _tailscale_status and _tailscale_get_config
+        # TODO this is a placeholder that needs to be replaced with a pulic method that combines usefull info in _tailscale_status and _tailscale_get_config
         self._tailscale_config = await self._update_platform(
-            self._api._tailscale_get_config
+            self._api._tailscale_get_config #pylint: disable=protected-access  # noqa: SLF001
         )
         response: TailscaleConnection = await self._update_platform(
             self._api.tailscale_connection_state
@@ -390,7 +389,7 @@ class GLinetRouter:
         return req_reload
 
     def add_to_device_registry(self):
-        """Adds to the registry.
+        """Add to the registry.
 
         Since this router device doesn't always have its
         own entities we need to manually add it to
