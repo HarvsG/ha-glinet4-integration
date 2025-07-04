@@ -78,7 +78,7 @@ class GLinetRouter:
         self._options.update(entry.options)
 
         # gli4py API
-        self._api: GLinet | None = None
+        self._api: GLinet
         self._host: str = entry.data[CONF_HOST]
 
         # Stable properties
@@ -107,7 +107,7 @@ class GLinetRouter:
         """
 
         try:
-            self._api: GLinet = await self.get_api()
+            self._api = await self.get_api()
             await self._api.login(
                 self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD]
             )
@@ -120,6 +120,7 @@ class GLinetRouter:
             raise ConfigEntryNotReady from exc
         try:
             router_info = await self._update_platform(self._api.router_info)
+            assert router_info is not None
         except Exception as exc:  # pylint: disable=broad-except
             # The late initialized variables will remain in
             # their default 'UNKNOWN' state
@@ -209,14 +210,14 @@ class GLinetRouter:
             )
             raise ConfigEntryAuthFailed from exc
 
-    async def update_all(self, _: HomeAssistant | None = None) -> None:
+    async def update_all(self, _: datetime | None = None) -> None:
         """Update all Gl-inet platforms."""
         await self.update_system_status()
         await self.update_device_trackers()
         await self.update_wireguard_client_state()
         await self.update_tailscale_state()
 
-    async def _update_platform(self, api_callable: Callable) -> str | None:
+    async def _update_platform(self, api_callable: Callable) -> dict | None:
         """Boilerplate to make update requests to api and handle errors."""
 
         _LOGGER.debug("Checking client can connect to GL-iNet router %s", self._host)
@@ -302,7 +303,8 @@ class GLinetRouter:
 
         status = await self._update_platform(self._api.router_get_status)
         # For now only the content of the `system` field seems of use
-        self._system_status = status.get("system")
+        if status:
+            self._system_status = status.get("system", {})
 
     async def update_device_trackers(self) -> None:
         """Update the device trackers."""
@@ -374,7 +376,9 @@ class GLinetRouter:
         # TODO as part of changes to switch.py, this probably needs to become
         # client/server/VPN type agnostic it may be that router/vpn/status
         # is a better API endpoint to do it in only 1 call
-        response: dict = await self._update_platform(self._api.wireguard_client_list)
+        response = await self._update_platform(self._api.wireguard_client_list)
+        if not response:
+            return
         # TODO wireguard_client_list outputs some private info, we don't want it to end up in the logs.
         # TODO we need to do some validation before we start accessing dictionary keys, I've had errors before
         # May be best to redact it in gli4py.
@@ -391,7 +395,9 @@ class GLinetRouter:
             return
 
         # update wether the currently selected WG client is connected
-        response: dict = await self._update_platform(self._api.wireguard_client_state)
+        response = await self._update_platform(self._api.wireguard_client_state)
+        if not response:
+            return
         connected: bool = response["status"] == 1
 
         # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
@@ -503,8 +509,10 @@ class GLinetRouter:
         return self._tailscale_config != {}
 
     @property
-    def tailscale_connection(self) -> bool:
+    def tailscale_connection(self) -> bool | None:
         """Property for tailscale connection."""
+        if not self.tailscale_configured:
+            return None
         return self._tailscale_connection
 
     @property

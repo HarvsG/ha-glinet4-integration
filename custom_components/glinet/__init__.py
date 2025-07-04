@@ -43,5 +43,5 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry):
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
 
     # Currently router.update_options() never returns True
-    if router.update_options(entry.options):
+    if router.update_options(dict(entry.options)):
         await hass.config_entries.async_reload(entry.entry_id)

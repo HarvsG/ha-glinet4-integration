@@ -42,9 +42,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda system_status: (
-            system_status.get("cpu").get("temperature")
-            if system_status.get("cpu")
-            else None
+            (cpu := system_status.get("cpu")) and cpu.get("temperature")
         ),
     ),
     SystemStatusEntityDescription(
@@ -149,7 +147,7 @@ class GliSensorBase(SensorEntity):
     ) -> None:
         """Initialize the sensor class."""
         self.router = router
-        self.entity_description = entity_description
+        self.entity_description: SystemStatusEntityDescription = entity_description
         self._attr_device_info = router.device_info
 
     @property
