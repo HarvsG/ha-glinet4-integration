@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 import logging
 
 from gli4py import GLinet
@@ -17,7 +18,13 @@ from homeassistant.components.device_tracker import (
     DOMAIN as TRACKER_DOMAIN,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_API_TOKEN, CONF_HOST, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import (
+    CONF_API_TOKEN,
+    CONF_HOST,
+    CONF_MAC,
+    CONF_PASSWORD,
+    CONF_USERNAME,
+)
 from homeassistant.core import HomeAssistant  # callback,CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -25,21 +32,24 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.event import async_track_time_interval
-
-# from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import API_PATH, DOMAIN
 
-# from typing import Any
-
-
-# from homeassistant.helpers.event import async_track_time_interval
-
-
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
 
+class DeviceInterfaceType(StrEnum):
+    """Enum for the possible interface types reported by glipy."""
+
+    WIFI_24 = "2.4GHz"
+    WIFI_5 = "5GHz"
+    LAN = "LAN"
+    WIFI_24_GUEST = "2.4GHz Guest"
+    WIFI_5_GUEST = "5GHz Guest"
+    UNKNOWN = "Unknown"
+    DONGLE = "Dongle"
+    BYPASS_ROUTE = "Bypass Route"
 
 class GLinetRouter:
     """representation of a GLinet router.
@@ -64,7 +74,7 @@ class GLinetRouter:
         self._options.update(entry.options)
 
         # gli4py API
-        # self._api: GLinet
+        self._api: GLinet | None = None
         self._host: str = entry.data[CONF_HOST]
 
         # Stable properties
@@ -107,12 +117,7 @@ class GLinetRouter:
         try:
             router_info = await self._update_platform(
                 self._api.router_info
-            )  # TODO seems to always throw unexpected err on first boot
-            _LOGGER.debug("Router info retrieved: %s", router_info)
-            self._model = router_info["model"]
-            self._sw_v = router_info["firmware_version"]
-            self._factory_mac = router_info["mac"]
-            # self._entry.data[CONF_API_TOKEN] = self._api.sid # cant update like this
+            )
         except Exception as exc:  # pylint: disable=broad-except
             # The late initialized variables will remain in
             # their default 'UNKNOWN' state
@@ -122,7 +127,12 @@ class GLinetRouter:
                 exc,
                 exc.with_traceback,
             )
-            raise ConfigEntryNotReady from exc  # TODO probably shouldnt raise this after logging an error
+            raise ConfigEntryNotReady from exc
+
+        _LOGGER.debug("Router info retrieved: %s", router_info)
+        self._model = router_info["model"]
+        self._sw_v = router_info["firmware_version"]
+        self._factory_mac = router_info[CONF_MAC]
 
         self._late_init_complete = True
 
@@ -135,7 +145,6 @@ class GLinetRouter:
         # On setup we may already have saved tracker entities
         # Load them in and save them to the class
         entity_registry = er.async_get(self.hass)
-        # entity_registry = er_helper.async_get(self.hass)
 
         track_entries: list[RegistryEntry] = er.async_entries_for_config_entry(
             entity_registry, self._entry.entry_id
@@ -147,7 +156,7 @@ class GLinetRouter:
                     entry.unique_id, entry.original_name
                 )
 
-        # TODO, should we load in the switch entities
+        # TODO, should we load in the switch entities?
 
         # Each new setup should renew the token
         await self.renew_token()
@@ -201,14 +210,14 @@ class GLinetRouter:
             )
             raise ConfigEntryAuthFailed from exc
 
-    async def update_all(self, now: datetime | None = None) -> None:
+    async def update_all(self) -> None:
         """Update all Gl-inet platforms."""
         await self.update_device_trackers()
         await self.update_wifi_ifaces_state()
         await self.update_wireguard_client_state()
         await self.update_tailscale_state()
 
-    async def _update_platform(self, api_callable: Callable):
+    async def _update_platform(self, api_callable: Callable) -> str | None:
         """Boilerplate to make update requests to api and handle errors."""
 
         _LOGGER.debug("Checking client can connect to GL-inet router %s", self._host)
@@ -217,6 +226,9 @@ class GLinetRouter:
                 _LOGGER.debug(
                     "The last requested resulted in a token error - so renewing token"
                 )
+                await self.renew_token()
+            if self._connect_error:
+                _LOGGER.debug("Got pending connect error - attempting to renew token")
                 await self.renew_token()
             _LOGGER.debug(
                 "Making api call %s from _update_platform()", api_callable.__name__
@@ -230,7 +242,7 @@ class GLinetRouter:
                 self._host,
                 exc,
             )
-            return
+            return None
         except TokenError as exc:
             self._token_error = True
             if not self._connect_error:
@@ -240,7 +252,7 @@ class GLinetRouter:
                 self._host,
                 exc,
             )
-            return
+            return None
         except NonZeroResponse as exc:
             if not self._connect_error:
                 self._connect_error = True
@@ -249,7 +261,7 @@ class GLinetRouter:
                 self._host,
                 exc,
             )
-            return
+            return None
         except Exception as exc:  # pylint: disable=broad-except  # noqa: BLE001
             if not self._connect_error:
                 self._connect_error = True
@@ -258,7 +270,7 @@ class GLinetRouter:
                 self._host,
                 exc,
             )
-            return
+            return None
 
         if not response:
             _LOGGER.debug(
@@ -311,10 +323,16 @@ class GLinetRouter:
             device.update(dev_info, consider_home)
 
         for device_mac, dev_info in wrt_devices.items():
+            # Skip if we've already have this device
             if device_mac in self._devices:
                 continue
-            if not dev_info["name"]:
+
+            alias = dev_info.get("alias","").strip()
+            name = dev_info.get("name","").strip()
+            # Skip if both alias and name are empty
+            if not alias and not name:
                 continue
+
             new_device = True
             device = ClientDevInfo(device_mac)
             device.update(dev_info)
@@ -338,9 +356,9 @@ class GLinetRouter:
         if not await self._api.tailscale_configured():
             self._tailscale_config = {}
             return
-        ##TODO this is a placeholder that needs to be replaced with a pulic method that combines usefull info in _tailscale_status and _tailscale_get_config
+        # TODO this is a placeholder that needs to be replaced with a pulic method that combines usefull info in _tailscale_status and _tailscale_get_config
         self._tailscale_config = await self._update_platform(
-            self._api._tailscale_get_config
+            self._api._tailscale_get_config #pylint: disable=protected-access  # noqa: SLF001
         )
         response: TailscaleConnection = await self._update_platform(
             self._api.tailscale_connection_state
@@ -398,7 +416,7 @@ class GLinetRouter:
         return req_reload
 
     def add_to_device_registry(self):
-        """Asynchronysly adds to the registry.
+        """Add to the registry.
 
         Since this router device doesn't always have its
         own entities we need to manually add it to
@@ -408,7 +426,8 @@ class GLinetRouter:
 
         device_registry.async_get_or_create(
             config_entry_id=self._entry.entry_id,
-            # TODO In my test local lan uses MAC - 1, 2.4G MAC + 1 and 5G MAC +2.
+            # Note the router uses different MACs for different intferaces
+            # my test local lan uses MAC - 1, 2.4G MAC + 1 and 5G MAC +2.
             # Huwawei LTE does this
             # https://github.com/home-assistant/core/blob/8d21e2b168c995346c8c6af7fe077ca0e97e6ab3/homeassistant/components/huawei_lte/__init__.py#L181
             # https://github.com/home-assistant/core/blob/8d21e2b168c995346c8c6af7fe077ca0e97e6ab3/homeassistant/components/huawei_lte/__init__.py#L404
@@ -529,21 +548,29 @@ class ClientDevInfo:
         self._ip_address: str | None = None
         self._last_activity: datetime = dt_util.utcnow() - timedelta(days=1)
         self._connected: bool = False
+        self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN
 
     def update(self, dev_info: dict | None = None, consider_home=0):
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
         if dev_info:
-            if not self._name:
-                # GLinet router name unknown devices "*"
-                if dev_info["name"] == "*" or dev_info["name"] == "":
+            # Prefer the user-defined alias as a name
+            alias = dev_info.get("alias")
+            if alias and alias.strip():
+                self._name = alias
+            else:
+                # If no alias, fallback to auto-assigned name field
+                name = dev_info.get("name", "")
+                if name == "*" or not name.strip():
                     self._name = self._mac.replace(":", "_")
                 else:
-                    self._name = dev_info["name"]
+                    self._name = name
             self._ip_address = dev_info["ip"]
             self._last_activity = now
             self._connected = dev_info["online"]
-
+            self._if_type = list(DeviceInterfaceType)[
+                dev_info["type"]
+            ]  # TODO be more index safe
         # a device might not actually be online but we want to consider it home
         elif self._connected:
             self._connected = (
@@ -555,6 +582,11 @@ class ClientDevInfo:
     def is_connected(self):
         """Return connected status."""
         return self._connected
+
+    @property
+    def interface_type(self) -> DeviceInterfaceType:
+        """Return device interface type."""
+        return self._if_type
 
     @property
     def mac(self):

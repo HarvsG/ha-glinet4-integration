@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
@@ -142,7 +141,7 @@ class TailscaleSwitch(GliSwitchBase):
         """Return if the service is on."""
         return self._router.tailscale_connection
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
+    async def async_turn_on(self) -> None:
         """Turn on the service."""
         try:
             await self._router.api.tailscale_start()
@@ -151,7 +150,7 @@ class TailscaleSwitch(GliSwitchBase):
         except OSError:
             _LOGGER.error("Unable to enable tailscale connection")
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
+    async def async_turn_off(self) -> None:
         """Turn off the service."""
         try:
             await self._router.api.tailscale_stop()
@@ -206,7 +205,7 @@ class WireGuardSwitch(GliSwitchBase):
         # > 1 client configured, but only one connected
         return self._router.wireguard_connection == self._client
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
+    async def async_turn_on(self) -> None:
         """Turn on the service."""
         try:
             if self._router.connected_wireguard_client not in [self._client, None]:
@@ -218,7 +217,7 @@ class WireGuardSwitch(GliSwitchBase):
         except OSError:
             _LOGGER.error("Unable to enable WG client")
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
+    async def async_turn_off(self) -> None:
         """Turn off the service."""
         try:
             await self._router.api.wireguard_client_stop()
