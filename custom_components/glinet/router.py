@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-import logging
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Any, Coroutine
+import logging
+from typing import Any
 
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
 from gli4py.error_handling import NonZeroResponse, TokenError
+
 from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
     DEFAULT_CONSIDER_HOME,
+    DOMAIN as TRACKER_DOMAIN,
 )
-from homeassistant.components.device_tracker import DOMAIN as TRACKER_DOMAIN
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_API_TOKEN,
@@ -361,7 +362,7 @@ class GLinetRouter:
         if not await self._api.tailscale_configured():
             self._tailscale_config = {}
             return
-        # TODO this is a placeholder that needs to be replaced with a pulic method that combines usefull info in _tailscale_status and _tailscale_get_config
+        # TODO this is a placeholder that needs to be replaced with a pulic method that combines useful info in _tailscale_status and _tailscale_get_config
         self._tailscale_config = (
             await self._update_platform(
                 self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
@@ -400,7 +401,7 @@ class GLinetRouter:
             _LOGGER.debug("No wireguard clients, there is nothing to update")
             return
 
-        # update wether the currently selected WG client is connected
+        # update whether the currently selected WG client is connected
         response = await self._update_platform(self._api.wireguard_client_state)
         if not response:
             return
@@ -421,7 +422,7 @@ class GLinetRouter:
         Returns True if a reload is required
         Called in __init__.py
         placeholder function because it may become
-        neccessary to reload in future.
+        necessary to reload in future.
         """
         req_reload = False
         self._options.update(new_options)
@@ -524,7 +525,7 @@ class GLinetRouter:
     @property
     def tailscale_config(self) -> dict:
         """Property for tailscale connection."""
-        # TODO, we need a non private API method that returns some usefull config info
+        # TODO, we need a non private API method that returns some useful config info
         return self._tailscale_config
 
     @property
