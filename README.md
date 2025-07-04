@@ -37,7 +37,6 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 9. You may need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwitten if you rebuild the container
 
 ## TODO
-- [ ] Only add entities to devices that already exist, do not create new ones for each.
 - [ ] Handle all the errors gracefully, including empty client lists that happen after a glinet device restart.
 - [ ] Auto detect router IP for config flow - assume it is the default gateway, test an enpoint that doesn't require auth (/model or /hello), fallback to default `192.168.8.1`
 - [ ] Add switches for wireguard and open vpn (client and server), done for wireguard client, but we can probably do all programatically rather than repeating boilerplate
