@@ -11,17 +11,17 @@ from gli4py.error_handling import NonZeroResponse, TokenError
 from homeassistant import config_entries
 from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
-    DEFAULT_CONSIDER_HOME
+    DEFAULT_CONSIDER_HOME,
 )
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import (
     CONF_API_TOKEN,
     CONF_HOST,
     CONF_MAC,
     CONF_PASSWORD,
-    CONF_USERNAME
+    CONF_USERNAME,
 )
 from homeassistant.core import callback
-from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 from homeassistant.helpers.device_registry import format_mac
@@ -33,7 +33,7 @@ from .const import (
     GLINET_DEFAULT_PW,
     GLINET_DEFAULT_URL,
     GLINET_DEFAULT_USERNAME,
-    GLINET_FRIENDLY_NAME
+    GLINET_FRIENDLY_NAME,
 )
 
 _LOGGER = logging.getLogger(__name__)

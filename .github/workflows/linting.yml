@@ -24,4 +24,4 @@ jobs:
           extra-black-options: ""
           # Whilst gli4py is not statically typed we must ignore it
           extra-mypy-options: "--disable-error-code=import-untyped"
-          extra-isort-options: "--multi-line 3"
+          extra-isort-options: "--multi-line 3 --trailing-comma"

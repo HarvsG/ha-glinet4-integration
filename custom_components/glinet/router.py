@@ -13,7 +13,7 @@ from gli4py.enums import TailscaleConnection
 from gli4py.error_handling import NonZeroResponse, TokenError
 from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
-    DEFAULT_CONSIDER_HOME
+    DEFAULT_CONSIDER_HOME,
 )
 from homeassistant.components.device_tracker import DOMAIN as TRACKER_DOMAIN
 from homeassistant.config_entries import ConfigEntry
@@ -23,7 +23,7 @@ from homeassistant.const import (
     CONF_MAC,
     CONF_MODEL,
     CONF_PASSWORD,
-    CONF_USERNAME
+    CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant  # callback,CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
