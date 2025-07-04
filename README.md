@@ -20,7 +20,9 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 3. Click the 3 dot menu in the top right
 4. Click `Custom repositories`
 5. Paste `https://github.com/HarvsG/ha-glinet4-integration`, select type `Integration`
-6. Go to Devices and Services and click `Add Integration` and select `GL-inet`
+6. Search fo `GL.inet` in HACS and download the latest version
+7. Consider restarting Home Assistant
+8. Go to Devices and Services and click `Add Integration` and select `GL-inet`
 
 ## Dev set up
 1. Set up the vscode homeassistant core [dev setup](https://developers.home-assistant.io/docs/development_environment/)
