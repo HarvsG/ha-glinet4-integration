@@ -9,6 +9,10 @@ from gli4py import GLinet
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.const import (
+    CONF_MAC,
+    CONF_TITLE,
+)
 from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
     DEFAULT_CONSIDER_HOME,
@@ -25,10 +29,8 @@ from .const import (
     GLINET_DEFAULT_PW,
     GLINET_DEFAULT_URL,
     GLINET_DEFAULT_USERNAME,
+    GLINET_FRIENDLY_NAME,
 )
-
-# from homeassistant.helpers import config_validation as cv
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,12 +91,6 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
 
-    # If your PyPI package is not built with async, pass your methods
-    # to the executor:
-    # await hass.async_add_executor_job(
-    #     your_validate_func, data["username"], data["password"]
-    # )
-
     hub = TestingHub(data[CONF_USERNAME], data[CONF_HOST])
 
     if not await hub.connect():
@@ -106,9 +102,8 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     # Return info that you want to store in the config entry.
     return {
         # TODO, on success we can/should probably store some immutable device info in the class.
-        # TODO should we be using inbuilt literals and consts here?
-        "title": "GL-inet " + hub.router_model.capitalize(),
-        "mac": hub.router_mac,
+        CONF_TITLE: GLINET_FRIENDLY_NAME + " " + hub.router_model.capitalize(),
+        CONF_MAC: hub.router_mac,
         "data": {
             CONF_USERNAME: data[CONF_USERNAME],
             CONF_HOST: data[CONF_HOST],
@@ -137,11 +132,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         try:
             info = await validate_input(self.hass, user_input)
-            # TODO would it be sensible to do some checks here, e.g of API version and issue warnings for possibly unsupported versions?
+            # In future we could do additional checks such as
+            # decting API version warning about unsupported versions
         except CannotConnect:
             errors["base"] = "cannot_connect"
         except InvalidAuth:
             errors["base"] = "invalid_auth"
+        # Broad excepts are permitted in config flows
         except Exception:  # pylint: disable=broad-except
             _LOGGER.exception("Unexpected exception")
             errors["base"] = "unknown"
@@ -172,9 +169,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Handle options flow."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-        # TODO add options to reconfigure host name and password
-        data_schema = vol.Schema(
+            return self.async_create_entry(title="", data=self.config_entry.options | user_input)
+        data_schema = STEP_USER_DATA_SCHEMA.extend(vol.Schema(
             {
                 vol.Optional(
                     CONF_CONSIDER_HOME,
@@ -183,7 +179,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     ),
                 ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900))
             }
-        )
+        ))
         return self.async_show_form(step_id="init", data_schema=data_schema)
 
 

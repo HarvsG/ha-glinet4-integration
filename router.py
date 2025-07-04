@@ -390,7 +390,7 @@ class GLinetRouter:
         return req_reload
 
     def add_to_device_registry(self):
-        """Asynchronysly adds to the registry.
+        """Adds to the registry.
 
         Since this router device doesn't always have its
         own entities we need to manually add it to
@@ -400,7 +400,8 @@ class GLinetRouter:
 
         device_registry.async_get_or_create(
             config_entry_id=self._entry.entry_id,
-            # TODO In my test local lan uses MAC - 1, 2.4G MAC + 1 and 5G MAC +2.
+            # Note the router uses different MACs for different intferaces
+            # my test local lan uses MAC - 1, 2.4G MAC + 1 and 5G MAC +2.
             # Huwawei LTE does this
             # https://github.com/home-assistant/core/blob/8d21e2b168c995346c8c6af7fe077ca0e97e6ab3/homeassistant/components/huawei_lte/__init__.py#L181
             # https://github.com/home-assistant/core/blob/8d21e2b168c995346c8c6af7fe077ca0e97e6ab3/homeassistant/components/huawei_lte/__init__.py#L404

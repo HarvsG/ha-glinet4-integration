@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from .const import DATA_GLINET, DOMAIN
 from .router import GLinetRouter
 
-PLATFORMS = ["device_tracker","switch"] #TODO add other services such as sensor.py
+PLATFORMS = ["device_tracker","switch"]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigEntry):
@@ -43,15 +43,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     Called by home assistant on initial config, restart and
     componenet reload
     """
-    # No need to support YAML
-    # yaml_options = hass.data.get(DOMAIN, {}).pop("yaml_options", {})
-    # if not entry.options and yaml_options:
-    #     hass.config_entries.async_update_entry(entry, options=yaml_options)
 
-    # Store an API object for your platforms to access
+    # Store an API object for platforms to access
     router = GLinetRouter(hass, entry)
     await router.setup()
-    #router.async_on_close(entry.add_update_listener(update_listener))
+
     hass.data[DOMAIN] = {}
     hass.data[DOMAIN][entry.entry_id] = {}
     hass.data[DOMAIN][entry.entry_id][DATA_GLINET] = router
@@ -73,5 +69,6 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry):
     """Update when config_entry options update."""
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
 
-    if router.update_options(entry.options): #TODO does this ever return True?
+    # Currently router.update_options() never returns True
+    if router.update_options(entry.options):
         await hass.config_entries.async_reload(entry.entry_id)
