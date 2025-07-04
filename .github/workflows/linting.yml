@@ -34,10 +34,10 @@ jobs:
           isort --multi-line 3 --trailing-comma . -c --diff
       - name: Run flake8
         run: |
-          flake8 --ignore=E501,W503,E203
+          flake8 --ignore=E501,W503,E203 .
       - name: Run pycodestyle
         run: |
-          pycodestyle --ignore=E501,W503,E203
+          pycodestyle --ignore=E501,W503,E203 .
       - name: Run mypy
         run: |
           mypy --ignore-missing-imports --show-error-codes .
