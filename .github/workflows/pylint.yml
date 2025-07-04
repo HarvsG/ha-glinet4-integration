@@ -19,5 +19,8 @@ jobs:
         python -m pip install --upgrade pip
         pip install pylint
     - name: Analysing the code with pylint
+      # Over time, bring into line with https://github.com/home-assistant/core/blob/4be2e84ce65de68883f16770818cf2e354cd6cc7/pyproject.toml#L276
+      # At the moment we are disabling fix-me
       run: |
-        pylint --disable=line-too-long,fixme,invalid-name $(git ls-files '*.py')
+        pylint --disable=import-error,protected-access,fixme,line-too-long,invalid-name,too-many-public-methods,abstract-method,overridden-final-method,too-many-instance-attributes,too-many-public-methods (git ls-files '*.py')
+
