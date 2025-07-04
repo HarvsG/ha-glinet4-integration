@@ -22,19 +22,22 @@ from homeassistant.const import (
     CONF_API_TOKEN,
     CONF_HOST,
     CONF_MAC,
+    CONF_MODEL,
     CONF_PASSWORD,
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant  # callback,CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
 from .const import API_PATH, DOMAIN
+from .utils import increment_mac
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
@@ -129,7 +132,7 @@ class GLinetRouter:
             raise ConfigEntryNotReady from exc
 
         _LOGGER.debug("Router info retrieved: %s", router_info)
-        self._model = router_info["model"]
+        self._model = router_info[CONF_MODEL]
         self._sw_v = router_info["firmware_version"]
         self._factory_mac = router_info[CONF_MAC]
 
@@ -155,14 +158,11 @@ class GLinetRouter:
                     entry.unique_id, entry.original_name
                 )
 
-        # TODO, should we load in the switch entities?
-
         # Each new setup should renew the token
         await self.renew_token()
 
+        # Update device tracker and switch entities
         await self.update_all()
-
-        self.add_to_device_registry()
 
         # TODO here we ask this to update all on the same scan interval
         # but in future some sensors e.g WANip need to update less regularly than
@@ -209,7 +209,7 @@ class GLinetRouter:
             )
             raise ConfigEntryAuthFailed from exc
 
-    async def update_all(self) -> None:
+    async def update_all(self, _: HomeAssistant | None = None) -> None:
         """Update all Gl-inet platforms."""
         await self.update_device_trackers()
         await self.update_wireguard_client_state()
@@ -407,56 +407,39 @@ class GLinetRouter:
         self._options.update(new_options)
         return req_reload
 
-    def add_to_device_registry(self):
-        """Add to the registry.
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device information."""
 
-        Since this router device doesn't always have its
-        own entities we need to manually add it to
-        the device registry.
-        """
-        device_registry = dr.async_get(self.hass)
-
-        device_registry.async_get_or_create(
-            config_entry_id=self._entry.entry_id,
-            # Note the router uses different MACs for different intferaces
-            # my test local lan uses MAC - 1, 2.4G MAC + 1 and 5G MAC +2.
-            # Huwawei LTE does this
-            # https://github.com/home-assistant/core/blob/8d21e2b168c995346c8c6af7fe077ca0e97e6ab3/homeassistant/components/huawei_lte/__init__.py#L181
-            # https://github.com/home-assistant/core/blob/8d21e2b168c995346c8c6af7fe077ca0e97e6ab3/homeassistant/components/huawei_lte/__init__.py#L404
-            connections={(CONNECTION_NETWORK_MAC, self.factory_mac)},
-            identifiers={(DOMAIN, self.factory_mac)},
-            manufacturer="GL-inet",
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry.unique_id or self.factory_mac)},
+            connections={(CONNECTION_NETWORK_MAC, self.factory_mac),(CONNECTION_NETWORK_MAC, increment_mac(self.factory_mac))},
             name=self.name,
-            model=self.model,
+            model=self.model or "GL-inet Router",
+            manufacturer="GL-inet",
+            configuration_url=f"http://{self.host}",
             sw_version=self._sw_v,
         )
-
-    # @property
-    # def device_info(self) -> DeviceInfo:
-    #     """Return the device information."""
-    #     data: DeviceInfo = {
-    #       "connections": {(CONNECTION_NETWORK_MAC, self.factory_mac)},
-    #       "identifiers": {(DOMAIN, self.factory_mac)},
-    #       "name": self.name,
-    #       "model": self.model,
-    #       "manufacturer": "GL-inet",
-    #     }
-    #     return data
 
     @property
     def signal_device_new(self) -> str:
         """Event specific per GL-inet entry to signal new device."""
-        return f"{DOMAIN}-device-new"
+        return f"{DOMAIN}-device-new-{self._factory_mac}"
 
     @property
     def signal_device_update(self) -> str:
         """Event specific per GL-inet entry to signal updates in devices."""
-        return f"{DOMAIN}-device-update"
+        return f"{DOMAIN}-device-update-{self._factory_mac}"
 
     @property
     def host(self) -> str:
         """Return router host."""
         return self._host
+
+    @property
+    def unique_id(self) -> str:
+        """Return router unique id."""
+        return self._entry.unique_id or self._entry.entry_id
 
     @property
     def devices(self) -> dict[str, ClientDevInfo]:
