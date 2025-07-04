@@ -3,6 +3,7 @@
   "config": {
     "step": {
       "user": {
+        "description": "Set required parameters to connect to your router",
         "data": {
           "username":"[%key:common::config_flow::data::username%]",
           "host": "[%key:common::config_flow::data::host%]",
