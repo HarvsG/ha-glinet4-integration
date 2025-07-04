@@ -2,7 +2,7 @@
   "domain": "glinet",
   "name": "GL-inet",
   "config_flow": true,
-  "documentation": "https://www.home-assistant.io/integrations/glinet",
+  "documentation": "https://github.com/HarvsG/ha-glinet4-integration",
   "requirements": ["gli4py==0.0.10"],
   "version": "0.0.5",
   "ssdp": [],
