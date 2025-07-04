@@ -28,10 +28,13 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 1. Set up the vscode homeassistant core [dev setup](https://developers.home-assistant.io/docs/development_environment/)
   - Or you could just use a running install of homeassistant (restarts are required for a lot of changes)
 2. Run once to generate directories
-3. create a `config/custom_components/glinet` directory
-4. `git clone https://github.com/HarvsG/ha-glinet4-integration.git . `
-5. Note, the vscode git tracker will track the parent repo (ha core), but command line git will still work within the `glinet` dir
-6. You may need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwitten if you rebuild the container
+3. Create a new directory `/workspaces/glinet`
+4. Cntr Shift P, `add folder to workspace` and then add the above folder
+5. `cd` into that directory
+6. `git clone https://github.com/HarvsG/ha-glinet4-integration.git . `
+7. `mkdir -p /workspaces/core/config/custom_components && cd /workspaces/core/config/custom_components`
+8. `ln -s /workspaces/glinet/custom_components/glinet`
+9. You may need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwitten if you rebuild the container
 
 ## TODO
 - [ ] Only add entities to devices that already exist, do not create new ones for each.
