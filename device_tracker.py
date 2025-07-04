@@ -94,6 +94,7 @@ class GLinetDevice(ScannerEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the attributes."""
         attrs = {}
+        attrs["interface_type"] = str(self._device.interface_type)
         if self._device.last_activity:
             attrs["last_time_reachable"] = self._device.last_activity.isoformat(
                 timespec="seconds"
