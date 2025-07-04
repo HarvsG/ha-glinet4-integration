@@ -47,7 +47,7 @@ def add_entities(
     async_add_entities: AddConfigEntryEntitiesCallback,
     tracked: set[str],
 ) -> None:
-    """Add new tracker entities from the router."""
+    """Add all new tracker entities from the router."""
     new_tracked = []
     for mac, device in router.devices.items():
         if mac in tracked:
