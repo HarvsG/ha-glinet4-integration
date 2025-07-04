@@ -23,4 +23,4 @@ jobs:
           extra-flake8-options: "--ignore=E501,W503,E203"
           extra-black-options: ""
           extra-mypy-options: ""
-          extra-isort-options: ""
+          extra-isort-options: "--multi-line 3"

@@ -5,13 +5,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from propcache.api import cached_property
-
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from propcache.api import cached_property
 
 from .const import DATA_GLINET, DOMAIN
 from .router import ClientDevInfo, GLinetRouter
