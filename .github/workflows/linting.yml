@@ -10,12 +10,6 @@ jobs:
         python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v4
-      # ← Add this so the whole job uses Python 3.13
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install typing-extensions for back-port
-        run: pip install typing-extensions
       - uses: ricardochaves/python-lint@v1.4.0
         with:
           use-pylint: false

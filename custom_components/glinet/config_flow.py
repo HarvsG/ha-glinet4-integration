@@ -94,7 +94,7 @@ class TestingHub:
             self.router_model = res["model"]
         except (ConnectionRefusedError, NonZeroResponse, TokenError):
             _LOGGER.error("Failed to authenticate with Gl-inet router during testing")
-        return self.router.logged_in
+        return bool(self.router.logged_in)
 
 
 async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
@@ -168,7 +168,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry):
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
         return OptionsFlowHandler(config_entry)
 
@@ -180,7 +182,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Initialize options flow."""
         self.config_entry = config_entry
 
-    async def async_step_init(self, user_input=None) -> config_entries.ConfigFlowResult:
+    async def async_step_init(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle options flow."""
         errors = {}
         if user_input is not None:

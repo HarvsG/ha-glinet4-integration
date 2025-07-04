@@ -168,7 +168,7 @@ class SystemStatusSensor(GliSensorBase):
 class SystemUptimeSensor(GliSensorBase):
     """GL-iNet system uptime sensor class."""
 
-    _current_value = None
+    _current_value: datetime | None = None
 
     @property
     def native_value(self) -> datetime | None:

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+from typing import Any, Coroutine
 
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
@@ -188,7 +189,7 @@ class GLinetRouter:
         )
         raise ConfigEntryAuthFailed
 
-    async def renew_token(self):
+    async def renew_token(self) -> None:
         """Attempt to get a new token."""
         try:
             await self._api.login(
@@ -217,7 +218,9 @@ class GLinetRouter:
         await self.update_wireguard_client_state()
         await self.update_tailscale_state()
 
-    async def _update_platform(self, api_callable: Callable) -> dict | None:
+    async def _update_platform(
+        self, api_callable: Callable[[], Coroutine[Any, Any, dict]]
+    ) -> dict | None:
         """Boilerplate to make update requests to api and handle errors."""
 
         _LOGGER.debug("Checking client can connect to GL-iNet router %s", self._host)
@@ -317,7 +320,7 @@ class GLinetRouter:
                 str(wrt_devices),
                 type(wrt_devices),
             )
-            if wrt_devices == []:
+            if wrt_devices is None or wrt_devices == {}:
                 self._connected_devices = 0
             return
         consider_home = self._options.get(
@@ -352,15 +355,18 @@ class GLinetRouter:
 
         self._connected_devices = len(wrt_devices)
 
-    async def update_tailscale_state(self):
+    async def update_tailscale_state(self) -> None:
         """Make a call to the API to get the tailscale state."""
 
         if not await self._api.tailscale_configured():
             self._tailscale_config = {}
             return
         # TODO this is a placeholder that needs to be replaced with a pulic method that combines usefull info in _tailscale_status and _tailscale_get_config
-        self._tailscale_config = await self._update_platform(
-            self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
+        self._tailscale_config = (
+            await self._update_platform(
+                self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
+            )
+            or {}
         )
         response: TailscaleConnection = await self._update_platform(
             self._api.tailscale_connection_state
@@ -541,16 +547,16 @@ class WireGuardClient:
 class ClientDevInfo:
     """Representation of a device connected to the router."""
 
-    def __init__(self, mac: str, name=None) -> None:
+    def __init__(self, mac: str, name: str | None = None) -> None:
         """Initialize a connected device."""
         self._mac: str = mac
         self._name: str | None = name
-        self._ip_address: str | None = None
+        self._ip_address: str | None
         self._last_activity: datetime = dt_util.utcnow() - timedelta(days=1)
         self._connected: bool = False
         self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN
 
-    def update(self, dev_info: dict | None = None, consider_home=0):
+    def update(self, dev_info: dict | None = None, consider_home: int = 0) -> None:
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
         if dev_info:
@@ -579,7 +585,7 @@ class ClientDevInfo:
             self._ip_address = None
 
     @property
-    def is_connected(self):
+    def is_connected(self) -> bool:
         """Return connected status."""
         return self._connected
 
@@ -589,21 +595,21 @@ class ClientDevInfo:
         return self._if_type
 
     @property
-    def mac(self):
+    def mac(self) -> str:
         """Return device mac address."""
         return self._mac
 
     @property
-    def name(self):
+    def name(self) -> str | None:
         """Return device name."""
         return self._name
 
     @property
-    def ip_address(self):
+    def ip_address(self) -> str | None:
         """Return device ip address."""
         return self._ip_address
 
     @property
-    def last_activity(self):
+    def last_activity(self) -> datetime:
         """Return device last activity."""
         return self._last_activity

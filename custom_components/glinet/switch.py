@@ -84,9 +84,12 @@ class TailscaleSwitch(SwitchEntity):
             _LOGGER.error("Unable to stop tailscale connection")
 
     @property
-    def lan_access(self) -> bool:
-        """Whether the router exposes the LAN as a subnet."""
-        return self._router.tailscale_config["lan_enabled"]
+    def lan_access(self) -> bool | None:
+        """Whether the router exposes the LAN as a subnet."""  #
+        la = self._router.tailscale_config.get("lan_enabled")
+        if la is not None:
+            return bool(la)
+        return None
 
     @property
     def entity_category(self) -> EntityCategory:

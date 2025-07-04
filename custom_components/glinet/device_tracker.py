@@ -10,6 +10,7 @@ from homeassistant.components.device_tracker.config_entry import ScannerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from propcache.api import cached_property
 
 from .const import DATA_GLINET, DOMAIN
@@ -19,14 +20,16 @@ DEFAULT_DEVICE_NAME = "Unknown device"
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up device tracker for GLinet component."""
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
     tracked: set[str] = set()
 
     @callback
-    def update_router():
+    def update_router() -> None:
         """Update the values of the router."""
         add_entities(router, async_add_entities, tracked)
 
@@ -37,7 +40,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @callback
-def add_entities(router: GLinetRouter, async_add_entities, tracked):
+def add_entities(
+    router: GLinetRouter,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+    tracked: set[str],
+) -> None:
     """Add new tracker entities from the router."""
     new_tracked = []
     for mac, device in router.devices.items():
