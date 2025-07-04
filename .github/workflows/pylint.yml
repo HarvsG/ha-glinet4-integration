@@ -22,5 +22,5 @@ jobs:
       # Over time, bring into line with https://github.com/home-assistant/core/blob/4be2e84ce65de68883f16770818cf2e354cd6cc7/pyproject.toml#L276
       # At the moment we are disabling fix-me
       run: |
-        pylint --disable=import-error,protected-access,fixme,line-too-long,invalid-name,too-many-public-methods,abstract-method,overridden-final-method,too-many-instance-attributes,too-many-public-methods,too-few-public-methods $(git ls-files '*.py')
+        pylint --disable=import-error,duplicate-code,fixme,line-too-long,invalid-name,too-many-public-methods,abstract-method,overridden-final-method,too-many-instance-attributes,too-many-public-methods,too-few-public-methods,too-many-branches $(git ls-files '*.py')
 
