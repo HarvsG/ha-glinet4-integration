@@ -66,7 +66,7 @@ class TailscaleSwitch(SwitchEntity):
             return False
         return self._router.tailscale_connection
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
+    async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
         try:
             await self._router.api.tailscale_start()
@@ -75,7 +75,7 @@ class TailscaleSwitch(SwitchEntity):
         except OSError:
             _LOGGER.error("Unable to enable tailscale connection")
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
+    async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
         try:
             await self._router.api.tailscale_stop()
@@ -136,7 +136,7 @@ class WireGuardSwitch(SwitchEntity):
         # > 1 client configured, but only one connected
         return self._router.wireguard_connection == self._client
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
+    async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
         try:
             if self._router.connected_wireguard_client not in [self._client, None]:
@@ -148,7 +148,7 @@ class WireGuardSwitch(SwitchEntity):
         except OSError:
             _LOGGER.error("Unable to enable WG client")
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
+    async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
         try:
             await self._router.api.wireguard_client_stop()
