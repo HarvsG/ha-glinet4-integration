@@ -100,7 +100,7 @@ class GLinetRouter:
         self._token_error: bool = False
 
     async def async_init(self) -> None:
-        """Set up a GL-inet router.
+        """Set up a GL-iNet router.
 
         Do some late initialization
         """
@@ -112,7 +112,7 @@ class GLinetRouter:
             )
         except OSError as exc:
             _LOGGER.error(
-                "Error connecting to GL-inet router %s for setup: %s",
+                "Error connecting to GL-iNet router %s for setup: %s",
                 self._host,
                 exc,
             )
@@ -125,7 +125,7 @@ class GLinetRouter:
             # The late initialized variables will remain in
             # their default 'UNKNOWN' state
             _LOGGER.error(
-                "Error getting basic device info from GL-inet router %s for setup: %s, trace %s",
+                "Error getting basic device info from GL-iNet router %s for setup: %s, trace %s",
                 self._host,
                 exc,
                 exc.with_traceback,
@@ -184,7 +184,7 @@ class GLinetRouter:
             await router.login(CONF_USERNAME, conf[CONF_PASSWORD])
             return router
         _LOGGER.error(
-            "Error setting up GL-inet router, no auth details found in configuration"
+            "Error setting up GL-iNet router, no auth details found in configuration"
         )
         raise ConfigEntryAuthFailed
 
@@ -199,12 +199,12 @@ class GLinetRouter:
             # Update the configuration entry with the new data
             self.hass.config_entries.async_update_entry(self._entry, data=new_data)
             _LOGGER.info(
-                "GL-inet router %s token was renewed",
+                "GL-iNet router %s token was renewed",
                 self._host,
             )
         except Exception as exc:
             _LOGGER.error(
-                "GL-inet %s failed to renew the token, have you changed your router password?: %s",
+                "GL-iNet %s failed to renew the token, have you changed your router password?: %s",
                 self._host,
                 exc,
             )
@@ -220,7 +220,7 @@ class GLinetRouter:
     async def _update_platform(self, api_callable: Callable) -> str | None:
         """Boilerplate to make update requests to api and handle errors."""
 
-        _LOGGER.debug("Checking client can connect to GL-inet router %s", self._host)
+        _LOGGER.debug("Checking client can connect to GL-iNet router %s", self._host)
         try:
             if self._token_error:
                 _LOGGER.debug(
@@ -238,7 +238,7 @@ class GLinetRouter:
             if not self._connect_error:
                 self._connect_error = True
             _LOGGER.error(
-                "GL-inet router %s did not respond in time: %s",
+                "GL-iNet router %s did not respond in time: %s",
                 self._host,
                 exc,
             )
@@ -248,7 +248,7 @@ class GLinetRouter:
             if not self._connect_error:
                 self._connect_error = True
             _LOGGER.warning(
-                "GL-inet router %s token was refused %s, will try to re-autheticate before next poll",
+                "GL-iNet router %s token was refused %s, will try to re-autheticate before next poll",
                 self._host,
                 exc,
             )
@@ -257,7 +257,7 @@ class GLinetRouter:
             if not self._connect_error:
                 self._connect_error = True
             _LOGGER.error(
-                "GL-inet router %s responded, but with an error code: %s",
+                "GL-iNet router %s responded, but with an error code: %s",
                 self._host,
                 exc,
             )
@@ -266,7 +266,7 @@ class GLinetRouter:
             if not self._connect_error:
                 self._connect_error = True
             _LOGGER.error(
-                "GL-inet router %s responded with an unexpected error: %s",
+                "GL-iNet router %s responded with an unexpected error: %s",
                 self._host,
                 exc,
             )
@@ -422,22 +422,25 @@ class GLinetRouter:
 
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry.unique_id or self.factory_mac)},
-            connections={(CONNECTION_NETWORK_MAC, self.factory_mac),(CONNECTION_NETWORK_MAC, increment_mac(self.factory_mac))},
+            connections={
+                (CONNECTION_NETWORK_MAC, self.factory_mac),
+                (CONNECTION_NETWORK_MAC, increment_mac(self.factory_mac)),
+            },
             name=self.name,
-            model=self.model or "GL-inet Router",
-            manufacturer="GL-inet",
+            model=self.model or "GL-iNet Router",
+            manufacturer="GL-iNet",
             configuration_url=f"http://{self.host}",
             sw_version=self._sw_v,
         )
 
     @property
     def signal_device_new(self) -> str:
-        """Event specific per GL-inet entry to signal new device."""
+        """Event specific per GL-iNet entry to signal new device."""
         return f"{DOMAIN}-device-new-{self._factory_mac}"
 
     @property
     def signal_device_update(self) -> str:
-        """Event specific per GL-inet entry to signal updates in devices."""
+        """Event specific per GL-iNet entry to signal updates in devices."""
         return f"{DOMAIN}-device-update-{self._factory_mac}"
 
     @property
@@ -474,7 +477,7 @@ class GLinetRouter:
     def name(self) -> str:
         """Return router name."""
         # TODO retrieve the friendly name of the router e.g MT1300 is Beryl
-        return f"GL-inet {self._model.upper()}"
+        return f"GL-iNet {self._model.upper()}"
 
     @property
     def wireguard_clients(self) -> dict[str, WireGuardClient]:

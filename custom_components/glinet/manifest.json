@@ -1,6 +1,6 @@
 {
   "domain": "glinet",
-  "name": "GL-inet",
+  "name": "GL-iNet",
   "codeowners": ["@HarvsG"],
   "config_flow": true,
   "dependencies": ["network", "http"],

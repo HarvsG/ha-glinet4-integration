@@ -1,18 +1,18 @@
 {
-  "title": "GL-inet",
+  "title": "GL-iNet",
   "config": {
     "step": {
       "user": {
         "description": "Set required parameters to connect to your router",
         "data": {
-          "username":"Username",
+          "username": "Username",
           "host": "Host",
           "password": "Password",
           "consider_home": "Consider Home"
         },
         "data_description": {
-          "username": "This is always 'root' by default on GL-inet devices",
-          "host": "The hostname or IP address of your GL-inet router.",
+          "username": "This is always 'root' by default on GL-iNet devices",
+          "host": "The hostname or IP address of your GL-iNet router.",
           "password": "The password you use to login to your router's admin page, this is unlikely to be the same as your WiFi password",
           "consider_home": "Seconds to wait before deciding that a device is away"
         }
@@ -31,14 +31,14 @@
     "step": {
       "init": {
         "data": {
-          "username":"Username",
+          "username": "Username",
           "host": "Host",
           "password": "Password",
           "consider_home": "Consider Home"
         },
         "data_description": {
-          "username": "This is always 'root' by default on GL-inet devices",
-          "host": "The hostname or IP address of your GL-inet router.",
+          "username": "This is always 'root' by default on GL-iNet devices",
+          "host": "The hostname or IP address of your GL-iNet router.",
           "password": "The password you use to login to your router's admin page, this is unlikely to be the same as your WiFi password",
           "consider_home": "Seconds to wait before deciding that a device is away"
         }

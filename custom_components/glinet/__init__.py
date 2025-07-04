@@ -1,4 +1,4 @@
-"""The GL-inet integration."""
+"""The GL-iNet integration."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ PLATFORMS = ["button", "device_tracker", "sensor", "switch"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up GL-inet from a config entry.
+    """Set up GL-iNet from a config entry.
 
     Called by home assistant on initial config, restart and
     componenet reload.
