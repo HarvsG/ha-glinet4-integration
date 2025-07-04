@@ -8,40 +8,13 @@ from homeassistant.core import HomeAssistant
 from .const import DATA_GLINET, DOMAIN
 from .router import GLinetRouter
 
-PLATFORMS = ["device_tracker","switch"]
-
-
-async def async_setup(hass: HomeAssistant, config: ConfigEntry):
-    """Set up the GLinet integration."""
-    conf = config.get(DOMAIN)
-    if conf is None:
-        return True
-
-    # save the options from config yaml
-    options = {}
-    for name, value in conf.items():
-        if name in ([CONF_CONSIDER_HOME]):
-            options[name] = value
-    hass.data[DOMAIN]["yaml_options"] = options
-
-    # check if already configured
-    domains_list = hass.config_entries.async_domains()
-    if DOMAIN in domains_list:
-        return True
-
-    hass.async_create_task(
-        hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": SOURCE_IMPORT}, data=conf
-        )
-    )
-
-    return True
-
+PLATFORMS = ["button","device_tracker","switch"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up GL-inet from a config entry.
+
     Called by home assistant on initial config, restart and
-    componenet reload
+    componenet reload.
     """
 
     # Store an API object for platforms to access
