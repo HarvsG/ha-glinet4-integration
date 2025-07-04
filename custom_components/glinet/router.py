@@ -120,9 +120,7 @@ class GLinetRouter:
             )
             raise ConfigEntryNotReady from exc
         try:
-            router_info = await self._update_platform(
-                self._api.router_info
-            )
+            router_info = await self._update_platform(self._api.router_info)
         except Exception as exc:  # pylint: disable=broad-except
             # The late initialized variables will remain in
             # their default 'UNKNOWN' state
