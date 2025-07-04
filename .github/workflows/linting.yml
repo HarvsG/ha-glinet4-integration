@@ -24,7 +24,8 @@ jobs:
             black \
             isort \
             flake8 \
-            pycodestyle
+            pycodestyle \
+            pydantic
 
       - name: Run black
         run: |
