@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
-from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -17,8 +15,6 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import utcnow
 
@@ -28,18 +24,16 @@ from .router import GLinetRouter
 _LOGGER = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, kw_only=True)
-class SystemStatusEntityDescription(SensorEntityDescription):
+class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=True):
     """Describes a GL-inet system status sensor entity."""
 
     value_fn: Callable[[dict], int | float | None]
 
 
-SYSTEM_SENSORS: tuple[SystemStatusEntityDescription, ...] = (
+SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
     SystemStatusEntityDescription(
         key="cpu_temp",
         name="CPU temperature",
-
         has_entity_name=True,
         icon="mdi:thermometer",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -47,7 +41,9 @@ SYSTEM_SENSORS: tuple[SystemStatusEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
-        value_fn=lambda system_status: system_status["cpu"]["temperature"],
+        value_fn=lambda system_status: system_status.get("cpu").get("temperature")
+        if system_status.get("cpu")
+        else None,
     ),
     SystemStatusEntityDescription(
         key="load_avg1",
@@ -57,7 +53,10 @@ SYSTEM_SENSORS: tuple[SystemStatusEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
-        value_fn=lambda system_status: system_status["load_average"][0],
+        value_fn=lambda system_status: (
+            (la := system_status.get("load_average")) and isinstance(la, list) and la[0]
+        )
+        or None,
     ),
     SystemStatusEntityDescription(
         key="load_avg5",
@@ -67,7 +66,13 @@ SYSTEM_SENSORS: tuple[SystemStatusEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
-        value_fn=lambda system_status: system_status["load_average"][1],
+        value_fn=lambda system_status: (
+            (la := system_status.get("load_average"))
+            and isinstance(la, list)
+            and len(la) > 1
+            and la[1]
+        )
+        or None,
     ),
     SystemStatusEntityDescription(
         key="load_avg15",
@@ -77,9 +82,15 @@ SYSTEM_SENSORS: tuple[SystemStatusEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
-        value_fn=lambda system_status: system_status["load_average"][2],
+        value_fn=lambda system_status: (
+            (la := system_status.get("load_average"))
+            and isinstance(la, list)
+            and len(la) > 2
+            and la[2]
+        )
+        or None,
     ),
-)
+]
 
 
 async def async_setup_entry(
@@ -99,10 +110,11 @@ async def async_setup_entry(
             router=router,
             entity_description=SystemStatusEntityDescription(
                 key="uptime",
-                name="uptime",
+                name="Uptime",
                 has_entity_name=True,
                 icon="mdi:clock",
                 device_class=SensorDeviceClass.TIMESTAMP,
+                entity_category=EntityCategory.DIAGNOSTIC,
                 value_fn=lambda a: None,
             ),
         )
@@ -113,7 +125,6 @@ async def async_setup_entry(
             sensors.remove(sensor)
 
     async_add_entities(sensors, True)
-
 
 
 def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> datetime:
@@ -137,21 +148,12 @@ class GliSensorBase(SensorEntity):
         """Initialize the sensor class."""
         self.router = router
         self.entity_description = entity_description
+        self._attr_device_info = router.device_info
 
     @property
     def unique_id(self) -> str:
         """Return the unique id of the switch."""
         return f"glinet_sensor/{self.router.factory_mac}/system_{self.entity_description.key}"
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device information."""
-        # TODO this should probably be defined in the router device not here in the switch
-        data: DeviceInfo = {
-            "connections": {(CONNECTION_NETWORK_MAC, self.router.factory_mac)},
-            "identifiers": {(DOMAIN, self.router.factory_mac)},
-        }
-        return data
 
 
 class SystemStatusSensor(GliSensorBase):
@@ -160,7 +162,7 @@ class SystemStatusSensor(GliSensorBase):
     @property
     def native_value(self) -> int | float | None:
         """Return the native value of the sensor."""
-        return self.entity_description.value_fn(self.router._system_status)
+        return self.entity_description.value_fn(self.router.system_status)
 
 
 class SystemUptimeSensor(GliSensorBase):
@@ -172,6 +174,6 @@ class SystemUptimeSensor(GliSensorBase):
     def native_value(self) -> datetime | None:
         """Return the native value of the sensor."""
         self._current_value = _uptime_calculation(
-            self.router._system_status["uptime"], self._current_value
+            self.router.system_status["uptime"], self._current_value
         )
         return self._current_value

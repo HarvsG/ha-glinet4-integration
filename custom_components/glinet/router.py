@@ -299,6 +299,8 @@ class GLinetRouter:
         return response
 
     async def update_system_status(self) -> None:
+        """Update the system status from the API."""
+
         status = await self._update_platform(self._api.router_get_status)
         # For now only the content of the `system` field seems of use
         self._system_status = status.get("system")
@@ -509,6 +511,11 @@ class GLinetRouter:
         # TODO, we need a non private API method that returns some usefull config info
         return self._tailscale_config
 
+    @property
+    def system_status(self) -> dict:
+        """Property for system status"""
+
+        return self._system_status
 
 @dataclass
 class WireGuardClient:
