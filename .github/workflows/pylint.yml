@@ -1,0 +1,26 @@
+name: Pylint
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pylint
+    - name: Analysing the code with pylint
+      # Over time, bring into line with https://github.com/home-assistant/core/blob/4be2e84ce65de68883f16770818cf2e354cd6cc7/pyproject.toml#L276
+      # At the moment we are disabling fix-me
+      run: |
+        pylint --disable=import-error,duplicate-code,fixme,line-too-long,invalid-name,too-many-public-methods,abstract-method,overridden-final-method,too-many-instance-attributes,too-many-public-methods,too-few-public-methods,too-many-branches $(git ls-files '*.py')
+
