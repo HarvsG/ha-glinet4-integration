@@ -15,7 +15,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up GL-iNet from a config entry.
 
     Called by home assistant on initial config, restart and
-    componenet reload.
+    component reload.
     """
 
     # Store an API object for platforms to access
@@ -38,10 +38,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-async def update_listener(hass: HomeAssistant, entry: ConfigEntry):
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Update when config_entry options update."""
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
 
     # Currently router.update_options() never returns True
-    if router.update_options(entry.options):
+    if router.update_options(dict(entry.options)):
         await hass.config_entries.async_reload(entry.entry_id)

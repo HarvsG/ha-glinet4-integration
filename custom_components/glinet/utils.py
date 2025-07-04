@@ -1,6 +1,7 @@
 """Utility functions for GL-iNet routers."""
 
-def increment_mac(mac: str, sep: str = ':') -> str:
+
+def increment_mac(mac: str, sep: str = ":") -> str:
     """Increment a MAC address by 1.
 
     This is helpful because GL-iNet devices' LAN ports have a mac of factory_mac + 1
@@ -10,7 +11,7 @@ def increment_mac(mac: str, sep: str = ':') -> str:
     :return: Incremented MAC address as a string.
     """
     # Remove common separators and convert to integer
-    hex_str = mac.replace(sep, '').replace('-', '').lower()
+    hex_str = mac.replace(sep, "").replace("-", "").lower()
     value = int(hex_str, 16)
 
     # Increment and wrap around at 48 bits
@@ -20,4 +21,4 @@ def increment_mac(mac: str, sep: str = ':') -> str:
     new_hex = f"{value:012x}"
 
     # Reinsert the separator every two hex digits
-    return sep.join(new_hex[i:i+2] for i in range(0, 12, 2)).upper()
+    return sep.join(new_hex[i : i + 2] for i in range(0, 12, 2)).upper()

@@ -5,15 +5,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import voluptuous as vol
 from gli4py import GLinet
 from gli4py.error_handling import NonZeroResponse, TokenError
-import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
     DEFAULT_CONSIDER_HOME,
 )
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import (
     CONF_API_TOKEN,
     CONF_HOST,
@@ -22,7 +22,6 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 from homeassistant.helpers.device_registry import format_mac
@@ -41,10 +40,18 @@ _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_USERNAME, default=GLINET_DEFAULT_USERNAME): selector.TextSelector(),
-        vol.Required(CONF_HOST, default=GLINET_DEFAULT_URL): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.URL)),
-        vol.Required(CONF_PASSWORD, default=GLINET_DEFAULT_PW): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
-        vol.Optional(CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900))
+        vol.Required(
+            CONF_USERNAME, default=GLINET_DEFAULT_USERNAME
+        ): selector.TextSelector(),
+        vol.Required(CONF_HOST, default=GLINET_DEFAULT_URL): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.URL)
+        ),
+        vol.Required(CONF_PASSWORD, default=GLINET_DEFAULT_PW): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        ),
+        vol.Optional(
+            CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()
+        ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900)),
     }
 )
 
@@ -87,7 +94,7 @@ class TestingHub:
             self.router_model = res["model"]
         except (ConnectionRefusedError, NonZeroResponse, TokenError):
             _LOGGER.error("Failed to authenticate with Gl-inet router during testing")
-        return self.router.logged_in
+        return bool(self.router.logged_in)
 
 
 async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
@@ -114,7 +121,7 @@ async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
             CONF_HOST: data[CONF_HOST],
             CONF_API_TOKEN: hub.router.sid,
             CONF_PASSWORD: data[CONF_PASSWORD],
-            CONF_CONSIDER_HOME: data[CONF_CONSIDER_HOME]
+            CONF_CONSIDER_HOME: data[CONF_CONSIDER_HOME],
         },
     }
 
@@ -126,7 +133,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the initial step."""
 
         errors = {}
@@ -147,15 +154,23 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 unique_id: str = format_mac(info[CONF_MAC])
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=info[CONF_TITLE], data=info["data"])
+                return self.async_create_entry(
+                    title=info[CONF_TITLE], data=info["data"]
+                )
 
         return self.async_show_form(
-            step_id="user", data_schema=self.add_suggested_values_to_schema(STEP_USER_DATA_SCHEMA,user_input), errors=errors
+            step_id="user",
+            data_schema=self.add_suggested_values_to_schema(
+                STEP_USER_DATA_SCHEMA, user_input
+            ),
+            errors=errors,
         )
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry):
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
         return OptionsFlowHandler(config_entry)
 
@@ -167,7 +182,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Initialize options flow."""
         self.config_entry = config_entry
 
-    async def async_step_init(self, user_input=None) -> config_entries.ConfigFlowResult:
+    async def async_step_init(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle options flow."""
         errors = {}
         if user_input is not None:
@@ -184,9 +201,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                return self.async_create_entry(title="", data=self.config_entry.options | info["data"])
+                return self.async_create_entry(
+                    title="", data=self.config_entry.options | info["data"]
+                )
         # This exposes the API key back to the user
-        data_schema = self.add_suggested_values_to_schema(STEP_USER_DATA_SCHEMA,self.config_entry.data)
+        data_schema = self.add_suggested_values_to_schema(
+            STEP_USER_DATA_SCHEMA, self.config_entry.data
+        )
         return self.async_show_form(step_id="init", data_schema=data_schema)
 
 

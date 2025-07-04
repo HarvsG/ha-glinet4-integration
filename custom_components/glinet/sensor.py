@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
-import logging
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -41,9 +41,9 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
-        value_fn=lambda system_status: system_status.get("cpu").get("temperature")
-        if system_status.get("cpu")
-        else None,
+        value_fn=lambda system_status: (
+            (cpu := system_status.get("cpu")) and cpu.get("temperature")
+        ),
     ),
     SystemStatusEntityDescription(
         key="load_avg1",
@@ -147,7 +147,7 @@ class GliSensorBase(SensorEntity):
     ) -> None:
         """Initialize the sensor class."""
         self.router = router
-        self.entity_description = entity_description
+        self.entity_description: SystemStatusEntityDescription = entity_description
         self._attr_device_info = router.device_info
 
     @property
@@ -168,7 +168,7 @@ class SystemStatusSensor(GliSensorBase):
 class SystemUptimeSensor(GliSensorBase):
     """GL-iNet system uptime sensor class."""
 
-    _current_value = None
+    _current_value: datetime | None = None
 
     @property
     def native_value(self) -> datetime | None:
