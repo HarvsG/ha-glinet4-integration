@@ -1,4 +1,4 @@
-"""Sensors for GL-inet component."""
+"""Sensors for GL-iNet component."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=True):
-    """Describes a GL-inet system status sensor entity."""
+    """Describes a GL-iNet system status sensor entity."""
 
     value_fn: Callable[[dict], int | float | None]
 
@@ -97,7 +97,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up sensors."""
-    _LOGGER.debug("Setting up GL-inet Sensors")
+    _LOGGER.debug("Setting up GL-iNet Sensors")
 
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
     sensors: list[SystemStatusSensor | SystemUptimeSensor] = [
@@ -138,7 +138,7 @@ def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> d
 
 
 class GliSensorBase(SensorEntity):
-    """GL-inet sensor base class."""
+    """GL-iNet sensor base class."""
 
     def __init__(
         self,
@@ -157,7 +157,7 @@ class GliSensorBase(SensorEntity):
 
 
 class SystemStatusSensor(GliSensorBase):
-    """GL-inet system status sensor class."""
+    """GL-iNet system status sensor class."""
 
     @property
     def native_value(self) -> int | float | None:
@@ -166,7 +166,7 @@ class SystemStatusSensor(GliSensorBase):
 
 
 class SystemUptimeSensor(GliSensorBase):
-    """GL-inet system uptime sensor class."""
+    """GL-iNet system uptime sensor class."""
 
     _current_value = None
 

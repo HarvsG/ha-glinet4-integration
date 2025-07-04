@@ -1,4 +1,4 @@
-"""Config flow for GL-inet integration."""
+"""Config flow for GL-iNet integration."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ class TestingHub:
             res: bool = await self.router.router_reachable(self.username)
         except ConnectionError:
             _LOGGER.error(
-                "Failed to connect to %s, is it really a GL-inet router?", self.host
+                "Failed to connect to %s, is it really a GL-iNet router?", self.host
             )
         except TypeError:
             _LOGGER.error(
@@ -120,7 +120,7 @@ async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for GL-inet."""
+    """Handle a config flow for GL-iNet."""
 
     VERSION = 1
 
@@ -161,7 +161,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle a option flow for GL-inet."""
+    """Handle a option flow for GL-iNet."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""

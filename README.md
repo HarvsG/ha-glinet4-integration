@@ -1,5 +1,5 @@
 # ha-glinet4-integration
-A HomeAssistant custom component for GL-inet routers that uses [their API version 4](https://dev.gl-inet.com/api/).
+A HomeAssistant custom component for GL-iNet routers that uses [their API version 4](https://dev.gl-inet.com/api/).
 
 Working - in alpha, breaking changes very likely.
 
@@ -22,7 +22,7 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 5. Paste `https://github.com/HarvsG/ha-glinet4-integration`, select type `Integration`
 6. Search fo `GL.inet` in HACS and download the latest version
 7. Consider restarting Home Assistant
-8. Go to Devices and Services and click `Add Integration` and select `GL-inet`
+8. Go to Devices and Services and click `Add Integration` and select `GL-iNet`
 
 ## Dev set up
 1. Set up the vscode homeassistant core [dev setup](https://developers.home-assistant.io/docs/development_environment/)
@@ -37,7 +37,6 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 9. You may need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwitten if you rebuild the container
 
 ## TODO
-- [ ] Only add entities to devices that already exist, do not create new ones for each.
 - [ ] Handle all the errors gracefully, including empty client lists that happen after a glinet device restart.
 - [ ] Auto detect router IP for config flow - assume it is the default gateway, test an enpoint that doesn't require auth (/model or /hello), fallback to default `192.168.8.1`
 - [ ] Add switches for wireguard and open vpn (client and server), done for wireguard client, but we can probably do all programatically rather than repeating boilerplate
