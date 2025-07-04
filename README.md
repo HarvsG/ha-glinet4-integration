@@ -10,8 +10,8 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
   - Note, modern phones use MAC address randomisation when they connect to WiFi, you will need to disable this for your home wifi only on [android](https://www.howtogeek.com/722653/how-to-disable-random-wi-fi-mac-address-on-android/) and [iphone](https://www.linksys.com/support-article?articleNum=317709)
 - Control all configured wireguard and tailscale clients with a switch.
 - Reboot your router
+- System device sensors including CPU temperature (if supported by your device), CPU load and Uptime
 - Coming soon:
-  - System device sensors including temperature, CPU load and Uptime
   - On/off control of WiFi Networks
 
 ## Installation

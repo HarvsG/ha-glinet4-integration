@@ -1,4 +1,5 @@
 """The GL-inet integration."""
+
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
@@ -7,7 +8,8 @@ from homeassistant.core import HomeAssistant
 from .const import DATA_GLINET, DOMAIN
 from .router import GLinetRouter
 
-PLATFORMS = ["button","device_tracker","switch"]
+PLATFORMS = ["button", "device_tracker", "sensor", "switch"]
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up GL-inet from a config entry.
@@ -21,7 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await router.setup()
 
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {DATA_GLINET : router}
+    hass.data[DOMAIN][entry.entry_id] = {DATA_GLINET: router}
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
