@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from gli4py import GLinet
+from gli4py.error_handling import NonZeroResponse, TokenError
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -84,7 +85,7 @@ class TestingHub:
             res = await self.router.router_info()
             self.router_mac = res[CONF_MAC]
             self.router_model = res["model"]
-        except ConnectionRefusedError:
+        except (ConnectionRefusedError, NonZeroResponse, TokenError):
             _LOGGER.error("Failed to authenticate with Gl-inet router during testing")
         return self.router.logged_in
 
@@ -106,7 +107,7 @@ async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
     # Return info that you want to store in the config entry.
     return {
         # TODO, on success we can/should probably store some immutable device info in the class.
-        CONF_TITLE: GLINET_FRIENDLY_NAME + " " + hub.router_model.capitalize(),
+        CONF_TITLE: GLINET_FRIENDLY_NAME + " " + hub.router_model.upper(),
         CONF_MAC: hub.router_mac,
         "data": {
             CONF_USERNAME: data[CONF_USERNAME],
@@ -149,7 +150,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=info[CONF_TITLE], data=info["data"])
 
         return self.async_show_form(
-            step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
+            step_id="user", data_schema=self.add_suggested_values_to_schema(STEP_USER_DATA_SCHEMA,user_input), errors=errors
         )
 
     @staticmethod
