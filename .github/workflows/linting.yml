@@ -10,27 +10,34 @@ jobs:
         python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Upgrade mypy
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "mypy>=1.10"
-      - uses: ricardochaves/python-lint@v1.4.0
-        with:
-          use-pylint: false
-          use-pycodestyle: true
-          use-flake8: true
-          use-black: true
-          use-mypy: true
-          use-isort: true
-          extra-pylint-options: ""
-          extra-pycodestyle-options: "--ignore=E501,W503,E203"
-          extra-flake8-options: "--ignore=E501,W503,E203"
-          extra-black-options: ""
-          # Whilst gli4py is not statically typed we must ignore it
-          extra-mypy-options: "--ignore-missing-imports -V"
-          extra-isort-options: "--multi-line 3 --trailing-comma"
+          pip install \
+            mypy>=1.10 \
+            black \
+            isort \
+            flake8 \
+            pycodestyle
+
+      - name: Run black
+        run: |
+          black --check .
+      - name: Run isort
+        run: |
+          isort --multi-line 3 --trailing-comma . -c --diff
+      - name: Run flake8
+        run: |
+          flake8 --ignore=E501,W503,E203
+      - name: Run pycodestyle
+        run: |
+          pycodestyle --ignore=E501,W503,E203
+      - name: Run mypy
+        run: |
+          mypy --ignore-missing-imports --show-error-codes .
