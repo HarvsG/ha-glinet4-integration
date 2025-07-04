@@ -46,6 +46,7 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 - [ ] Add tests - will need to mock the API
 - [ ] Detect and create a re-configure entry if the password changes
 - [ ] Enable support for `https` as well as `http` and consider enabling it by default.
+- [ ] Static type gli4py and then enable static typing on this repo
 - [ ] Add features:
   - Upload/Download sensors
   - Internet reachable sensors (remember that API timesout when internet not reachable)
