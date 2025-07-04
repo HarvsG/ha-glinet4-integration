@@ -38,7 +38,8 @@ class SystemStatusEntityDescription(SensorEntityDescription):
 SYSTEM_SENSORS: tuple[SystemStatusEntityDescription, ...] = (
     SystemStatusEntityDescription(
         key="cpu_temp",
-        name="cpu temperature",
+        name="CPU temperature",
+
         has_entity_name=True,
         icon="mdi:thermometer",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -107,7 +108,12 @@ async def async_setup_entry(
         )
     )
 
+    for sensor in sensors:
+        if sensor.native_value is None:
+            sensors.remove(sensor)
+
     async_add_entities(sensors, True)
+
 
 
 def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> datetime:
