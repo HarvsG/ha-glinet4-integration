@@ -64,7 +64,7 @@ class TailscaleSwitch(SwitchEntity):
         """Return if the service is on."""
         return self._router.tailscale_connection
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
+    async def async_turn_on(self) -> None:
         """Turn on the service."""
         try:
             await self._router.api.tailscale_start()
@@ -73,7 +73,7 @@ class TailscaleSwitch(SwitchEntity):
         except OSError:
             _LOGGER.error("Unable to enable tailscale connection")
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
+    async def async_turn_off(self) -> None:
         """Turn off the service."""
         try:
             await self._router.api.tailscale_stop()
