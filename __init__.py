@@ -1,8 +1,7 @@
 """The GL-inet integration."""
 from __future__ import annotations
 
-from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
-from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DATA_GLINET, DOMAIN
