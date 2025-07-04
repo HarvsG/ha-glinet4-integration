@@ -1,4 +1,5 @@
 {
   "name": "GL.iNet",
   "content_in_root": true,
+  "homeassistant": "2025.01"
 }
