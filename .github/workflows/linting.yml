@@ -23,5 +23,5 @@ jobs:
           extra-flake8-options: "--ignore=E501,W503,E203"
           extra-black-options: ""
           # Whilst gli4py is not statically typed we must ignore it
-          extra-mypy-options: "--disable-error-code=import-untyped"
+          extra-mypy-options: "--ignore-missing-imports"
           extra-isort-options: "--multi-line 3 --trailing-comma"
