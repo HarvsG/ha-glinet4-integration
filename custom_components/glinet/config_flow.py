@@ -22,11 +22,13 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.data_entry_flow import FlowResult, AbortFlow
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.device_registry import format_mac
+
+from .utils import adjust_mac
 
 from .const import (
     API_PATH,
@@ -42,10 +44,18 @@ _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_USERNAME, default=GLINET_DEFAULT_USERNAME): selector.TextSelector(),
-        vol.Required(CONF_HOST, default=GLINET_DEFAULT_URL): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.URL)),
-        vol.Required(CONF_PASSWORD, default=GLINET_DEFAULT_PW): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
-        vol.Optional(CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900))
+        vol.Required(
+            CONF_USERNAME, default=GLINET_DEFAULT_USERNAME
+        ): selector.TextSelector(),
+        vol.Required(CONF_HOST, default=GLINET_DEFAULT_URL): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.URL)
+        ),
+        vol.Required(CONF_PASSWORD, default=GLINET_DEFAULT_PW): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        ),
+        vol.Optional(
+            CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()
+        ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900)),
     }
 )
 
@@ -84,20 +94,23 @@ class TestingHub:
         try:
             await self.router.login(self.username, password)
             res = await self.router.router_info()
-            self.router_mac = res[CONF_MAC]
-            self.router_model = res["model"]
         except (ConnectionRefusedError, NonZeroResponse, TokenError):
             _LOGGER.error("Failed to authenticate with Gl-inet router during testing")
+        else:
+            self.router_mac = res[CONF_MAC]
+            self.router_model = res["model"]
         return self.router.logged_in
 
 
-async def validate_input(data: dict[str, Any], raise_on_invalid_auth: bool = True) -> dict[str, Any]:
+async def validate_input(
+    data: dict[str, Any], raise_on_invalid_auth: bool = True
+) -> dict[str, Any]:
     """Validate the user input allows us to connect.
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
 
-    hub = TestingHub(data.get(CONF_USERNAME,GLINET_DEFAULT_USERNAME), data[CONF_HOST])
+    hub = TestingHub(data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME), data[CONF_HOST])
 
     if not await hub.connect():
         raise CannotConnect
@@ -114,11 +127,15 @@ async def validate_input(data: dict[str, Any], raise_on_invalid_auth: bool = Tru
         CONF_TITLE: GLINET_FRIENDLY_NAME + " " + hub.router_model.upper(),
         CONF_MAC: hub.router_mac,
         "data": {
-            CONF_USERNAME: data.get(CONF_USERNAME,GLINET_DEFAULT_USERNAME),
+            CONF_USERNAME: data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME),
             CONF_HOST: data[CONF_HOST],
             CONF_API_TOKEN: hub.router.sid,
-            CONF_PASSWORD: if valid_auth data.get(CONF_PASSWORD, GLINET_DEFAULT_PW) else None,
-            CONF_CONSIDER_HOME: data.get(CONF_CONSIDER_HOME,DEFAULT_CONSIDER_HOME.total_seconds())
+            CONF_PASSWORD: (
+                data.get(CONF_PASSWORD, GLINET_DEFAULT_PW) if valid_auth else ""
+            ),
+            CONF_CONSIDER_HOME: data.get(
+                CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()
+            ),
         },
     }
 
@@ -151,27 +168,55 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 unique_id: str = format_mac(info[CONF_MAC])
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=info[CONF_TITLE], data=info["data"])
+                return self.async_create_entry(
+                    title=info[CONF_TITLE], data=info["data"]
+                )
 
         return self.async_show_form(
-            step_id="user", data_schema=self.add_suggested_values_to_schema(STEP_USER_DATA_SCHEMA,user_input), errors=errors
+            step_id="user",
+            data_schema=self.add_suggested_values_to_schema(
+                STEP_USER_DATA_SCHEMA, user_input
+            ),
+            errors=errors,
         )
 
     async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
         """Handle information passed following a DHCP discovery"""
 
+        _LOGGER.debug(
+            "DHCP device discovered with host: %s, ip: %s and mac: %s",
+            discovery_info.hostname,
+            discovery_info.ip,
+            discovery_info.macaddress,
+        )
         # This is probably not robust to https and those using a hostname
-        discovery_input = {CONF_HOST: f"http://discovery_info.ip"}
+        discovery_input = {CONF_HOST: f"http://{discovery_info.ip}"}
         self._async_abort_entries_match(discovery_input)
-
         # confirm that this is running a compatible version of the API
-        hub = TestingHub("root", discovery_input[CONF_HOST])
+
+        # the factory mac is usually the LAN MAC -1
+        unique_id = adjust_mac(discovery_info.macaddress, -1).lower()
+        _LOGGER.debug(
+            "Comparing %s with %s",
+            {unique_id, format_mac(discovery_info.macaddress)},
+            self._async_current_ids(include_ignore=True),
+        )  # TODO delete me
+        if {unique_id, format_mac(discovery_info.macaddress)}.intersection(
+            self._async_current_ids(include_ignore=True)
+        ):
+            raise AbortFlow("already_configured")
         try:
-          entry = await validate_input(discovery_input, raise_on_invalid_auth = False)
-        except Cannot connect:
-          self.async_abort(reason="cannot_connect")
-        return await self.async_step_user(user_input=entry['data'])
-    
+            _LOGGER.debug("trying to connect to device")  # TODO delete me
+            entry = await validate_input(discovery_input, raise_on_invalid_auth=False)
+            _LOGGER.debug("connected to device")  # TODO delete me
+        except CannotConnect:
+            _LOGGER.debug("failed to connect to device")  # TODO delete me
+            self.async_abort(reason="cannot_connect")
+        except Exception as exc:  # TODO delete me
+            _LOGGER.error("Some other exception occured %s", exc)
+        _LOGGER.debug("Entry is %s", entry)
+        return await self.async_step_user(user_input=entry["data"])
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
@@ -203,9 +248,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                return self.async_create_entry(title="", data=self.config_entry.options | info["data"])
+                return self.async_create_entry(
+                    title="", data=self.config_entry.options | info["data"]
+                )
         # This exposes the API key back to the user
-        data_schema = self.add_suggested_values_to_schema(STEP_USER_DATA_SCHEMA,self.config_entry.data)
+        data_schema = self.add_suggested_values_to_schema(
+            STEP_USER_DATA_SCHEMA, self.config_entry.data
+        )
         return self.async_show_form(step_id="init", data_schema=data_schema)
 
 
