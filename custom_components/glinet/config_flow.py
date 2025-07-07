@@ -102,10 +102,10 @@ async def validate_input(data: dict[str, Any], raise_on_invalid_auth: bool = Tru
     if not await hub.connect():
         raise CannotConnect
 
-    invalid_auth = False
+    valid_auth = True
     if not await hub.authenticate(data.get(CONF_PASSWORD, GLINET_DEFAULT_PW)):
-        invalid_auth = True
-    if raise_on_invalid_auth and invalid_auth:
+        valid_auth = False
+    if raise_on_invalid_auth and not valid_auth:
         raise InvalidAuth
 
     # Return info that you want to store in the config entry.
