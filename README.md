@@ -1,7 +1,7 @@
 # ha-glinet4-integration
 A HomeAssistant custom component for GL-iNet routers that uses [their API version 4](https://dev.gl-inet.com/api/).
 
-Working - in alpha, breaking changes very likely.
+Disclaimer: GL-iNet no longer publicly documents their API, so the longevity of this integration is unknown and may well break in future firmware versions.
 
 Contributions are welcome, for ideas see the TODO list below or the various `#TODO`s in the code.
 
@@ -17,12 +17,7 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 ## Installation
 1. [Install HACS](https://www.youtube.com/watch?v=a4lSlN6EI04)
 2. Open the HACS page in home assistant
-3. Click the 3 dot menu in the top right
-4. Click `Custom repositories`
-5. Paste `https://github.com/HarvsG/ha-glinet4-integration`, select type `Integration`
-6. Search fo `GL.inet` in HACS and download the latest version
-7. Consider restarting Home Assistant
-8. Go to Devices and Services and click `Add Integration` and select `GL-iNet`
+3. Search for GL-iNet and download the latest release
 
 ## Dev set up
 1. Set up the vscode homeassistant core [dev setup](https://developers.home-assistant.io/docs/development_environment/)
