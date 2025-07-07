@@ -117,7 +117,7 @@ async def validate_input(data: dict[str, Any], raise_on_invalid_auth: bool = Tru
             CONF_USERNAME: data.get(CONF_USERNAME,GLINET_DEFAULT_USERNAME),
             CONF_HOST: data[CONF_HOST],
             CONF_API_TOKEN: hub.router.sid,
-            CONF_PASSWORD: data.get(CONF_PASSWORD, GLINET_DEFAULT_PW),
+            CONF_PASSWORD: if valid_auth data.get(CONF_PASSWORD, GLINET_DEFAULT_PW) else None,
             CONF_CONSIDER_HOME: data.get(CONF_CONSIDER_HOME,DEFAULT_CONSIDER_HOME.total_seconds())
         },
     }
@@ -166,9 +166,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # confirm that this is running a compatible version of the API
         hub = TestingHub("root", discovery_input[CONF_HOST])
-        if not await hub.connect():
-             self.async_abort(reason="cannot_connect")
-        return await self.async_step_user(user_input=discovery_input)
+        try:
+          entry = await validate_input(discovery_input, raise_on_invalid_auth = False)
+        except Cannot connect:
+          self.async_abort(reason="cannot_connect")
+        return await self.async_step_user(user_input=entry['data'])
     
     @staticmethod
     @callback
