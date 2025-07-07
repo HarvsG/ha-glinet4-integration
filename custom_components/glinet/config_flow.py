@@ -25,6 +25,7 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.device_registry import format_mac
 
 from .const import (
@@ -153,6 +154,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=self.add_suggested_values_to_schema(STEP_USER_DATA_SCHEMA,user_input), errors=errors
         )
 
+    async def async_def_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult
+        """Handle information passed following a DHCP discovery"""
+
+        # This is probably not robust to https and those using a hostname
+        discovery_input = {CONF_HOST: f"http://discovery_info.ip"}
+        self._async_abort_entries_match(discovery_input)
+
+        # confirm that this is running a compatible version of the API
+        hub = TestingHub("root", discovery_input[CONF_HOST])
+        if not await hub.connect():
+            return
+        return await self.async_step_user(user_input=discovery_input)
+    
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
