@@ -154,7 +154,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=self.add_suggested_values_to_schema(STEP_USER_DATA_SCHEMA,user_input), errors=errors
         )
 
-    async def async_def_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult
+    async def async_def_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
         """Handle information passed following a DHCP discovery"""
 
         # This is probably not robust to https and those using a hostname
