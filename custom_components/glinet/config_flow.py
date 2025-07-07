@@ -91,18 +91,21 @@ class TestingHub:
         return self.router.logged_in
 
 
-async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
+async def validate_input(data: dict[str, Any], raise_on_invalid_auth: bool = True) -> dict[str, Any]:
     """Validate the user input allows us to connect.
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
 
-    hub = TestingHub(data[CONF_USERNAME], data[CONF_HOST])
+    hub = TestingHub(data.get(CONF_USERNAME,GLINET_DEFAULT_USERNAME), data[CONF_HOST])
 
     if not await hub.connect():
         raise CannotConnect
 
-    if not await hub.authenticate(data[CONF_PASSWORD]):
+    invalid_auth = False
+    if not await hub.authenticate(data.get(CONF_PASSWORD, GLINET_DEFAULT_PW)):
+        invalid_auth = True
+    if raise_on_invalid_auth and invalid_auth:
         raise InvalidAuth
 
     # Return info that you want to store in the config entry.
@@ -111,11 +114,11 @@ async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
         CONF_TITLE: GLINET_FRIENDLY_NAME + " " + hub.router_model.upper(),
         CONF_MAC: hub.router_mac,
         "data": {
-            CONF_USERNAME: data[CONF_USERNAME],
+            CONF_USERNAME: data.get(CONF_USERNAME,GLINET_DEFAULT_USERNAME),
             CONF_HOST: data[CONF_HOST],
             CONF_API_TOKEN: hub.router.sid,
-            CONF_PASSWORD: data[CONF_PASSWORD],
-            CONF_CONSIDER_HOME: data[CONF_CONSIDER_HOME]
+            CONF_PASSWORD: data.get(CONF_PASSWORD, GLINET_DEFAULT_PW),
+            CONF_CONSIDER_HOME: data.get(CONF_CONSIDER_HOME,DEFAULT_CONSIDER_HOME.total_seconds())
         },
     }
 
@@ -154,7 +157,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=self.add_suggested_values_to_schema(STEP_USER_DATA_SCHEMA,user_input), errors=errors
         )
 
-    async def async_def_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
         """Handle information passed following a DHCP discovery"""
 
         # This is probably not robust to https and those using a hostname
@@ -164,7 +167,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # confirm that this is running a compatible version of the API
         hub = TestingHub("root", discovery_input[CONF_HOST])
         if not await hub.connect():
-            return
+             self.async_abort(reason="cannot_connect")
         return await self.async_step_user(user_input=discovery_input)
     
     @staticmethod
