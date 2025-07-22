@@ -365,7 +365,7 @@ class GLinetRouter:
             self._api.tailscale_connection_state
         )
 
-        if response == TailscaleConnection.Connected:
+        if response == TailscaleConnection.CONNECTED:
             self._tailscale_connection = True
         else:
             self._tailscale_connection = False

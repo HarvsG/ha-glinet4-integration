@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from gli4py import GLinet
-from gli4py.error_handling import NonZeroResponse, TokenError
+from gli4py.error_handling import NonZeroResponse
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -94,8 +94,11 @@ class TestingHub:
         try:
             await self.router.login(self.username, password)
             res = await self.router.router_info()
-        except (ConnectionRefusedError, NonZeroResponse, TokenError):
-            _LOGGER.error("Failed to authenticate with Gl-inet router during testing")
+        except (ConnectionRefusedError, NonZeroResponse):
+            _LOGGER.info(
+                "Failed to authenticate with Gl-inet router during testing, this may be expected at times"
+            )
+
         else:
             self.router_mac = res[CONF_MAC]
             self.router_model = res["model"]
@@ -145,12 +148,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self):
+        self._discovered_data = None
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
 
         errors = {}
+
         if user_input is not None:
             try:
                 info = await validate_input(user_input)
@@ -172,10 +179,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     title=info[CONF_TITLE], data=info["data"]
                 )
 
+        # If we have discovered data, we can pre-fill the form
+        defaults = user_input or self._discovered_data or {}
         return self.async_show_form(
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(
-                STEP_USER_DATA_SCHEMA, user_input
+                STEP_USER_DATA_SCHEMA, defaults
             ),
             errors=errors,
         )
@@ -196,26 +205,24 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # the factory mac is usually the LAN MAC -1
         unique_id = adjust_mac(discovery_info.macaddress, -1).lower()
-        _LOGGER.debug(
-            "Comparing %s with %s",
-            {unique_id, format_mac(discovery_info.macaddress)},
-            self._async_current_ids(include_ignore=True),
-        )  # TODO delete me
+
         if {unique_id, format_mac(discovery_info.macaddress)}.intersection(
             self._async_current_ids(include_ignore=True)
         ):
             raise AbortFlow("already_configured")
         try:
-            _LOGGER.debug("trying to connect to device")  # TODO delete me
             entry = await validate_input(discovery_input, raise_on_invalid_auth=False)
-            _LOGGER.debug("connected to device")  # TODO delete me
         except CannotConnect:
-            _LOGGER.debug("failed to connect to device")  # TODO delete me
+            _LOGGER.debug("Failed to connect to DHCP device, aborting")
             self.async_abort(reason="cannot_connect")
-        except Exception as exc:  # TODO delete me
-            _LOGGER.error("Some other exception occured %s", exc)
-        _LOGGER.debug("Entry is %s", entry)
-        return await self.async_step_user(user_input=entry["data"])
+        else:
+            _LOGGER.debug(
+                "Connected to device using DHCP information, default password in use: %s",
+                entry["data"][CONF_PASSWORD] == GLINET_DEFAULT_PW,
+            )
+            entry["data"].pop(CONF_API_TOKEN)
+            self._discovered_data = entry["data"]
+            return await self.async_step_user()
 
     @staticmethod
     @callback
@@ -234,6 +241,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None) -> config_entries.ConfigFlowResult:
         """Handle options flow."""
         errors = {}
+
         if user_input is not None:
             try:
                 info = await validate_input(user_input)
