@@ -4,7 +4,7 @@
   "codeowners": ["@HarvsG"],
   "config_flow": true,
   "dependencies": ["network", "http"],
-  "dhcp": [{ "hostname": "*gl-inet*" }, { "macaddress": "9483C4*" }],
+  "dhcp": [{ "hostname": "*gl-*", "macaddress": "9483C4*" }],
   "documentation": "https://github.com/HarvsG/ha-glinet4-integration",
   "homekit": {},
   "integration_type": "hub",

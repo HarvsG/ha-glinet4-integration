@@ -29,7 +29,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant  # callback,CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format_mac
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_registry import RegistryEntry
@@ -37,7 +37,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
 from .const import API_PATH, DOMAIN
-from .utils import increment_mac
+from .utils import adjust_mac
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
@@ -294,7 +294,7 @@ class GLinetRouter:
         _LOGGER.debug(
             "_update_platform() completed without error for callable %s, returning response: %s",
             api_callable.__name__,
-            str(response),
+            str(response)[:100],
         )
         return response
 
@@ -423,8 +423,8 @@ class GLinetRouter:
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry.unique_id or self.factory_mac)},
             connections={
-                (CONNECTION_NETWORK_MAC, self.factory_mac),
-                (CONNECTION_NETWORK_MAC, increment_mac(self.factory_mac)),
+                (CONNECTION_NETWORK_MAC, format_mac(self.factory_mac)),
+                (CONNECTION_NETWORK_MAC, adjust_mac(self.factory_mac, 1)),
             },
             name=self.name,
             model=self.model or "GL-iNet Router",
