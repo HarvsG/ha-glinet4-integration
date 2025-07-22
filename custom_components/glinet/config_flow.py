@@ -7,7 +7,9 @@ from typing import Any
 
 import voluptuous as vol
 from gli4py import GLinet
-from gli4py.error_handling import NonZeroResponse, TokenError
+from gli4py.error_handling import NonZeroResponse
+import voluptuous as vol
+
 from homeassistant import config_entries
 from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
@@ -22,9 +24,13 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import FlowResult, AbortFlow
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.device_registry import format_mac
+
+from .utils import adjust_mac
 
 from .const import (
     API_PATH,
@@ -90,25 +96,34 @@ class TestingHub:
         try:
             await self.router.login(self.username, password)
             res = await self.router.router_info()
+        except (ConnectionRefusedError, NonZeroResponse):
+            _LOGGER.info(
+                "Failed to authenticate with Gl-inet router during testing, this may be expected at times"
+            )
+
+        else:
             self.router_mac = res[CONF_MAC]
             self.router_model = res["model"]
-        except (ConnectionRefusedError, NonZeroResponse, TokenError):
-            _LOGGER.error("Failed to authenticate with Gl-inet router during testing")
         return bool(self.router.logged_in)
 
 
-async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
+async def validate_input(
+    data: dict[str, Any], raise_on_invalid_auth: bool = True
+) -> dict[str, Any]:
     """Validate the user input allows us to connect.
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
 
-    hub = TestingHub(data[CONF_USERNAME], data[CONF_HOST])
+    hub = TestingHub(data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME), data[CONF_HOST])
 
     if not await hub.connect():
         raise CannotConnect
 
-    if not await hub.authenticate(data[CONF_PASSWORD]):
+    valid_auth = True
+    if not await hub.authenticate(data.get(CONF_PASSWORD, GLINET_DEFAULT_PW)):
+        valid_auth = False
+    if raise_on_invalid_auth and not valid_auth:
         raise InvalidAuth
 
     # Return info that you want to store in the config entry.
@@ -117,11 +132,15 @@ async def validate_input(data: dict[str, Any]) -> dict[str, Any]:
         CONF_TITLE: GLINET_FRIENDLY_NAME + " " + hub.router_model.upper(),
         CONF_MAC: hub.router_mac,
         "data": {
-            CONF_USERNAME: data[CONF_USERNAME],
+            CONF_USERNAME: data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME),
             CONF_HOST: data[CONF_HOST],
             CONF_API_TOKEN: hub.router.sid,
-            CONF_PASSWORD: data[CONF_PASSWORD],
-            CONF_CONSIDER_HOME: data[CONF_CONSIDER_HOME],
+            CONF_PASSWORD: (
+                data.get(CONF_PASSWORD, GLINET_DEFAULT_PW) if valid_auth else ""
+            ),
+            CONF_CONSIDER_HOME: data.get(
+                CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()
+            ),
         },
     }
 
@@ -131,12 +150,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self):
+        self._discovered_data = None
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the initial step."""
 
         errors = {}
+
         if user_input is not None:
             try:
                 info = await validate_input(user_input)
@@ -158,13 +181,50 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     title=info[CONF_TITLE], data=info["data"]
                 )
 
+        # If we have discovered data, we can pre-fill the form
+        defaults = user_input or self._discovered_data or {}
         return self.async_show_form(
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(
-                STEP_USER_DATA_SCHEMA, user_input
+                STEP_USER_DATA_SCHEMA, defaults
             ),
             errors=errors,
         )
+
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
+        """Handle information passed following a DHCP discovery"""
+
+        _LOGGER.debug(
+            "DHCP device discovered with host: %s, ip: %s and mac: %s",
+            discovery_info.hostname,
+            discovery_info.ip,
+            discovery_info.macaddress,
+        )
+        # This is probably not robust to https and those using a hostname
+        discovery_input = {CONF_HOST: f"http://{discovery_info.ip}"}
+        self._async_abort_entries_match(discovery_input)
+        # confirm that this is running a compatible version of the API
+
+        # the factory mac is usually the LAN MAC -1
+        unique_id = adjust_mac(discovery_info.macaddress, -1).lower()
+
+        if {unique_id, format_mac(discovery_info.macaddress)}.intersection(
+            self._async_current_ids(include_ignore=True)
+        ):
+            raise AbortFlow("already_configured")
+        try:
+            entry = await validate_input(discovery_input, raise_on_invalid_auth=False)
+        except CannotConnect:
+            _LOGGER.debug("Failed to connect to DHCP device, aborting")
+            self.async_abort(reason="cannot_connect")
+        else:
+            _LOGGER.debug(
+                "Connected to device using DHCP information, default password in use: %s",
+                entry["data"][CONF_PASSWORD] == GLINET_DEFAULT_PW,
+            )
+            entry["data"].pop(CONF_API_TOKEN)
+            self._discovered_data = entry["data"]
+            return await self.async_step_user()
 
     @staticmethod
     @callback
@@ -187,6 +247,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         """Handle options flow."""
         errors = {}
+
         if user_input is not None:
             try:
                 info = await validate_input(user_input)

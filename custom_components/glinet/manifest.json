@@ -4,13 +4,13 @@
   "codeowners": ["@HarvsG"],
   "config_flow": true,
   "dependencies": ["network", "http"],
-  "dhcp": [{ "hostname": "*gl-inet*" }, { "macaddress": "9483C4*" }],
+  "dhcp": [{ "hostname": "*gl-*", "macaddress": "9483C4*" }],
   "documentation": "https://github.com/HarvsG/ha-glinet4-integration",
   "homekit": {},
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/HarvsG/ha-glinet4-integration/issues",
-  "requirements": ["gli4py==0.0.10"],
+  "requirements": ["gli4py==0.0.12"],
   "ssdp": [],
   "version": "0.0.5"
 }
