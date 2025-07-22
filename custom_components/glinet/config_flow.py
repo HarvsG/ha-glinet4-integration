@@ -22,7 +22,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import AbortFlow, FlowResult
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 from homeassistant.helpers.device_registry import format_mac
@@ -150,7 +150,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    def __init__(self) -> ConfigFlow:
+    def __init__(self) -> None:
         """Initialize the config flow."""
         self._discovered_data = None
 
@@ -192,7 +192,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
+    async def async_step_dhcp(
+        self, discovery_info: DhcpServiceInfo
+    ) -> ConfigFlowResult:
         """Handle information passed following a DHCP discovery."""
 
         _LOGGER.debug(
@@ -217,7 +219,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             entry = await validate_input(discovery_input, raise_on_invalid_auth=False)
         except CannotConnect:
             _LOGGER.debug("Failed to connect to DHCP device, aborting")
-            self.async_abort(reason="cannot_connect")
         else:
             _LOGGER.debug(
                 "Connected to device using DHCP information, default password in use: %s",
@@ -226,6 +227,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             entry["data"].pop(CONF_API_TOKEN)
             self._discovered_data = entry["data"]
             return await self.async_step_user()
+        return self.async_abort(reason="cannot_connect")
 
     @staticmethod
     @callback
