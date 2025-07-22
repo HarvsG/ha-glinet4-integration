@@ -150,7 +150,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    def __init__(self):
+    def __init__(self) -> ConfigFlow:
         """Initialize the config flow."""
         self._discovered_data = None
 
