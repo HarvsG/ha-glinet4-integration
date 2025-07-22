@@ -21,6 +21,12 @@ repos:
         language: system
         types: [python]
         require_serial: true
+      - id: isort
+        name: isort
+        entry: uv run isort --multi-line 3 --trailing-comma . -c --diff
+        language: system
+        types: [python]
+        require_serial: true
       - id: mypy
         name: mypy
         entry: uv run mypy
