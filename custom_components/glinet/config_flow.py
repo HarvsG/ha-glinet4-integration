@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import voluptuous as vol
 from gli4py import GLinet
 from gli4py.error_handling import NonZeroResponse
 import voluptuous as vol
@@ -15,7 +14,6 @@ from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
     DEFAULT_CONSIDER_HOME,
 )
-from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import (
     CONF_API_TOKEN,
     CONF_HOST,
@@ -24,13 +22,10 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult, AbortFlow
+from homeassistant.data_entry_flow import AbortFlow, FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
-from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.device_registry import format_mac
-
-from .utils import adjust_mac
 
 from .const import (
     API_PATH,
@@ -41,6 +36,11 @@ from .const import (
     GLINET_DEFAULT_USERNAME,
     GLINET_FRIENDLY_NAME,
 )
+from .utils import adjust_mac
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigFlowResult
+    from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -78,11 +78,11 @@ class TestingHub:
         try:
             res: bool = await self.router.router_reachable(self.username)
         except ConnectionError:
-            _LOGGER.error(
+            _LOGGER.exception(
                 "Failed to connect to %s, is it really a GL-iNet router?", self.host
             )
         except TypeError:
-            _LOGGER.error(
+            _LOGGER.exception(
                 "Failed to parse router response to %s, is it the right firmware version?",
                 self.host,
             )
@@ -151,6 +151,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self):
+        """Initialize the config flow."""
         self._discovered_data = None
 
     async def async_step_user(
@@ -192,7 +193,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
-        """Handle information passed following a DHCP discovery"""
+        """Handle information passed following a DHCP discovery."""
 
         _LOGGER.debug(
             "DHCP device discovered with host: %s, ip: %s and mac: %s",

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
@@ -18,7 +17,6 @@ from homeassistant.components.device_tracker import (
     DEFAULT_CONSIDER_HOME,
     DOMAIN as TRACKER_DOMAIN,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_API_TOKEN,
     CONF_HOST,
@@ -27,18 +25,23 @@ from homeassistant.const import (
     CONF_PASSWORD,
     CONF_USERNAME,
 )
-from homeassistant.core import HomeAssistant  # callback,CALLBACK_TYPE
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format_mac
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.entity_registry import RegistryEntry
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
 from .const import API_PATH, DOMAIN
 from .utils import adjust_mac
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_registry import RegistryEntry
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
@@ -114,10 +117,9 @@ class GLinetRouter:
                 self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD]
             )
         except OSError as exc:
-            _LOGGER.error(
-                "Error connecting to GL-iNet router %s for setup: %s",
+            _LOGGER.exception(
+                "Error connecting to GL-iNet router %s",
                 self._host,
-                exc,
             )
             raise ConfigEntryNotReady from exc
         try:
@@ -126,11 +128,9 @@ class GLinetRouter:
         except Exception as exc:  # pylint: disable=broad-except
             # The late initialized variables will remain in
             # their default 'UNKNOWN' state
-            _LOGGER.error(
-                "Error getting basic device info from GL-iNet router %s for setup: %s, trace %s",
+            _LOGGER.exception(
+                "Error getting basic device info from GL-iNet router %s",
                 self._host,
-                exc,
-                exc.with_traceback,
             )
             raise ConfigEntryNotReady from exc
 
@@ -205,10 +205,9 @@ class GLinetRouter:
                 self._host,
             )
         except Exception as exc:
-            _LOGGER.error(
-                "GL-iNet %s failed to renew the token, have you changed your router password?: %s",
+            _LOGGER.exception(
+                "GL-iNet %s failed to renew the token, have you changed your router password?",
                 self._host,
-                exc,
             )
             raise ConfigEntryAuthFailed from exc
 
@@ -238,13 +237,12 @@ class GLinetRouter:
                 "Making api call %s from _update_platform()", api_callable.__name__
             )
             response = await api_callable()
-        except TimeoutError as exc:
+        except TimeoutError:
             if not self._connect_error:
                 self._connect_error = True
-            _LOGGER.error(
-                "GL-iNet router %s did not respond in time: %s",
+            _LOGGER.exception(
+                "GL-iNet router %s did not respond in time",
                 self._host,
-                exc,
             )
             return None
         except TokenError as exc:
@@ -257,22 +255,18 @@ class GLinetRouter:
                 exc,
             )
             return None
-        except NonZeroResponse as exc:
+        except NonZeroResponse:
             if not self._connect_error:
                 self._connect_error = True
-            _LOGGER.error(
-                "GL-iNet router %s responded, but with an error code: %s",
-                self._host,
-                exc,
+            _LOGGER.exception(
+                "GL-iNet router %s responded, but with an error code", self._host
             )
             return None
-        except Exception as exc:  # pylint: disable=broad-except  # noqa: BLE001
+        except Exception:  # pylint: disable=broad-except  # noqa: BLE001
             if not self._connect_error:
                 self._connect_error = True
-            _LOGGER.error(
-                "GL-iNet router %s responded with an unexpected error: %s",
-                self._host,
-                exc,
+            _LOGGER.exception(
+                "GL-iNet router %s responded with an unexpected error", self._host
             )
             return None
 
@@ -530,7 +524,7 @@ class GLinetRouter:
 
     @property
     def system_status(self) -> dict:
-        """Property for system status"""
+        """Property for system status."""
 
         return self._system_status
 
@@ -552,7 +546,7 @@ class ClientDevInfo:
         """Initialize a connected device."""
         self._mac: str = mac
         self._name: str | None = name
-        self._ip_address: str | None
+        self._ip_address: str | None = None
         self._last_activity: datetime = dt_util.utcnow() - timedelta(days=1)
         self._connected: bool = False
         self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN

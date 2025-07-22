@@ -3,20 +3,22 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from propcache.api import cached_property
 
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity_platform import (
-    AddConfigEntryEntitiesCallback,
-)
-from propcache.api import cached_property
 
 from .const import DATA_GLINET, DOMAIN
-from .router import ClientDevInfo, GLinetRouter
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+    from .router import ClientDevInfo, GLinetRouter
 
 DEFAULT_DEVICE_NAME = "Unknown device"
 
@@ -72,9 +74,7 @@ class GLinetDevice(ScannerEntity):
         """Initialize a GLinet device."""
         self._router: GLinetRouter = router
         self._device: ClientDevInfo = device
-        self._icon = (
-            "mdi:radar"  # TODO will need to be replaced with brand logo or similar
-        )
+        self._icon = "mdi:radar"
         self._attr_hostname: str = self._device.name or DEFAULT_DEVICE_NAME
         self._attr_ip_address: str | None = self._device.ip_address
         self._attr_mac_address: str = self._device.mac
@@ -82,13 +82,11 @@ class GLinetDevice(ScannerEntity):
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
-        # TODO do we need to prepend DOMAIN to make this unique or does HA do this already?
         return self._attr_mac_address
 
     @property
     def icon(self) -> str:
         """Icon."""
-        # TODO theoretically HA should give the default device tracker icon
         return self._icon
 
     @property

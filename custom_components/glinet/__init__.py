@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from typing import TYPE_CHECKING
 
 from .const import DATA_GLINET, DOMAIN
 from .router import GLinetRouter
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
 
 PLATFORMS = ["button", "device_tracker", "sensor", "switch"]
 

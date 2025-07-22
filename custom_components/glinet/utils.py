@@ -1,5 +1,6 @@
 """Utility functions for GL-iNet routers."""
 
+
 def adjust_mac(mac: str, delta: int, sep: str = ":") -> str:
     """Increment a MAC address by 1.
 
