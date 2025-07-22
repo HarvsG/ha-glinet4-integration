@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from gli4py import GLinet
 from gli4py.error_handling import NonZeroResponse
@@ -22,13 +22,10 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult, AbortFlow
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
-from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.device_registry import format_mac
-
-from .utils import adjust_mac
 
 from .const import (
     API_PATH,
@@ -39,6 +36,11 @@ from .const import (
     GLINET_DEFAULT_USERNAME,
     GLINET_FRIENDLY_NAME,
 )
+from .utils import adjust_mac
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigFlowResult
+    from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,11 +78,11 @@ class TestingHub:
         try:
             res: bool = await self.router.router_reachable(self.username)
         except ConnectionError:
-            _LOGGER.error(
+            _LOGGER.exception(
                 "Failed to connect to %s, is it really a GL-iNet router?", self.host
             )
         except TypeError:
-            _LOGGER.error(
+            _LOGGER.exception(
                 "Failed to parse router response to %s, is it the right firmware version?",
                 self.host,
             )
@@ -102,7 +104,7 @@ class TestingHub:
         else:
             self.router_mac = res[CONF_MAC]
             self.router_model = res["model"]
-        return self.router.logged_in
+        return bool(self.router.logged_in)
 
 
 async def validate_input(
@@ -148,12 +150,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize the config flow."""
         self._discovered_data = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the initial step."""
 
         errors = {}
@@ -189,8 +192,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> FlowResult:
-        """Handle information passed following a DHCP discovery"""
+    async def async_step_dhcp(
+        self, discovery_info: DhcpServiceInfo
+    ) -> ConfigFlowResult:
+        """Handle information passed following a DHCP discovery."""
 
         _LOGGER.debug(
             "DHCP device discovered with host: %s, ip: %s and mac: %s",
@@ -214,7 +219,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             entry = await validate_input(discovery_input, raise_on_invalid_auth=False)
         except CannotConnect:
             _LOGGER.debug("Failed to connect to DHCP device, aborting")
-            self.async_abort(reason="cannot_connect")
         else:
             _LOGGER.debug(
                 "Connected to device using DHCP information, default password in use: %s",
@@ -223,10 +227,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             entry["data"].pop(CONF_API_TOKEN)
             self._discovered_data = entry["data"]
             return await self.async_step_user()
+        return self.async_abort(reason="cannot_connect")
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry):
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
         return OptionsFlowHandler(config_entry)
 
@@ -238,7 +245,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Initialize options flow."""
         self.config_entry = config_entry
 
-    async def async_step_init(self, user_input=None) -> config_entries.ConfigFlowResult:
+    async def async_step_init(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle options flow."""
         errors = {}
 

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import datetime, timedelta
 import logging
+from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -12,14 +12,19 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfTemperature
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import utcnow
 
 from .const import DATA_GLINET, DOMAIN
-from .router import GLinetRouter
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+    from .router import GLinetRouter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,9 +46,9 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
-        value_fn=lambda system_status: system_status.get("cpu").get("temperature")
-        if system_status.get("cpu")
-        else None,
+        value_fn=lambda system_status: (
+            (cpu := system_status.get("cpu")) and cpu.get("temperature")
+        ),
     ),
     SystemStatusEntityDescription(
         key="load_avg1",
@@ -129,7 +134,7 @@ async def async_setup_entry(
 
 def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> datetime:
     """Calculate uptime with deviation."""
-    delta_uptime = utcnow() - timedelta(seconds=seconds_uptime)
+    delta_uptime: datetime = utcnow() - timedelta(seconds=seconds_uptime)
 
     if not last_value or abs((delta_uptime - last_value).total_seconds()) > 15:
         return delta_uptime
@@ -147,7 +152,7 @@ class GliSensorBase(SensorEntity):
     ) -> None:
         """Initialize the sensor class."""
         self.router = router
-        self.entity_description = entity_description
+        self.entity_description: SystemStatusEntityDescription = entity_description
         self._attr_device_info = router.device_info
 
     @property
@@ -168,7 +173,7 @@ class SystemStatusSensor(GliSensorBase):
 class SystemUptimeSensor(GliSensorBase):
     """GL-iNet system uptime sensor class."""
 
-    _current_value = None
+    _current_value: datetime | None = None
 
     @property
     def native_value(self) -> datetime | None:
