@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DATA_GLINET, DOMAIN
-from .router import GLinetRouter, WireGuardClient
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+    from .router import GLinetRouter, WireGuardClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -73,7 +76,7 @@ class TailscaleSwitch(SwitchEntity):
             # TODO since the state takes a while to change we may
             await self._router.update_tailscale_state()
         except OSError:
-            _LOGGER.error("Unable to enable tailscale connection")
+            _LOGGER.exception("Unable to enable tailscale connection")
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
@@ -81,11 +84,11 @@ class TailscaleSwitch(SwitchEntity):
             await self._router.api.tailscale_stop()
             await self._router.update_tailscale_state()
         except OSError:
-            _LOGGER.error("Unable to stop tailscale connection")
+            _LOGGER.exception("Unable to stop tailscale connection")
 
     @property
     def lan_access(self) -> bool | None:
-        """Whether the router exposes the LAN as a subnet."""  #
+        """Whether the router exposes the LAN as a subnet."""
         la = self._router.tailscale_config.get("lan_enabled")
         if la is not None:
             return bool(la)
@@ -149,7 +152,7 @@ class WireGuardSwitch(SwitchEntity):
                 self._client.group_id, self._client.peer_id
             )  # TODO not working
         except OSError:
-            _LOGGER.error("Unable to enable WG client")
+            _LOGGER.exception("Unable to enable WG client")
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
@@ -157,7 +160,7 @@ class WireGuardSwitch(SwitchEntity):
             await self._router.api.wireguard_client_stop()
             # TODO may need to introduce a delay here, or await confirmation of the stop
         except OSError:
-            _LOGGER.error("Unable to stop WG client")
+            _LOGGER.exception("Unable to stop WG client")
 
     @property
     def entity_category(self) -> EntityCategory:
