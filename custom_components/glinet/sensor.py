@@ -134,7 +134,7 @@ async def async_setup_entry(
 
 def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> datetime:
     """Calculate uptime with deviation."""
-    delta_uptime = utcnow() - timedelta(seconds=seconds_uptime)
+    delta_uptime: datetime = utcnow() - timedelta(seconds=seconds_uptime)
 
     if not last_value or abs((delta_uptime - last_value).total_seconds()) > 15:
         return delta_uptime
