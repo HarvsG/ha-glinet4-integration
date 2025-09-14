@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from typing import Any
-
 
 from .const import DATA_GLINET, DOMAIN
 from .router import GLinetRouter, WireGuardClient
@@ -33,7 +32,7 @@ async def async_setup_entry(
         ]
     if router.tailscale_configured:
         switches.append(TailscaleSwitch(router))
-    for iface in router._wifi_ifaces:
+    for iface in router.wifi_ifaces_get:
         switches.append(WifiApSwitch(router, iface))
     if switches:
         async_add_entities(switches, True)
@@ -85,16 +84,18 @@ class WifiApSwitch(GliSwitchBase):
         """Return the attributes."""
         attrs = {}
         for attr in ["guest", "ssid"]:
-            if val := self._router._wifi_ifaces.get(self._iface_name, {}).get(attr):
+            if val := self._router.wifi_ifaces_get.get(self._iface_name, {}).get(attr):
                 attrs[attr] = val
         return attrs
 
     @property
     def is_on(self) -> bool:
         """Return if the AP is on."""
-        return self._router._wifi_ifaces.get(self._iface_name, {}).get("enabled", False)
+        return self._router.wifi_ifaces_get.get(self._iface_name, {}).get(
+            "enabled", False
+        )
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
+    async def async_turn_on(self) -> None:
         """Turn on the AP."""
         try:
             await self._router.api.wifi_iface_set_enabled(self._iface_name, True)
@@ -102,7 +103,7 @@ class WifiApSwitch(GliSwitchBase):
         except OSError:
             _LOGGER.error("Unable to enable WiFi interface %s", self._iface_name)
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
+    async def async_turn_off(self) -> None:
         """Turn off the AP."""
         try:
             await self._router.api.wifi_iface_set_enabled(self._iface_name, False)
