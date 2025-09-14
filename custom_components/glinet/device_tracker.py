@@ -3,31 +3,37 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from propcache.api import cached_property
 
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import DATA_GLINET, DOMAIN
-from .router import ClientDevInfo, GLinetRouter
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+    from .router import ClientDevInfo, GLinetRouter
 
 DEFAULT_DEVICE_NAME = "Unknown device"
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up device tracker for GLinet component."""
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
     tracked: set[str] = set()
 
     @callback
-    def update_router():
+    def update_router() -> None:
         """Update the values of the router."""
         add_entities(router, async_add_entities, tracked)
 
@@ -38,8 +44,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @callback
-def add_entities(router: GLinetRouter, async_add_entities, tracked):
-    """Add new tracker entities from the router."""
+def add_entities(
+    router: GLinetRouter,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+    tracked: set[str],
+) -> None:
+    """Add all new tracker entities from the router."""
     new_tracked = []
     for mac, device in router.devices.items():
         if mac in tracked:
@@ -55,35 +65,28 @@ def add_entities(router: GLinetRouter, async_add_entities, tracked):
 class GLinetDevice(ScannerEntity):
     """Representation of a GLinet tracked device."""
 
-    _attr_hostname: str | None
+    _attr_hostname: str
     _attr_ip_address: str | None
-    _attr_mac_address: str | None
+    _attr_mac_address: str
     _attr_source_type: SourceType = SourceType.ROUTER
 
     def __init__(self, router: GLinetRouter, device: ClientDevInfo) -> None:
         """Initialize a GLinet device."""
         self._router: GLinetRouter = router
         self._device: ClientDevInfo = device
-        self._icon = (
-            "mdi:radar"  # TODO will need to be replaced with brand logo or similar
-        )
-        self._attr_hostname: str | None = self._device.name or DEFAULT_DEVICE_NAME
+        self._icon = "mdi:radar"
+        self._attr_hostname: str = self._device.name or DEFAULT_DEVICE_NAME
         self._attr_ip_address: str | None = self._device.ip_address
-        self._attr_mac_address: str | None = self._device.mac
-        self._attr_device_info = (
-            router.device_info
-        )  # This is currently ignored for ScannerEntities
+        self._attr_mac_address: str = self._device.mac
 
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
-        # TODO do we need to prepend DOMAIN to make this unique or does HA do this already?
         return self._attr_mac_address
 
     @property
     def icon(self) -> str:
         """Icon."""
-        # TODO theoretically HA should give the default device tracker icon
         return self._icon
 
     @property
