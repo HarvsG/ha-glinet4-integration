@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
+from typing import Any
 
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
@@ -88,7 +89,7 @@ class GLinetRouter:
         # State
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
-        self._wifi_ifaces: dict = {}
+        self._wifi_ifaces: dict[str, dict[str, Any]] = {}
         self._wireguard_clients: dict[str, WireGuardClient] = {}
         self._wireguard_connection: WireGuardClient | None = None
         self._tailscale_config: dict = {}

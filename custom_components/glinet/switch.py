@@ -32,8 +32,8 @@ async def async_setup_entry(
         ]
     if router.tailscale_configured:
         switches.append(TailscaleSwitch(router))
-    for iface in router.wifi_ifaces_get:
-        switches.append(WifiApSwitch(router, iface))
+    for iface_name, iface in router.wifi_ifaces_get.items():
+        switches.append(WifiApSwitch(router, iface_name, iface))
     if switches:
         async_add_entities(switches, True)
 
@@ -57,10 +57,13 @@ class GliSwitchBase(SwitchEntity):
 class WifiApSwitch(GliSwitchBase):
     """A WiFi AccessPoint switch."""
 
-    def __init__(self, router: GLinetRouter, iface_name: str) -> None:
+    def __init__(
+        self, router: GLinetRouter, iface_name: str, iface: dict[str, Any]
+    ) -> None:
         """Initialize a GLinet device."""
         super().__init__(router)
         self._iface_name = iface_name
+        self._iface = iface
 
     @property
     def icon(self) -> str:
@@ -72,7 +75,7 @@ class WifiApSwitch(GliSwitchBase):
     @property
     def name(self) -> str:
         """Return the name of the switch."""
-        return self._iface_name
+        return self._iface.get("ssid", self._iface_name)
 
     @property
     def unique_id(self) -> str:
