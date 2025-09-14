@@ -210,6 +210,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # the factory mac is usually the LAN MAC -1
         unique_id = adjust_mac(discovery_info.macaddress, -1).lower()
+        await self.async_set_unique_id(unique_id)
+        self._abort_if_unique_id_configured()
 
         if {unique_id, format_mac(discovery_info.macaddress)}.intersection(
             self._async_current_ids(include_ignore=True)
