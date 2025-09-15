@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -12,7 +12,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
 from homeassistant.util.dt import utcnow
 
 from .const import DATA_GLINET, DOMAIN
@@ -33,6 +33,7 @@ class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=Tr
     """Describes a GL-iNet system status sensor entity."""
 
     value_fn: Callable[[dict], int | float | None]
+    extra_attributes_fn: Callable[[dict], dict[str, Any]] | None = None
 
 
 SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
@@ -94,6 +95,52 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
             and la[2]
         )
         or None,
+    ),
+    SystemStatusEntityDescription(
+        key="memory_use",
+        name="Memory usage",
+        has_entity_name=True,
+        icon="mdi:memory",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        native_unit_of_measurement=PERCENTAGE,
+        value_fn=lambda system_status: (
+            (memory_total := system_status.get("memory_total", 0)) > 0
+            and (memory_free := system_status.get("memory_free", 0)) >= 0
+            and (mu := 100 * (1 - memory_free / memory_total))
+            and isinstance(mu, float)
+            and 0 <= mu <= 100
+            and mu
+        )
+        or None,
+        extra_attributes_fn=lambda system_status: {
+            "memory_total": system_status.get("memory_total"),
+            "memory_free": system_status.get("memory_free"),
+        },
+    ),
+    SystemStatusEntityDescription(
+        key="flash_use",
+        name="Flash usage",
+        has_entity_name=True,
+        icon="mdi:harddisk",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        native_unit_of_measurement=PERCENTAGE,
+        value_fn=lambda system_status: (
+            (flash_total := system_status.get("flash_total", 0)) > 0
+            and (flash_free := system_status.get("flash_free", 0)) >= 0
+            and (fu := 100 * (1 - flash_free / flash_total))
+            and isinstance(fu, float)
+            and 0 <= fu <= 100
+            and fu
+        )
+        or None,
+        extra_attributes_fn=lambda system_status: {
+            "flash_total": system_status.get("flash_total"),
+            "flash_free": system_status.get("flash_free"),
+        },
     ),
 ]
 
@@ -159,6 +206,13 @@ class GliSensorBase(SensorEntity):
     def unique_id(self) -> str:
         """Return the unique id of the switch."""
         return f"glinet_sensor/{self.router.factory_mac}/system_{self.entity_description.key}"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        if self.entity_description.extra_attributes_fn is None:
+            return None
+        return self.entity_description.extra_attributes_fn(self.router.system_status)
 
 
 class SystemStatusSensor(GliSensorBase):

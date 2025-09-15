@@ -443,7 +443,7 @@ class GLinetRouter:
             name=self.name,
             model=self.model or "GL-iNet Router",
             manufacturer="GL-iNet",
-            configuration_url=f"http://{self.host}",
+            configuration_url=self._host,
             sw_version=self._sw_v,
         )
 
