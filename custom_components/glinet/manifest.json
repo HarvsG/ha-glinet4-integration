@@ -12,5 +12,5 @@
   "issue_tracker": "https://github.com/HarvsG/ha-glinet4-integration/issues",
   "requirements": ["gli4py==0.0.13"],
   "ssdp": [],
-  "version": "0.1.4"
+  "version": "0.1.5"
 }
