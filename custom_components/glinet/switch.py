@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .router import GLinetRouter, WireGuardClient
+    from .router import GLinetRouter, WifiInterface, WireGuardClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Pi-hole switch."""
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
-    switches: list[WireGuardSwitch | TailscaleSwitch] = []
+    switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch] = []
     if router.wireguard_clients:
         # TODO detect all configured wireguard, openvpn, shadowsocks and
         # TOR clients & servers with router/vpn/status? and gen a switch for each
@@ -35,19 +35,97 @@ async def async_setup_entry(
         ]
     if router.tailscale_configured:
         switches.append(TailscaleSwitch(router))
+    for iface_name, iface in router.wifi_ifaces.items():
+        switches.append(WifiApSwitch(router, iface_name, iface))
     if switches:
         async_add_entities(switches, True)
 
 
-class TailscaleSwitch(SwitchEntity):
-    """A tailscale switch."""
+class GliSwitchBase(SwitchEntity):
+    """GL-inet switch base class."""
 
     def __init__(self, router: GLinetRouter) -> None:
         """Initialize a GLinet device."""
         self._router = router
         self._attr_device_info = router.device_info
 
-        # self._client = client
+    _attr_has_entity_name = True
+
+    @property
+    def entity_category(self) -> EntityCategory:
+        """A config entity."""
+        return EntityCategory.CONFIG
+
+
+class WifiApSwitch(GliSwitchBase):
+    """A WiFi AccessPoint switch."""
+
+    def __init__(
+        self, router: GLinetRouter, iface_name: str, iface: WifiInterface
+    ) -> None:
+        """Initialize a GLinet device."""
+        super().__init__(router)
+        self._iface_name = iface_name
+        self._iface = iface
+
+    @property
+    def icon(self) -> str:
+        """Return AP state icon."""
+        if self.is_on:
+            return "mdi:wifi"
+        return "mdi:wifi-off"
+
+    @property
+    def name(self) -> str:
+        """Return the name of the switch."""
+        return self._iface.ssid if self._iface.ssid else self._iface.name
+
+    @property
+    def unique_id(self) -> str:
+        """Return the unique id of the switch."""
+        return f"glinet_switch/{self._router.factory_mac}/iface_{self._iface_name}"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str | bool]:
+        """Return the attributes."""
+        attrs: dict[str, str | bool] = {}
+        attrs["interface"] = self._iface.name
+        attrs["guest"] = self._iface.guest
+        attrs["ssid"] = self._iface.ssid
+        attrs["hidden"] = self._iface.hidden
+        attrs["encryption"] = self._iface.encryption
+        return attrs
+
+    @property
+    def is_on(self) -> bool:
+        """Return if the AP is on."""
+        return self._iface.enabled
+
+    async def async_turn_on(self, **_: Any) -> None:
+        """Turn on the AP."""
+        try:
+            await self._router.api.wifi_iface_set_enabled(self._iface_name, True)
+            await self._router.update_wifi_ifaces_state()
+        except OSError:
+            _LOGGER.exception(
+                "Unable to enable WiFi interface and/or confirm the result %s",
+                self._iface_name,
+            )
+
+    async def async_turn_off(self, **_: Any) -> None:
+        """Turn off the AP."""
+        try:
+            await self._router.api.wifi_iface_set_enabled(self._iface_name, False)
+            await self._router.update_wifi_ifaces_state()
+        except OSError:
+            _LOGGER.exception(
+                "Unable to disable WiFi interface and/or confirm the result %s",
+                self._iface_name,
+            )
+
+
+class TailscaleSwitch(GliSwitchBase):
+    """A tailscale switch."""
 
     _attr_icon = "mdi:vpn"  # TODO would be better to have MDI style icons for each of the VPN types
 
@@ -95,11 +173,6 @@ class TailscaleSwitch(SwitchEntity):
         return None
 
     @property
-    def entity_category(self) -> EntityCategory:
-        """A config entity."""
-        return EntityCategory.CONFIG
-
-    @property
     def entity_registry_enabled_default(self) -> bool:
         """Enabled by default."""
         return self._router.tailscale_configured
@@ -110,7 +183,7 @@ class TailscaleSwitch(SwitchEntity):
         return self._router.tailscale_configured
 
 
-class WireGuardSwitch(SwitchEntity):
+class WireGuardSwitch(GliSwitchBase):
     """Representation of a VPN switch."""
 
     # TODO make class, client/server/VPN type agnostic and appreciate >1 can be configured of each
@@ -119,7 +192,7 @@ class WireGuardSwitch(SwitchEntity):
     # multiples of any one type etc etc
     def __init__(self, router: GLinetRouter, client: WireGuardClient) -> None:
         """Initialize a GLinet device."""
-        self._router = router
+        super().__init__(router)
         self._client = client
         self._attr_device_info = router.device_info
 

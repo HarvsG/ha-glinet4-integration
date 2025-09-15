@@ -94,6 +94,7 @@ class GLinetRouter:
         # State
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
+        self._wifi_ifaces: dict[str, WifiInterface] = {}
         self._system_status: dict = {}
         self._wireguard_clients: dict[str, WireGuardClient] = {}
         self._wireguard_connection: WireGuardClient | None = None
@@ -215,6 +216,7 @@ class GLinetRouter:
         """Update all Gl-inet platforms."""
         await self.update_system_status()
         await self.update_device_trackers()
+        await self.update_wifi_ifaces_state()
         await self.update_wireguard_client_state()
         await self.update_tailscale_state()
 
@@ -349,6 +351,21 @@ class GLinetRouter:
             async_dispatcher_send(self.hass, self.signal_device_new)
 
         self._connected_devices = len(wrt_devices)
+
+    async def update_wifi_ifaces_state(self) -> None:
+        """Make a call to the API to get the WiFi ifaces config state."""
+        ifaces = await self._update_platform(self._api.wifi_ifaces_get)
+        if not ifaces:
+            return
+        for name, iface in ifaces.items():
+            self._wifi_ifaces[name] = WifiInterface(
+                name=name,
+                enabled=iface.get("enabled", False),
+                ssid=iface.get("ssid", ""),
+                guest=iface.get("guest", False),
+                hidden=iface.get("hidden", False),
+                encryption=iface.get("encryption", "UNKNOWN"),
+            )
 
     async def update_tailscale_state(self) -> None:
         """Make a call to the API to get the tailscale state."""
@@ -486,6 +503,11 @@ class GLinetRouter:
         return f"GL-iNet {self._model.upper()}"
 
     @property
+    def wifi_ifaces(self) -> dict[str, WifiInterface]:
+        """Return router wifi interfaces."""
+        return self._wifi_ifaces
+
+    @property
     def wireguard_clients(self) -> dict[str, WireGuardClient]:
         """Return router factory_mac."""
         return self._wireguard_clients
@@ -539,6 +561,18 @@ class WireGuardClient:
     peer_id: int
 
 
+@dataclass
+class WifiInterface:
+    """Class for keeping track of Wifi Interfaces."""
+
+    name: str
+    enabled: bool
+    ssid: str
+    guest: bool
+    hidden: bool
+    encryption: str
+
+
 class ClientDevInfo:
     """Representation of a device connected to the router."""
 
@@ -566,11 +600,11 @@ class ClientDevInfo:
                     self._name = self._mac.replace(":", "_")
                 else:
                     self._name = name
-            self._ip_address = dev_info["ip"]
+            self._ip_address = dev_info.get("ip")
             self._last_activity = now
-            self._connected = dev_info["online"]
+            self._connected = dev_info.get("online", False)
             self._if_type = list(DeviceInterfaceType)[
-                dev_info["type"]
+                dev_info.get("type", 5)
             ]  # TODO be more index safe
         # a device might not actually be online but we want to consider it home
         elif self._connected:
