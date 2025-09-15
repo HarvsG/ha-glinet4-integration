@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .router import GLinetRouter, WireGuardClient
+    from .router import GLinetRouter, WifiInterface, WireGuardClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ async def async_setup_entry(
         ]
     if router.tailscale_configured:
         switches.append(TailscaleSwitch(router))
-    for iface_name, iface in router.wifi_ifaces_get.items():
+    for iface_name, iface in router.wifi_ifaces.items():
         switches.append(WifiApSwitch(router, iface_name, iface))
     if switches:
         async_add_entities(switches, True)
@@ -61,7 +61,7 @@ class WifiApSwitch(GliSwitchBase):
     """A WiFi AccessPoint switch."""
 
     def __init__(
-        self, router: GLinetRouter, iface_name: str, iface: dict[str, Any]
+        self, router: GLinetRouter, iface_name: str, iface: WifiInterface
     ) -> None:
         """Initialize a GLinet device."""
         super().__init__(router)
@@ -78,7 +78,7 @@ class WifiApSwitch(GliSwitchBase):
     @property
     def name(self) -> str:
         """Return the name of the switch."""
-        return self._iface.get("ssid", self._iface_name)
+        return self._iface.ssid if self._iface.ssid else self._iface.name
 
     @property
     def unique_id(self) -> str:
@@ -86,36 +86,42 @@ class WifiApSwitch(GliSwitchBase):
         return f"glinet_switch/{self._router.factory_mac}/iface_{self._iface_name}"
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, str | bool]:
         """Return the attributes."""
-        attrs = {}
-        for attr in ["guest", "ssid"]:
-            if val := self._router.wifi_ifaces_get.get(self._iface_name, {}).get(attr):
-                attrs[attr] = val
+        attrs: dict[str, str | bool] = {}
+        attrs["interface"] = self._iface.name
+        attrs["guest"] = self._iface.guest
+        attrs["ssid"] = self._iface.ssid
+        attrs["hidden"] = self._iface.hidden
+        attrs["encryption"] = self._iface.encryption
         return attrs
 
     @property
     def is_on(self) -> bool:
         """Return if the AP is on."""
-        return self._router.wifi_ifaces_get.get(self._iface_name, {}).get(
-            "enabled", False
-        )
+        return self._iface.enabled
 
-    async def async_turn_on(self) -> None:
+    async def async_turn_on(self, **_: Any) -> None:
         """Turn on the AP."""
         try:
             await self._router.api.wifi_iface_set_enabled(self._iface_name, True)
             await self._router.update_wifi_ifaces_state()
         except OSError:
-            _LOGGER.error("Unable to enable WiFi interface %s", self._iface_name)
+            _LOGGER.exception(
+                "Unable to enable WiFi interface and/or confirm the result %s",
+                self._iface_name,
+            )
 
-    async def async_turn_off(self) -> None:
+    async def async_turn_off(self, **_: Any) -> None:
         """Turn off the AP."""
         try:
             await self._router.api.wifi_iface_set_enabled(self._iface_name, False)
             await self._router.update_wifi_ifaces_state()
         except OSError:
-            _LOGGER.error("Unable to disable WiFi interface %s", self._iface_name)
+            _LOGGER.exception(
+                "Unable to disable WiFi interface and/or confirm the result %s",
+                self._iface_name,
+            )
 
 
 class TailscaleSwitch(GliSwitchBase):
