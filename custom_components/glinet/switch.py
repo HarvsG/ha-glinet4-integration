@@ -211,27 +211,48 @@ class WireGuardSwitch(GliSwitchBase):
     @property
     def is_on(self) -> bool:
         """Return if the service is on."""
-        # TODO alter property to account for the fact that users can have
-        # > 1 client configured, but only one connected
-        return self._router.wireguard_connection == self._client
+        client = self._router.wireguard_clients.get(self._client.peer_id)
+        if client is None:
+            return False
+        return client.connected
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
+        # Just in case we are asked to turn on a client that has no tunnel_id
+        # It shouldn't happen, unless it's not included in the status response
+        if self._client.tunnel_id is None:
+            _LOGGER.error("Unable to enable WG client, no tunnel_id known")
+            return
+
         try:
-            if self._router.connected_wireguard_client not in [self._client, None]:
-                await self._router.api.wireguard_client_stop()
-                # TODO may need to introduce a delay here, or await confirmation of the stop
-            await self._router.api.wireguard_client_start(
-                self._client.group_id, self._client.peer_id
-            )  # TODO not working
+            await self._router.api.wireguard_client_start(self._client.tunnel_id)
+            # Let's optimistically assume it worked
+            # The state will be refreshed in the background soon anyway
+            updatedClient = self._router.wireguard_clients.get(
+                self._client.peer_id)
+            if updatedClient:
+                updatedClient.connected = True
+                self._client = updatedClient
         except OSError:
             _LOGGER.exception("Unable to enable WG client")
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
+        # Just in case we are asked to turn on a client that has no tunnel_id
+        # It shouldn't happen, unless it's not included in the status response
+        if self._client.tunnel_id is None:
+            _LOGGER.error("Unable to disable WG client, no tunnel_id known")
+            return
+
         try:
-            await self._router.api.wireguard_client_stop()
-            # TODO may need to introduce a delay here, or await confirmation of the stop
+            await self._router.api.wireguard_client_stop(self._client.tunnel_id)
+            # Let's optimistically assume it worked
+            # The state will be refreshed in the background soon anyway
+            updatedClient = self._router.wireguard_clients.get(
+                self._client.peer_id)
+            if updatedClient:
+                updatedClient.connected = False
+                self._client = updatedClient
         except OSError:
             _LOGGER.exception("Unable to stop WG client")
 

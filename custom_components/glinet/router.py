@@ -96,8 +96,7 @@ class GLinetRouter:
         self._connected_devices: int = 0
         self._wifi_ifaces: dict[str, WifiInterface] = {}
         self._system_status: dict = {}
-        self._wireguard_clients: dict[str, WireGuardClient] = {}
-        self._wireguard_connection: WireGuardClient | None = None
+        self._wireguard_clients: dict[int, WireGuardClient] = {}
         self._tailscale_config: dict = {}
         self._tailscale_connection: bool | None = None
 
@@ -416,16 +415,13 @@ class GLinetRouter:
         response = await self._update_platform(self._api.wireguard_client_state)
         if not response:
             return
-        connected: bool = response["status"] == 1
 
-        # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
-        if self._wireguard_clients[response["peer_id"]]:
-            client: WireGuardClient = self._wireguard_clients[response["peer_id"]]
-            client.connected = connected
-            if connected:
-                self._wireguard_connection = client
-                return
-        self._wireguard_connection = None
+        for status in response:
+            if self._wireguard_clients.get(status["peer_id"]):
+                client: WireGuardClient = self._wireguard_clients[status["peer_id"]]
+                client.connected = status["enabled"] and status.get(
+                    "status", 0) == 1
+                client.tunnel_id = status.get("tunnel_id")
 
     def update_options(self, new_options: dict) -> bool:
         """Update router options.
@@ -508,23 +504,9 @@ class GLinetRouter:
         return self._wifi_ifaces
 
     @property
-    def wireguard_clients(self) -> dict[str, WireGuardClient]:
+    def wireguard_clients(self) -> dict[int, WireGuardClient]:
         """Return router factory_mac."""
         return self._wireguard_clients
-
-    @property
-    def connected_wireguard_client(self) -> None | WireGuardClient:
-        """Return the wirguard client that is connected, if any."""
-        for client in self._wireguard_clients.values():
-            if client.connected:
-                return client
-        return None
-
-    @property
-    def wireguard_connection(self) -> None | WireGuardClient:
-        """Return the wirguard client that is connected, if any."""
-        # TODO this property looks like a duplicate of the above
-        return self._wireguard_connection
 
     @property
     def tailscale_configured(self) -> bool:
@@ -559,6 +541,7 @@ class WireGuardClient:
     connected: bool
     group_id: int
     peer_id: int
+    tunnel_id: int | None = None
 
 
 @dataclass
