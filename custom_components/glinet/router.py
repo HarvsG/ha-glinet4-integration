@@ -58,6 +58,11 @@ class DeviceInterfaceType(StrEnum):
     UNKNOWN = "Unknown"
     DONGLE = "Dongle"
     BYPASS_ROUTE = "Bypass Route"
+    UNKNOWN2 = "Unknown2"
+    MLO = "MLO"
+    MLO_GUEST = "MLO Guest"
+    WIFI_6 = "6GHz"
+    WIFI_6_GUEST = "6GHz Guest"
 
 
 class GLinetRouter:
