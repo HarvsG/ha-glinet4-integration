@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
+T = TypeVar("T")
 
 
 class DeviceInterfaceType(StrEnum):
@@ -228,8 +229,8 @@ class GLinetRouter:
         await self.update_tailscale_state()
 
     async def _update_platform(
-        self, api_callable: Callable[[], Coroutine[Any, Any, dict]]
-    ) -> dict | None:
+        self, api_callable: Callable[[], Coroutine[Any, Any, T]]
+    ) -> T | None:
         """Boilerplate to make update requests to api and handle errors."""
 
         _LOGGER.debug("Checking client can connect to GL-iNet router %s", self._host)
@@ -408,13 +409,11 @@ class GLinetRouter:
         # TODO we need to do some validation before we start accessing dictionary keys, I've had errors before
         # May be best to redact it in gli4py.
         for config in response:
-            self._wireguard_clients[config.get("peer_id", config["tunnel_id"])] = (
-                WireGuardClient(
-                    name=config["name"],
-                    connected=False,
-                    group_id=config["group_id"],
-                    peer_id=config.get("peer_id", config["tunnel_id"]),
-                )
+            self._wireguard_clients[config["peer_id"]] = WireGuardClient(
+                name=config["name"],
+                connected=False,
+                group_id=config["group_id"],
+                peer_id=config["peer_id"],
             )
 
         if len(self._wireguard_clients) == 0:
@@ -426,14 +425,16 @@ class GLinetRouter:
         if not response:
             return
         # 0 is disconnted, 1 is connected, 2 is connecting
-        connected: bool = response["status"] != 0
-        # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
-        if self._wireguard_clients[response["peer_id"]]:
-            client: WireGuardClient = self._wireguard_clients[response["peer_id"]]
-            client.connected = connected
-            if connected:
-                self._wireguard_connection = client
-                return
+        for config in response:
+            connected: bool = config["status"] != 0
+            # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
+            if self._wireguard_clients[config["peer_id"]]:
+                client: WireGuardClient = self._wireguard_clients[config["peer_id"]]
+                client.connected = connected
+                if connected:
+                    # If more modern firmware supports more than 1 client being connected, we need to change this
+                    self._wireguard_connection = client
+                    return
         self._wireguard_connection = None
 
     def update_options(self, new_options: dict) -> bool:
