@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
@@ -171,7 +171,7 @@ class GLinetRouter:
         # TODO here we ask this to update all on the same scan interval
         # but in future some sensors e.g WANip need to update less regularly than
         # others
-        async_track_time_interval(self.hass, self.update_all, SCAN_INTERVAL)
+        async_track_time_interval(self.hass, self.update_states, SCAN_INTERVAL)
 
     async def get_api(self) -> GLinet:
         """Optimistically returns a GLinet object for connection to the API, no test included."""
@@ -218,6 +218,13 @@ class GLinetRouter:
         await self.update_device_trackers()
         await self.update_wifi_ifaces_state()
         await self.update_wireguard_client_state()
+        await self.update_tailscale_state()
+
+    async def update_states(self, _: datetime | None = None) -> None:
+        """Update platforms and states that aren't handled elsewhere."""
+        await self.update_system_status()
+        await self.update_device_trackers()
+        await self.update_wifi_ifaces_state()
         await self.update_tailscale_state()
 
     async def _update_platform(
@@ -294,7 +301,7 @@ class GLinetRouter:
         _LOGGER.debug(
             "_update_platform() completed without error for callable %s, returning response: %s",
             api_callable.__name__,
-            str(response)[:100],
+            str(response)[:200],
         )
         return response
 
@@ -416,8 +423,8 @@ class GLinetRouter:
         response = await self._update_platform(self._api.wireguard_client_state)
         if not response:
             return
-        connected: bool = response["status"] == 1
-
+        # 0 is disconnted, 1 is connected, 2 is connecting
+        connected: bool = response["status"] != 0
         # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
         if self._wireguard_clients[response["peer_id"]]:
             client: WireGuardClient = self._wireguard_clients[response["peer_id"]]
@@ -556,7 +563,7 @@ class WireGuardClient:
     """Class for keeping track of WireGuard Client Configs."""
 
     name: str
-    connected: bool
+    connected: bool = field(compare=False)
     group_id: int
     peer_id: int
 

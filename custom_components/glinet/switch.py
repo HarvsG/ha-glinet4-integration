@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
+from homeassistant.core import callback
 
 from .const import DATA_GLINET, DOMAIN
 
@@ -143,9 +144,7 @@ class TailscaleSwitch(GliSwitchBase):
     @property
     def is_on(self) -> bool:
         """Return if the service is on."""
-        if self._router.tailscale_connection is None:
-            return False
-        return self._router.tailscale_connection
+        return self._router.tailscale_connection is True
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
@@ -195,6 +194,7 @@ class WireGuardSwitch(GliSwitchBase):
         super().__init__(router)
         self._client = client
         self._attr_device_info = router.device_info
+        self._attr_is_on: bool = False
 
     _attr_icon = "mdi:vpn"  # TODO would be better to have MDI style icons for each of the VPN types
 
@@ -211,9 +211,7 @@ class WireGuardSwitch(GliSwitchBase):
     @property
     def is_on(self) -> bool:
         """Return if the service is on."""
-        # TODO alter property to account for the fact that users can have
-        # > 1 client configured, but only one connected
-        return self._router.wireguard_connection == self._client
+        return self._attr_is_on
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
@@ -221,19 +219,36 @@ class WireGuardSwitch(GliSwitchBase):
             if self._router.connected_wireguard_client not in [self._client, None]:
                 await self._router.api.wireguard_client_stop()
                 # TODO may need to introduce a delay here, or await confirmation of the stop
+            # be optimistic
+            self._attr_is_on = True
+            self.async_write_ha_state()
             await self._router.api.wireguard_client_start(
                 self._client.group_id, self._client.peer_id
             )  # TODO not working
         except OSError:
+            self._attr_is_on = False
+            self.async_write_ha_state()
             _LOGGER.exception("Unable to enable WG client")
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
         try:
+            # be optimistic
+            self._attr_is_on = False
+            self.async_write_ha_state()
             await self._router.api.wireguard_client_stop()
             # TODO may need to introduce a delay here, or await confirmation of the stop
         except OSError:
+            self._attr_is_on = True
+            self.async_write_ha_state()
             _LOGGER.exception("Unable to stop WG client")
+
+    @callback
+    async def async_update(self) -> None:
+        """Update the switch state."""
+        _LOGGER.debug("Updating WG client switch state")
+        await self._router.update_wireguard_client_state()
+        self._attr_is_on = self._router.wireguard_connection == self._client
 
     @property
     def entity_category(self) -> EntityCategory:
