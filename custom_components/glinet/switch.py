@@ -230,8 +230,8 @@ class WireGuardSwitch(GliSwitchBase):
             self._attr_is_on = True
             self.async_write_ha_state()
             await self._router.api.wireguard_client_start(
-                self._client.group_id, self._client.peer_id
-            )  # TODO not working
+                self._client.group_id, self._client.tunnel_id or self._client.peer_id
+            )
         except OSError:
             self._attr_is_on = False
             self.async_write_ha_state()
@@ -243,7 +243,9 @@ class WireGuardSwitch(GliSwitchBase):
             # be optimistic
             self._attr_is_on = False
             self.async_write_ha_state()
-            await self._router.api.wireguard_client_stop(self._client.peer_id)
+            await self._router.api.wireguard_client_stop(
+                self._client.tunnel_id or self._client.peer_id
+            )
             # TODO may need to introduce a delay here, or await confirmation of the stop
         except OSError:
             self._attr_is_on = True
