@@ -408,11 +408,13 @@ class GLinetRouter:
         # TODO we need to do some validation before we start accessing dictionary keys, I've had errors before
         # May be best to redact it in gli4py.
         for config in response:
-            self._wireguard_clients[config["peer_id"]] = WireGuardClient(
-                name=config["name"],
-                connected=False,
-                group_id=config["group_id"],
-                peer_id=config["peer_id"],
+            self._wireguard_clients[config.get("peer_id", config["tunnel_id"])] = (
+                WireGuardClient(
+                    name=config["name"],
+                    connected=False,
+                    group_id=config["group_id"],
+                    peer_id=config.get("peer_id", config["tunnel_id"]),
+                )
             )
 
         if len(self._wireguard_clients) == 0:

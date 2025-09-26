@@ -216,8 +216,13 @@ class WireGuardSwitch(GliSwitchBase):
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
         try:
-            if self._router.connected_wireguard_client not in [self._client, None]:
-                await self._router.api.wireguard_client_stop()
+            if (
+                self._router.connected_wireguard_client is not None
+                and self._router.connected_wireguard_client != self._client
+            ):
+                await self._router.api.wireguard_client_stop(
+                    self._router.connected_wireguard_client.peer_id
+                )
                 # TODO may need to introduce a delay here, or await confirmation of the stop
             # be optimistic
             self._attr_is_on = True
@@ -236,7 +241,7 @@ class WireGuardSwitch(GliSwitchBase):
             # be optimistic
             self._attr_is_on = False
             self.async_write_ha_state()
-            await self._router.api.wireguard_client_stop()
+            await self._router.api.wireguard_client_stop(self._client.peer_id)
             # TODO may need to introduce a delay here, or await confirmation of the stop
         except OSError:
             self._attr_is_on = True
