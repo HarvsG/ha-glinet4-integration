@@ -216,6 +216,7 @@ class WireGuardSwitch(GliSwitchBase):
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
         try:
+            # TODO Verify that the API doesn't do this for us
             if (
                 self._client.tunnel_id
                 is None  # This confirms we are using older firmware
