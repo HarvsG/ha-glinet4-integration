@@ -217,12 +217,13 @@ class WireGuardSwitch(GliSwitchBase):
         """Turn on the service."""
         try:
             if (
-                self._router.connected_wireguard_client is not None
-                and self._router.connected_wireguard_client != self._client
+                self._client.tunnel_id
+                is None  # This confirms we are using older firmware
+                and self._router.connected_wireguard_clients is not None
+                and self._client not in self._router.connected_wireguard_clients
             ):
-                await self._router.api.wireguard_client_stop(
-                    self._router.connected_wireguard_client.peer_id
-                )
+                for client in self._router.connected_wireguard_clients:
+                    await self._router.api.wireguard_client_stop(client.peer_id)
                 # TODO may need to introduce a delay here, or await confirmation of the stop
             # be optimistic
             self._attr_is_on = True
@@ -253,7 +254,7 @@ class WireGuardSwitch(GliSwitchBase):
         """Update the switch state."""
         _LOGGER.debug("Updating WG client switch state")
         await self._router.update_wireguard_client_state()
-        self._attr_is_on = self._router.wireguard_connection == self._client
+        self._attr_is_on = self._client in (self._router.wireguard_connections or [])
 
     @property
     def entity_category(self) -> EntityCategory:
