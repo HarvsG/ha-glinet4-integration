@@ -58,7 +58,7 @@ class DeviceInterfaceType(StrEnum):
     UNKNOWN = "Unknown"
     DONGLE = "Dongle"
     BYPASS_ROUTE = "Bypass Route"
-    UNKNOWN2 = "Unknown2"
+    UNKNOWN2 = "Unknown"
     MLO = "MLO"
     MLO_GUEST = "MLO Guest"
     WIFI_6 = "6GHz"
