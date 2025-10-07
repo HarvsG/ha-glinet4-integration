@@ -49,6 +49,7 @@ class GliSwitchBase(SwitchEntity):
         """Initialize a GLinet device."""
         self._router = router
         self._attr_device_info = router.device_info
+        self._attr_is_on: bool | None
 
     _attr_has_entity_name = True
 
