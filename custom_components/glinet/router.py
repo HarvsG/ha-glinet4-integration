@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
+T = TypeVar("T")
 
 
 class DeviceInterfaceType(StrEnum):
@@ -102,7 +103,7 @@ class GLinetRouter:
         self._wifi_ifaces: dict[str, WifiInterface] = {}
         self._system_status: dict = {}
         self._wireguard_clients: dict[str, WireGuardClient] = {}
-        self._wireguard_connection: WireGuardClient | None = None
+        self._wireguard_connections: list[WireGuardClient] | None = None
         self._tailscale_config: dict = {}
         self._tailscale_connection: bool | None = None
 
@@ -176,7 +177,7 @@ class GLinetRouter:
         # TODO here we ask this to update all on the same scan interval
         # but in future some sensors e.g WANip need to update less regularly than
         # others
-        async_track_time_interval(self.hass, self.update_all, SCAN_INTERVAL)
+        async_track_time_interval(self.hass, self.update_states, SCAN_INTERVAL)
 
     async def get_api(self) -> GLinet:
         """Optimistically returns a GLinet object for connection to the API, no test included."""
@@ -225,9 +226,16 @@ class GLinetRouter:
         await self.update_wireguard_client_state()
         await self.update_tailscale_state()
 
+    async def update_states(self, _: datetime | None = None) -> None:
+        """Update platforms and states that aren't handled elsewhere."""
+        await self.update_system_status()
+        await self.update_device_trackers()
+        await self.update_wifi_ifaces_state()
+        await self.update_tailscale_state()
+
     async def _update_platform(
-        self, api_callable: Callable[[], Coroutine[Any, Any, dict]]
-    ) -> dict | None:
+        self, api_callable: Callable[[], Coroutine[Any, Any, T]]
+    ) -> T | None:
         """Boilerplate to make update requests to api and handle errors."""
 
         _LOGGER.debug("Checking client can connect to GL-iNet router %s", self._host)
@@ -299,7 +307,7 @@ class GLinetRouter:
         _LOGGER.debug(
             "_update_platform() completed without error for callable %s, returning response: %s",
             api_callable.__name__,
-            str(response)[:100],
+            str(response)[:200],
         )
         return response
 
@@ -411,6 +419,7 @@ class GLinetRouter:
                 connected=False,
                 group_id=config["group_id"],
                 peer_id=config["peer_id"],
+                tunnel_id=config.get("tunnel_id", None),
             )
 
         if len(self._wireguard_clients) == 0:
@@ -421,16 +430,19 @@ class GLinetRouter:
         response = await self._update_platform(self._api.wireguard_client_state)
         if not response:
             return
-        connected: bool = response["status"] == 1
-
-        # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
-        if self._wireguard_clients[response["peer_id"]]:
-            client: WireGuardClient = self._wireguard_clients[response["peer_id"]]
-            client.connected = connected
-            if connected:
-                self._wireguard_connection = client
-                return
-        self._wireguard_connection = None
+        # 0 is disconnted, 1 is connected, 2 is connecting
+        self._wireguard_connections = []
+        for config in response:
+            # if config["enabled"] is false then status does not exist
+            connected: bool = config.get("status", 0) != 0
+            # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
+            if self._wireguard_clients[config["peer_id"]]:
+                client: WireGuardClient = self._wireguard_clients[config["peer_id"]]
+                client.tunnel_id = config.get("tunnel_id", None)
+                client.connected = connected
+                if connected:
+                    # If more modern firmware supports more than 1 client being connected, we need to change this
+                    self._wireguard_connections.append(client)
 
     def update_options(self, new_options: dict) -> bool:
         """Update router options.
@@ -518,18 +530,15 @@ class GLinetRouter:
         return self._wireguard_clients
 
     @property
-    def connected_wireguard_client(self) -> None | WireGuardClient:
+    def connected_wireguard_clients(self) -> None | list[WireGuardClient]:
         """Return the wirguard client that is connected, if any."""
-        for client in self._wireguard_clients.values():
-            if client.connected:
-                return client
-        return None
+        return self._wireguard_connections
 
     @property
-    def wireguard_connection(self) -> None | WireGuardClient:
+    def wireguard_connections(self) -> None | list[WireGuardClient]:
         """Return the wirguard client that is connected, if any."""
         # TODO this property looks like a duplicate of the above
-        return self._wireguard_connection
+        return self._wireguard_connections
 
     @property
     def tailscale_configured(self) -> bool:
@@ -561,9 +570,10 @@ class WireGuardClient:
     """Class for keeping track of WireGuard Client Configs."""
 
     name: str
-    connected: bool
+    connected: bool = field(compare=False)
     group_id: int
     peer_id: int
+    tunnel_id: int | None
 
 
 @dataclass
