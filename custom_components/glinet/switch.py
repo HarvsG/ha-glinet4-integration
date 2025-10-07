@@ -49,8 +49,14 @@ class GliSwitchBase(SwitchEntity):
         """Initialize a GLinet device."""
         self._router = router
         self._attr_device_info = router.device_info
+        self._attr_is_on: bool | None
 
     _attr_has_entity_name = True
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return if the service is on."""
+        return self._attr_is_on
 
     @property
     def entity_category(self) -> EntityCategory:
@@ -97,32 +103,53 @@ class WifiApSwitch(GliSwitchBase):
         attrs["encryption"] = self._iface.encryption
         return attrs
 
-    @property
-    def is_on(self) -> bool:
-        """Return if the AP is on."""
-        return self._iface.enabled
-
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the AP."""
         try:
+            _LOGGER.debug("Enabling WiFi interface %s", self._iface_name)
             await self._router.api.wifi_iface_set_enabled(self._iface_name, True)
-            await self._router.update_wifi_ifaces_state()
         except OSError:
             _LOGGER.exception(
-                "Unable to enable WiFi interface and/or confirm the result %s",
+                "Unable to enable WiFi interface %s",
                 self._iface_name,
             )
+        else:
+            # be optimistic
+            self._attr_is_on = True
+            self.async_write_ha_state()
+
+            # fetch the state #TODO try block?
+            await self._router.update_wifi_ifaces_state()
+            await self.async_update()
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the AP."""
         try:
+            _LOGGER.debug("Disabling WiFi interface %s", self._iface_name)
             await self._router.api.wifi_iface_set_enabled(self._iface_name, False)
-            await self._router.update_wifi_ifaces_state()
         except OSError:
             _LOGGER.exception(
-                "Unable to disable WiFi interface and/or confirm the result %s",
+                "Unable to disable WiFi interface %s",
                 self._iface_name,
             )
+        else:
+            # be optimistic
+            self._attr_is_on = False
+            self.async_write_ha_state()
+
+            # fetch the state #TODO try block?
+            await self._router.update_wifi_ifaces_state()
+            await self.async_update()
+
+    @callback
+    async def async_update(self) -> None:
+        """Update the switch state."""
+        _LOGGER.debug(
+            "Updating WiFi AP switch with stored state for %s",
+            self._iface_name,
+        )
+        self._iface = self._router.wifi_ifaces.get(self._iface_name) or self._iface
+        self._attr_is_on = self._iface.enabled
 
 
 class TailscaleSwitch(GliSwitchBase):
@@ -141,27 +168,28 @@ class TailscaleSwitch(GliSwitchBase):
         """Return the unique id of the switch."""
         return f"glinet_switch/{self._router.factory_mac}/tailscale"
 
-    @property
-    def is_on(self) -> bool:
-        """Return if the service is on."""
-        return self._router.tailscale_connection is True
-
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
         try:
+            _LOGGER.debug("Enabling tailscale")
             await self._router.api.tailscale_start()
             # TODO since the state takes a while to change we may
-            await self._router.update_tailscale_state()
         except OSError:
             _LOGGER.exception("Unable to enable tailscale connection")
+        else:
+            self._attr_is_on = True
+            self.async_write_ha_state()
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
         try:
+            _LOGGER.debug("Enabling tailscale")
             await self._router.api.tailscale_stop()
-            await self._router.update_tailscale_state()
         except OSError:
             _LOGGER.exception("Unable to stop tailscale connection")
+        else:
+            self._attr_is_on = False
+            self.async_write_ha_state()
 
     @property
     def lan_access(self) -> bool | None:
@@ -180,6 +208,13 @@ class TailscaleSwitch(GliSwitchBase):
     def entity_registry_visible_default(self) -> bool:
         """Enabled by default."""
         return self._router.tailscale_configured
+
+    @callback
+    async def async_update(self) -> None:
+        """Update the switch state. Only one tailscale connection can be configured so this is not expensive."""
+        _LOGGER.debug("Updating Tailscale switch state")
+        await self._router.update_tailscale_state()
+        self._attr_is_on = self._router.tailscale_connection
 
 
 class WireGuardSwitch(GliSwitchBase):
@@ -208,11 +243,6 @@ class WireGuardSwitch(GliSwitchBase):
         """Return the unique id of the switch."""
         return f"glinet_switch/{self._router.factory_mac}/{self._client.name}/wireguard_client"
 
-    @property
-    def is_on(self) -> bool:
-        """Return if the service is on."""
-        return self._attr_is_on
-
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
         try:
@@ -226,40 +256,36 @@ class WireGuardSwitch(GliSwitchBase):
                 for client in self._router.connected_wireguard_clients:
                     await self._router.api.wireguard_client_stop(client.peer_id)
                 # TODO may need to introduce a delay here, or await confirmation of the stop
-            # be optimistic
-            self._attr_is_on = True
-            self.async_write_ha_state()
+
             await self._router.api.wireguard_client_start(
                 self._client.group_id, self._client.tunnel_id or self._client.peer_id
             )
         except OSError:
-            self._attr_is_on = False
-            self.async_write_ha_state()
             _LOGGER.exception("Unable to enable WG client")
+        else:
+            self._attr_is_on = True
+            self.async_write_ha_state()
+            await self._router.update_wireguard_client_state()
+            await self.async_update()
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
         try:
-            # be optimistic
-            self._attr_is_on = False
-            self.async_write_ha_state()
             await self._router.api.wireguard_client_stop(
                 self._client.tunnel_id or self._client.peer_id
             )
             # TODO may need to introduce a delay here, or await confirmation of the stop
         except OSError:
-            self._attr_is_on = True
-            self.async_write_ha_state()
             _LOGGER.exception("Unable to stop WG client")
+        else:
+            # be optimistic
+            self._attr_is_on = False
+            self.async_write_ha_state()
+            await self._router.update_wireguard_client_state()
+            await self.async_update()
 
     @callback
     async def async_update(self) -> None:
-        """Update the switch state."""
-        _LOGGER.debug("Updating WG client switch state")
-        await self._router.update_wireguard_client_state()
+        """Update the switch state. A user may have many so don't call the API for each."""
+        _LOGGER.debug("Updating WG client switch state from stored info")
         self._attr_is_on = self._client in (self._router.wireguard_connections or [])
-
-    @property
-    def entity_category(self) -> EntityCategory:
-        """A config entity."""
-        return EntityCategory.CONFIG

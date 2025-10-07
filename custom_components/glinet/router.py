@@ -230,15 +230,15 @@ class GLinetRouter:
         """Update platforms and states that aren't handled elsewhere."""
         await self.update_system_status()
         await self.update_device_trackers()
+        # If a user may have many switches, best to update in bulk
         await self.update_wifi_ifaces_state()
-        await self.update_tailscale_state()
+        await self.update_wireguard_client_state()
 
     async def _update_platform(
         self, api_callable: Callable[[], Coroutine[Any, Any, T]]
     ) -> T | None:
         """Boilerplate to make update requests to api and handle errors."""
 
-        _LOGGER.debug("Checking client can connect to GL-iNet router %s", self._host)
         try:
             if self._token_error:
                 _LOGGER.debug(
