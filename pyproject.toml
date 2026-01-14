@@ -15,13 +15,13 @@ dependencies = [
 [dependency-groups]
 dev = [
     "codespell>=2.4.1",
-    "homeassistant-stubs==2025.10.1",
+    "homeassistant-stubs==2026.1.1",
     "mypy>=1.16.1",
     "PyGithub>=2.6",
     "pylint>=3.3.7",
     "pytest>=8.3.5",
     "ruff>=0.12.0",
-    "types-requests<2.32.4.20250914",
+    "types-requests<2.32.4.20260108",
     "voluptuous-stubs>=0.1.1",
 ]
 
