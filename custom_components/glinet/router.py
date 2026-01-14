@@ -433,9 +433,13 @@ class GLinetRouter:
         # 0 is disconnted, 1 is connected, 2 is connecting
         self._wireguard_connections = []
         for config in response:
+
+            # OpenVPN configs are sometimes returned leading to errors.
+            if config.get("type") != "wireguard":
+                continue
             # if config["enabled"] is false then status does not exist
             connected: bool = config.get("status", 0) != 0
-            # TODO in some circumstances this returns TypeError: 'NoneType' object is not subscriptable
+
             if self._wireguard_clients[config["peer_id"]]:
                 client: WireGuardClient = self._wireguard_clients[config["peer_id"]]
                 client.tunnel_id = config.get("tunnel_id", None)
