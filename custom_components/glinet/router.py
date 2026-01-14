@@ -435,7 +435,7 @@ class GLinetRouter:
         for config in response:
 
             # OpenVPN configs are sometimes returned leading to errors.
-            if config.get('type') != 'wireguard':
+            if config.get("type") != "wireguard":
                 continue
             # if config["enabled"] is false then status does not exist
             connected: bool = config.get("status", 0) != 0
