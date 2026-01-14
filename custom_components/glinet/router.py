@@ -50,7 +50,6 @@ T = TypeVar("T")
 
 class DeviceInterfaceType(StrEnum):
     """Enum for the possible interface types reported by glipy."""
-
     WIFI_24 = "2.4GHz"
     WIFI_5 = "5GHz"
     LAN = "LAN"
@@ -59,11 +58,26 @@ class DeviceInterfaceType(StrEnum):
     UNKNOWN = "Unknown"
     DONGLE = "Dongle"
     BYPASS_ROUTE = "Bypass Route"
-    UNKNOWN2 = "Unknown"
+    UNKNOWN2 = "Unknown"  # Note: This is an alias of UNKNOWN
     MLO = "MLO"
     MLO_GUEST = "MLO Guest"
     WIFI_6 = "6GHz"
     WIFI_6_GUEST = "6GHz Guest"
+
+    @classmethod
+    def get_by_index(cls, index: int):
+        """
+        Safely retrieves the Enum member by its list index.
+        Returns UNKNOWN if the index is out of bounds or invalid.
+        """
+
+        members = list(cls)
+        
+        try:
+            return members[int(index)]
+        except (IndexError, ValueError, TypeError):
+            _LOGGER.warning("Unknown GL.inet Device Interface Type detected: %s. Please report this issue on github.", index)
+            return cls.UNKNOWN
 
 
 class GLinetRouter:
@@ -621,9 +635,7 @@ class ClientDevInfo:
             self._ip_address = dev_info.get("ip")
             self._last_activity = now
             self._connected = dev_info.get("online", False)
-            self._if_type = list(DeviceInterfaceType)[
-                dev_info.get("type", 5)
-            ]  # TODO be more index safe
+            self._if_type = DeviceInterfaceType.get_by_index(dev_info.get("type", 5))
         # a device might not actually be online but we want to consider it home
         elif self._connected:
             self._connected = (
