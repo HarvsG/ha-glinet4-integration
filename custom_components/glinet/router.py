@@ -433,7 +433,6 @@ class GLinetRouter:
         # 0 is disconnted, 1 is connected, 2 is connecting
         self._wireguard_connections = []
         for config in response:
-
             # OpenVPN configs are sometimes returned leading to errors.
             if config.get("type") != "wireguard":
                 continue
