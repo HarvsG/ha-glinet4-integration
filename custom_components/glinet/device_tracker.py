@@ -39,6 +39,10 @@ async def async_setup_entry(
 
     update_router()
 
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, router.signal_device_new, update_router)
+    )
+
 
 _LOGGER = logging.getLogger(__name__)
 

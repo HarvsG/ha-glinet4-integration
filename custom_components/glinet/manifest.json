@@ -10,7 +10,7 @@
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/HarvsG/ha-glinet4-integration/issues",
-  "requirements": ["gli4py==0.0.15"],
+  "requirements": ["gli4py @ git+https://github.com/doggkruse/gli4py.git@add_interfaces_and_modems"],
   "ssdp": [],
   "version": "0.1.7"
 }

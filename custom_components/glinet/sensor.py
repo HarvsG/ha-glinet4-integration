@@ -16,6 +16,7 @@ from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
 from homeassistant.util.dt import utcnow
 
 from .const import DATA_GLINET, DOMAIN
+from .interface import IFACE_LABELS, build_interface_sensors
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -27,7 +28,6 @@ if TYPE_CHECKING:
     from .router import GLinetRouter
 
 _LOGGER = logging.getLogger(__name__)
-
 
 class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=True):
     """Describes a GL-iNet system status sensor entity."""
@@ -152,10 +152,13 @@ async def async_setup_entry(
     _LOGGER.debug("Setting up GL-iNet Sensors")
 
     router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
-    sensors: list[SystemStatusSensor | SystemUptimeSensor] = [
+    await router.update_system_status()
+    sensors: list[SensorEntity] = [
         SystemStatusSensor(router=router, entity_description=description)
         for description in SYSTEM_SENSORS
     ]
+    sensors.append(MultiWanModeSensor(router=router))
+    sensors.append(PrimaryInterfaceSensor(router=router))
     # Special case for uptime as it requires additional data processing
     sensors.append(
         SystemUptimeSensor(
@@ -172,9 +175,18 @@ async def async_setup_entry(
         )
     )
 
-    for sensor in sensors:
-        if sensor.native_value is None:
-            sensors.remove(sensor)
+    await router.update_interfaces_state()
+    iface_state = router.iface_state
+    if iface_state:
+        for iface_name, iface in iface_state.interfaces.items():
+            sensors.extend(
+                build_interface_sensors(
+                    router=router,
+                    iface=iface,
+                    label=IFACE_LABELS.get(iface_name, iface_name),
+                    mode=iface_state.mode,
+                )
+            )
 
     async_add_entities(sensors, True)
 
@@ -236,3 +248,47 @@ class SystemUptimeSensor(GliSensorBase):
             self.router.system_status["uptime"], self._current_value
         )
         return self._current_value
+
+
+class MultiWanModeSensor(SensorEntity):
+    """Multi-WAN mode sensor on the parent device."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_has_entity_name = True
+    _attr_name = "Multi-WAN mode"
+
+    def __init__(self, router: GLinetRouter) -> None:
+        self._router = router
+        self._attr_unique_id = f"{router.factory_mac}_mwan_mode"
+        self._attr_device_info = router.device_info
+
+    @property
+    def native_value(self) -> str | None:
+        """Return current Multi-WAN mode."""
+
+        state = self._router.iface_state
+        if not state:
+            return None
+        return state.mode.name.lower()
+
+
+class PrimaryInterfaceSensor(SensorEntity):
+    """Primary interface sensor on the parent device."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Primary interface"
+    _attr_icon = "mdi:wan"
+
+    def __init__(self, router: GLinetRouter) -> None:
+        self._router = router
+        self._attr_unique_id = f"{router.factory_mac}_mwan_primary"
+        self._attr_device_info = router.device_info
+
+    @property
+    def native_value(self) -> str | None:
+        """Return current primary interface."""
+
+        state = self._router.iface_state
+        if not state or not state.primary:
+            return None
+        return IFACE_LABELS.get(state.primary, state.primary)
