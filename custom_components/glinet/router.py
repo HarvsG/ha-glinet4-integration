@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
+from gli4py.interfaces import InterfaceManager, MultiWANState
 from gli4py.error_handling import NonZeroResponse, TokenError
 
 from homeassistant.components.device_tracker import (
@@ -96,10 +97,12 @@ class GLinetRouter:
         self._factory_mac: str = "UNKNOWN"
         self._model: str = "UNKNOWN"
         self._sw_v: str = "UNKNOWN"
+        self._interface_manager: InterfaceManager | None = None
 
         # State
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
+        self._iface_state: MultiWANState | None = None
         self._wifi_ifaces: dict[str, WifiInterface] = {}
         self._system_status: dict = {}
         self._wireguard_clients: dict[str, WireGuardClient] = {}
@@ -120,6 +123,7 @@ class GLinetRouter:
 
         try:
             self._api = await self.get_api()
+            self._interface_manager = InterfaceManager(self._api)
             await self._api.login(
                 self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD]
             )
@@ -222,6 +226,7 @@ class GLinetRouter:
         """Update all Gl-inet platforms."""
         await self.update_system_status()
         await self.update_device_trackers()
+        await self.update_interfaces_state()
         await self.update_wifi_ifaces_state()
         await self.update_wireguard_client_state()
         await self.update_tailscale_state()
@@ -231,6 +236,7 @@ class GLinetRouter:
         await self.update_system_status()
         await self.update_device_trackers()
         # If a user may have many switches, best to update in bulk
+        await self.update_interfaces_state()
         await self.update_wifi_ifaces_state()
         await self.update_wireguard_client_state()
 
@@ -350,9 +356,10 @@ class GLinetRouter:
 
             alias = dev_info.get("alias", "").strip()
             name = dev_info.get("name", "").strip()
-            # Skip if both alias and name are empty
+            # If both alias and name are empty, fall back to MAC-based name
             if not alias and not name:
-                continue
+                name = device_mac.replace(":", "_")
+                dev_info = {**dev_info, "name": name}
 
             new_device = True
             device = ClientDevInfo(device_mac)
@@ -364,6 +371,14 @@ class GLinetRouter:
             async_dispatcher_send(self.hass, self.signal_device_new)
 
         self._connected_devices = len(wrt_devices)
+
+    async def update_interfaces_state(self) -> None:
+        """Make a call to the API to get the network interfaces state"""
+
+        iface_state = await self._interface_manager.get_state()
+
+        if iface_state:
+            self._iface_state = iface_state
 
     async def update_wifi_ifaces_state(self) -> None:
         """Make a call to the API to get the WiFi ifaces config state."""
@@ -512,6 +527,12 @@ class GLinetRouter:
         return self._factory_mac
 
     @property
+    def entry(self) -> ConfigEntry:
+        """Return the config entry."""
+
+        return self._entry
+
+    @property
     def model(self) -> str:
         """Return router model."""
         return self._model.upper()
@@ -560,6 +581,37 @@ class GLinetRouter:
         """Property for tailscale connection."""
         # TODO, we need a non private API method that returns some useful config info
         return self._tailscale_config
+
+    @property
+    def iface_state(self) -> MultiWANState | None:
+        """Return cached Multi-WAN state."""
+
+        return self._iface_state
+
+    def interface_device_info(self, iface_name: str, iface_label: str | None = None) -> DeviceInfo:
+        """Return device info for a specific interface."""
+
+        name_suffix = iface_label or iface_name
+        parent_id = self.unique_id
+        manufacturer = "GL-iNet"
+        model = self._model
+        serial_number: str | None = None
+        iface_state = self._iface_state.interfaces.get(iface_name) if self._iface_state else None
+        if iface_state and iface_state.modem and iface_state.modem.info:
+            if iface_state.modem.info.vendor:
+                manufacturer = iface_state.modem.info.vendor
+            if iface_state.modem.info.name:
+                model = iface_state.modem.info.name
+            if iface_state.modem.info.imei:
+                serial_number = iface_state.modem.info.imei
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"{parent_id}_{iface_name}")},
+            name=f"{self.name} {name_suffix}",
+            manufacturer=manufacturer,
+            model=model,
+            serial_number=serial_number,
+            via_device=(DOMAIN, parent_id),
+        )
 
     @property
     def system_status(self) -> dict:
