@@ -107,7 +107,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         native_unit_of_measurement=PERCENTAGE,
         value_fn=lambda system_status: (
             (memory_total := system_status.get("memory_total", 0)) > 0
-            and (memory_free := system_status.get("memory_free", 0)) >= 0
+            and (memory_free := system_status.get("memory_free", 0) + system_status.get("memory_buff_cache", 0)) >= 0
             and (mu := 100 * (1 - memory_free / memory_total))
             and isinstance(mu, float)
             and 0 <= mu <= 100
