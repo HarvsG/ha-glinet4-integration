@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
 from gli4py.error_handling import NonZeroResponse, TokenError
+from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
@@ -27,6 +28,7 @@ from homeassistant.const import (
 )
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format_mac
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo
@@ -182,14 +184,19 @@ class GLinetRouter:
     async def get_api(self) -> GLinet:
         """Optimistically returns a GLinet object for connection to the API, no test included."""
         conf = self._entry.data
+        shared_session = async_get_clientsession(self.hass)
+        ha_client = AiohttpClient(session=shared_session)
         if CONF_API_TOKEN in conf:
             return GLinet(
                 sync=False,
                 sid=conf[CONF_API_TOKEN],
+                client=ha_client,
                 base_url=conf[CONF_HOST] + API_PATH,
             )
         if CONF_PASSWORD in conf:
-            router = GLinet(sync=False, base_url=conf[CONF_HOST] + API_PATH)
+            router = GLinet(
+                sync=False, base_url=conf[CONF_HOST] + API_PATH, client=ha_client
+            )
             await router.login(CONF_USERNAME, conf[CONF_PASSWORD])
             return router
         _LOGGER.error(
