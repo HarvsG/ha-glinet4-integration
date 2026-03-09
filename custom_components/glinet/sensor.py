@@ -117,6 +117,13 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         extra_attributes_fn=lambda system_status: {
             "memory_total": system_status.get("memory_total"),
             "memory_free": system_status.get("memory_free"),
+            "memory_buff_cache": system_status.get("memory_buff_cache"),
+            "memory_available": system_status.get("memory_buff_cache") + system_status.get("memory_free"),
+            "memory_used": (
+                system_status.get("memory_total")
+                - system_status.get("memory_buff_cache")
+                - system_status.get("memory_free")
+            ),
         },
     ),
     SystemStatusEntityDescription(
