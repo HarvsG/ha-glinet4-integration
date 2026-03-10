@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
 
-from .const import DATA_GLINET, DOMAIN
-
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
@@ -21,10 +19,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    _: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the button entities."""
-    router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
+    router: GLinetRouter = entry.runtime_data
     buttons: list[RebootButton] = []
     buttons.append(RebootButton(router))
     if buttons:
