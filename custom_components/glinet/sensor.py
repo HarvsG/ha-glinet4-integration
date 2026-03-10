@@ -15,8 +15,6 @@ from homeassistant.components.sensor import (
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
 from homeassistant.util.dt import utcnow
 
-from .const import DATA_GLINET, DOMAIN
-
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -153,12 +151,12 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    _: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up sensors."""
     _LOGGER.debug("Setting up GL-iNet Sensors")
 
-    router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
+    router: GLinetRouter = entry.runtime_data
     sensors: list[SystemStatusSensor | SystemUptimeSensor] = [
         SystemStatusSensor(router=router, entity_description=description)
         for description in SYSTEM_SENSORS
