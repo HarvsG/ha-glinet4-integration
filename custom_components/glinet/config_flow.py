@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from gli4py import GLinet
 from gli4py.error_handling import NonZeroResponse
+from uplink import AiohttpClient
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -21,10 +22,11 @@ from homeassistant.const import (
     CONF_PASSWORD,
     CONF_USERNAME,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
 
 from .const import (
@@ -65,11 +67,15 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 class TestingHub:
     """Testing class to test connection and authentication."""
 
-    def __init__(self, username: str, host: str) -> None:
+    def __init__(self, username: str, host: str, hass: HomeAssistant) -> None:
         """Initialize."""
         self.host: str = host
         self.username: str = username
-        self.router: GLinet = GLinet(base_url=self.host + API_PATH)
+        self.router: GLinet = GLinet(
+            base_url=self.host + API_PATH,
+            client=AiohttpClient(session=async_get_clientsession(hass)),
+            sync=False,
+        )
         self.router_mac: str = ""
         self.router_model: str = ""
 
@@ -108,14 +114,16 @@ class TestingHub:
 
 
 async def validate_input(
-    data: dict[str, Any], raise_on_invalid_auth: bool = True
+    data: dict[str, Any], hass: HomeAssistant, raise_on_invalid_auth: bool = True
 ) -> dict[str, Any]:
     """Validate the user input allows us to connect.
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
 
-    hub = TestingHub(data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME), data[CONF_HOST])
+    hub = TestingHub(
+        data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME), data[CONF_HOST], hass
+    )
 
     if not await hub.connect():
         raise CannotConnect
@@ -163,7 +171,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                info = await validate_input(user_input)
+                info = await validate_input(user_input, self.hass)
                 # In future we could do additional checks such as
                 # decting API version warning about unsupported versions
             except CannotConnect:
@@ -218,7 +226,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         ):
             raise AbortFlow("already_configured")
         try:
-            entry = await validate_input(discovery_input, raise_on_invalid_auth=False)
+            entry = await validate_input(
+                discovery_input, raise_on_invalid_auth=False, hass=self.hass
+            )
         except CannotConnect:
             _LOGGER.debug("Failed to connect to DHCP device, aborting")
         else:
@@ -250,7 +260,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         errors = {}
         if user_input is not None:
             try:
-                info = await validate_input(user_input)
+                info = await validate_input(user_input, self.hass)
                 # In future we could do additional checks such as
                 # decting API version warning about unsupported versions
             except CannotConnect:

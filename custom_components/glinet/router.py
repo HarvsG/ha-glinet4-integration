@@ -19,7 +19,6 @@ from homeassistant.components.device_tracker import (
     DOMAIN as TRACKER_DOMAIN,
 )
 from homeassistant.const import (
-    CONF_API_TOKEN,
     CONF_HOST,
     CONF_MAC,
     CONF_MODEL,
@@ -186,18 +185,12 @@ class GLinetRouter:
         conf = self._entry.data
         shared_session = async_get_clientsession(self.hass)
         ha_client = AiohttpClient(session=shared_session)
-        if CONF_API_TOKEN in conf:
-            return GLinet(
-                sync=False,
-                sid=conf[CONF_API_TOKEN],
-                client=ha_client,
-                base_url=conf[CONF_HOST] + API_PATH,
-            )
+
         if CONF_PASSWORD in conf:
             router = GLinet(
                 sync=False, base_url=conf[CONF_HOST] + API_PATH, client=ha_client
             )
-            await router.login(CONF_USERNAME, conf[CONF_PASSWORD])
+            await router.login(conf[CONF_USERNAME], conf[CONF_PASSWORD])
             return router
         _LOGGER.error(
             "Error setting up GL-iNet router, no auth details found in configuration"
@@ -210,10 +203,6 @@ class GLinetRouter:
             await self._api.login(
                 self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD]
             )
-            new_data = dict(self._entry.data)
-            new_data[CONF_API_TOKEN] = self._api.sid
-            # Update the configuration entry with the new data
-            self.hass.config_entries.async_update_entry(self._entry, data=new_data)
             _LOGGER.info(
                 "GL-iNet router %s token was renewed",
                 self._host,

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .const import DATA_GLINET, DOMAIN
 from .router import GLinetRouter
 
 if TYPE_CHECKING:
@@ -25,8 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     router = GLinetRouter(hass, entry)
     await router.setup()
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {DATA_GLINET: router}
+    entry.runtime_data = router
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -34,16 +32,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
 
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Update when config_entry options update."""
-    router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
+    router: GLinetRouter = entry.runtime_data
 
     # Currently router.update_options() never returns True
     if router.update_options(dict(entry.options)):

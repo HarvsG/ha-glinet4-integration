@@ -9,8 +9,6 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import callback
 
-from .const import DATA_GLINET, DOMAIN
-
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
@@ -22,10 +20,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    _: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the Pi-hole switch."""
-    router: GLinetRouter = hass.data[DOMAIN][entry.entry_id][DATA_GLINET]
+    router: GLinetRouter = entry.runtime_data
     switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch] = []
     if router.wireguard_clients:
         # TODO detect all configured wireguard, openvpn, shadowsocks and
