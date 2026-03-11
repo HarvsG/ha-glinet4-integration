@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
-from gli4py.error_handling import NonZeroResponse, TokenError
+from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -207,12 +207,15 @@ class GLinetRouter:
                 "GL-iNet router %s token was renewed",
                 self._host,
             )
-        except Exception as exc:
+        except (AuthenticationError, TokenError) as exc:
             _LOGGER.exception(
                 "GL-iNet %s failed to renew the token, have you changed your router password?",
                 self._host,
             )
             raise ConfigEntryAuthFailed from exc
+        except Exception as exc:
+            _LOGGER.warning("Could not connect to GL-iNet router to renew token: %s", exc)
+            raise  # Let generic network/timeout exceptions bubble up normally
 
     async def update_all(self, _: datetime | None = None) -> None:
         """Update all Gl-inet platforms."""
@@ -251,28 +254,31 @@ class GLinetRouter:
         except TimeoutError:
             if not self._connect_error:
                 self._connect_error = True
-            _LOGGER.exception(
-                "GL-iNet router %s did not respond in time",
-                self._host,
-            )
+                _LOGGER.exception(
+                    "GL-iNet router %s did not respond in time",
+                    self._host,
+                )
             return None
         except TokenError as exc:
             self._token_error = True
             if not self._connect_error:
                 self._connect_error = True
-            _LOGGER.warning(
-                "GL-iNet router %s token was refused %s, will try to re-autheticate before next poll",
-                self._host,
-                exc,
-            )
+                _LOGGER.warning(
+                    "GL-iNet router %s token was refused %s, will try to re-autheticate before next poll",
+                    self._host,
+                    exc,
+                )
             return None
         except NonZeroResponse:
             if not self._connect_error:
                 self._connect_error = True
-            _LOGGER.exception(
-                "GL-iNet router %s responded, but with an error code", self._host
-            )
+                _LOGGER.exception(
+                    "GL-iNet router %s responded, but with an error code", self._host
+                )
             return None
+        except ConfigEntryAuthFailed:
+            # Bubble up to Home Assistant to pause polling and trigger the re-auth flow
+            raise
         except Exception:  # pylint: disable=broad-except  # noqa: BLE001
             if not self._connect_error:
                 self._connect_error = True
@@ -283,7 +289,7 @@ class GLinetRouter:
 
         if not response:
             _LOGGER.debug(
-                "Empty response from %s to request %s is of type %s, Response: %s",
+                "Invalid response from %s to request %s is of type %s, Response: %s",
                 self._host,
                 api_callable.__name__,
                 str(type(response)),
@@ -293,7 +299,7 @@ class GLinetRouter:
         if self._token_error:
             self._token_error = False
             _LOGGER.info(
-                "Gl-inet %s new token has successfully made an API call, marked as valid",
+                "Gl-inet %s new token has successfully made an API call, token marked as valid",
                 self._host,
             )
 
