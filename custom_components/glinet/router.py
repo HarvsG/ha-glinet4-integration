@@ -214,7 +214,9 @@ class GLinetRouter:
             )
             raise ConfigEntryAuthFailed from exc
         except Exception as exc:
-            _LOGGER.warning("Could not connect to GL-iNet router to renew token: %s", exc)
+            _LOGGER.warning(
+                "Could not connect to GL-iNet router to renew token: %s", exc
+                )
             raise  # Let generic network/timeout exceptions bubble up normally
 
     async def update_all(self, _: datetime | None = None) -> None:
