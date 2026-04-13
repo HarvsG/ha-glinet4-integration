@@ -16,7 +16,7 @@ dependencies = [
 dev = [
     "codespell>=2.4.1",
     "homeassistant-stubs==2026.2.3",
-    "mypy>=1.16.1",
+    "mypy>=1.20.1",
     "PyGithub>=2.6",
     "pylint>=3.3.7",
     "pytest>=8.3.5",
