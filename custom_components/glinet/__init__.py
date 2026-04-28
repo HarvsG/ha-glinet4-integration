@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .router import GLinetRouter
-
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
+
+    from .router import GLinetRouter
 
 PLATFORMS = ["button", "device_tracker", "sensor", "switch"]
 
@@ -19,8 +19,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     Called by home assistant on initial config, restart and
     component reload.
     """
+    # Lazy import keeps the package init free of HA/gli4py at module load
+    # time, so unit tests for pure helpers in `wan.py` can run without the
+    # full integration dependency tree.
+    from .router import GLinetRouter  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
 
-    # Store an API object for platforms to access
     router = GLinetRouter(hass, entry)
     await router.setup()
 
