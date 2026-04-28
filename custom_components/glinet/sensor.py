@@ -7,13 +7,19 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import (
+    DOMAIN as SENSOR_DOMAIN,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
+from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util.dt import utcnow
+
+from .wan_sensor import WanStatusSensor
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -144,7 +150,9 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
 
 
 async def async_setup_entry(
-    _: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up sensors."""
     _LOGGER.debug("Setting up GL-iNet Sensors")
@@ -175,6 +183,61 @@ async def async_setup_entry(
             sensors.remove(sensor)
 
     async_add_entities(sensors, True)
+
+    # WAN status sensors: load any persisted entities from the registry,
+    # plus an entity per interface currently reporting up. Future "new WAN"
+    # discoveries are picked up via the router's dispatcher signal.
+    await _setup_wan_sensors(hass, entry, router, async_add_entities)
+
+
+async def _setup_wan_sensors(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    router: GLinetRouter,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Register WAN sensors from registry + currently-up interfaces, then subscribe."""
+    entity_registry = er.async_get(hass)
+    registry_entries = er.async_entries_for_config_entry(
+        entity_registry, entry.entry_id
+    )
+
+    wan_unique_id_prefix = f"glinet_sensor/{router.factory_mac}/wan_"
+    persisted_interfaces: set[str] = set()
+    for reg_entry in registry_entries:
+        if reg_entry.domain != SENSOR_DOMAIN:
+            continue
+        if not reg_entry.unique_id.startswith(wan_unique_id_prefix):
+            continue
+        persisted_interfaces.add(reg_entry.unique_id[len(wan_unique_id_prefix):])
+
+    currently_up = {
+        name for name, state in router.wan_status.items() if state.up
+    }
+
+    initial_interfaces = persisted_interfaces | currently_up
+    router.register_known_wan_interfaces(initial_interfaces)
+    if initial_interfaces:
+        async_add_entities(
+            WanStatusSensor(router, iface)
+            for iface in sorted(initial_interfaces)
+        )
+
+    @callback
+    def _handle_new_wan(new_interfaces: list[str]) -> None:
+        """Add entities for newly-discovered up interfaces.
+
+        The router fires ``signal_wan_new`` with the sorted list of names
+        that just transitioned to ``known``. Each name fires exactly once,
+        so we don't need to deduplicate here.
+        """
+        async_add_entities(
+            WanStatusSensor(router, iface) for iface in new_interfaces
+        )
+
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, router.signal_wan_new, _handle_new_wan)
+    )
 
 
 def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> datetime:
