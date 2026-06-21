@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from propcache.api import cached_property
-
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+
+from .const import TRACK_RANDOMIZED_MAC_ENABLED
+from .utils import is_randomized_mac
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -22,7 +23,7 @@ DEFAULT_DEVICE_NAME = "Unknown device"
 
 
 async def async_setup_entry(
-    _: HomeAssistant,
+    hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
@@ -34,6 +35,13 @@ async def async_setup_entry(
     def update_router() -> None:
         """Update the values of the router."""
         add_entities(router, async_add_entities, tracked)
+
+    # Create entities for any devices discovered on subsequent polls, not just
+    # those present at setup. Without this, new devices were only added on a
+    # reload of the integration (issue #139).
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, router.signal_device_new, update_router)
+    )
 
     update_router()
 
@@ -63,9 +71,6 @@ def add_entities(
 class GLinetDevice(ScannerEntity):
     """Representation of a GLinet tracked device."""
 
-    _attr_hostname: str
-    _attr_ip_address: str | None
-    _attr_mac_address: str
     _attr_source_type: SourceType = SourceType.ROUTER
 
     def __init__(self, router: GLinetRouter, device: ClientDevInfo) -> None:
@@ -73,14 +78,11 @@ class GLinetDevice(ScannerEntity):
         self._router: GLinetRouter = router
         self._device: ClientDevInfo = device
         self._icon = "mdi:radar"
-        self._attr_hostname: str = self._device.name or DEFAULT_DEVICE_NAME
-        self._attr_ip_address: str | None = self._device.ip_address
-        self._attr_mac_address: str = self._device.mac
 
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
-        return self._attr_mac_address
+        return self._device.mac
 
     @property
     def icon(self) -> str:
@@ -90,7 +92,7 @@ class GLinetDevice(ScannerEntity):
     @property
     def name(self) -> str:
         """Return the name."""
-        return self._attr_hostname
+        return self._device.name or DEFAULT_DEVICE_NAME
 
     @property
     def is_connected(self) -> bool:
@@ -103,37 +105,53 @@ class GLinetDevice(ScannerEntity):
         return SourceType.ROUTER
 
     @property
+    def entity_registry_enabled_default(self) -> bool:
+        """Decide whether a new tracker is enabled by default.
+
+        Randomized-MAC clients honour the ``track_randomized_mac`` option: only
+        ``enabled`` turns them on by default (``ignore`` stops the entity being
+        created at all - handled in the router). For every other client we
+        defer to Home Assistant's ScannerEntity heuristic, which enables a
+        tracker only when its MAC maps to a known device and otherwise leaves
+        it disabled to avoid surfacing unknown floating MACs.
+        """
+        if is_randomized_mac(self._device.mac):
+            return self._router.randomized_mac_mode == TRACK_RANDOMIZED_MAC_ENABLED
+        return super().entity_registry_enabled_default
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the attributes."""
 
         attrs = {}
 
         attrs["interface_type"] = str(self._device.interface_type)
+        attrs["mac_randomized"] = is_randomized_mac(self._device.mac)
         if self._device.last_activity:
             attrs["last_time_reachable"] = self._device.last_activity.isoformat(
                 timespec="seconds"
             )
         return attrs
 
-    @cached_property
+    @property
     def hostname(self) -> str:
         """Return the hostname of device."""
-        return self._attr_hostname
+        return self._device.name or DEFAULT_DEVICE_NAME
 
-    @cached_property
+    @property
     def ip_address(self) -> str | None:
         """Return the primary ip address of the device."""
-        return self._attr_ip_address
+        return self._device.ip_address
 
-    @cached_property
+    @property
     def mac_address(self) -> str | None:
         """Return the mac address of the device."""
-        return self._attr_mac_address
+        return self._device.mac
 
     @property
     def should_poll(self) -> bool:
-        """No polling needed."""
-        return True
+        """State is pushed via the router's dispatcher signal, not polled."""
+        return False
 
     @callback
     def async_on_demand_update(self) -> None:

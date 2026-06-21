@@ -34,8 +34,14 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
-from .const import API_PATH, DOMAIN
-from .utils import adjust_mac
+from .const import (
+    API_PATH,
+    CONF_TRACK_RANDOMIZED_MAC,
+    DEFAULT_TRACK_RANDOMIZED_MAC,
+    DOMAIN,
+    TRACK_RANDOMIZED_MAC_IGNORE,
+)
+from .utils import adjust_mac, is_randomized_mac
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -178,7 +184,11 @@ class GLinetRouter:
         # TODO here we ask this to update all on the same scan interval
         # but in future some sensors e.g WANip need to update less regularly than
         # others
-        async_track_time_interval(self.hass, self.update_states, SCAN_INTERVAL)
+        # Register the unsub so the poller is cancelled on unload/reload;
+        # otherwise every reload leaks another timer that keeps polling.
+        self._entry.async_on_unload(
+            async_track_time_interval(self.hass, self.update_states, SCAN_INTERVAL)
+        )
 
     async def get_api(self) -> GLinet:
         """Optimistically returns a GLinet object for connection to the API, no test included."""
@@ -337,6 +347,11 @@ class GLinetRouter:
             if wrt_devices is None or wrt_devices == {}:
                 self._connected_devices = 0
             return
+        _LOGGER.debug(
+            "connected_clients returned %d online device(s): %s",
+            len(wrt_devices),
+            list(wrt_devices.keys()),
+        )
         consider_home = self._options.get(
             CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()
         )
@@ -352,16 +367,28 @@ class GLinetRouter:
             if device_mac in self._devices:
                 continue
 
-            alias = dev_info.get("alias", "").strip()
-            name = dev_info.get("name", "").strip()
-            # Skip if both alias and name are empty
-            if not alias and not name:
+            # Optionally ignore clients using MAC randomization entirely, so
+            # they don't accumulate as (even disabled) entities over time.
+            if (
+                self.randomized_mac_mode == TRACK_RANDOMIZED_MAC_IGNORE
+                and is_randomized_mac(device_mac)
+            ):
                 continue
 
+            # Track every connected client. Devices without a name or alias
+            # (many IoT devices, e.g. bulbs and sensors) were previously
+            # dropped here, leaving most of the network untracked (issue #139).
+            # ClientDevInfo.update() falls back to a MAC-derived name for these.
             new_device = True
             device = ClientDevInfo(device_mac)
             device.update(dev_info)
             self._devices[device_mac] = device
+            _LOGGER.debug(
+                "Discovered new tracked device %s (name=%r alias=%r)",
+                device_mac,
+                dev_info.get("name"),
+                dev_info.get("alias"),
+            )
 
         async_dispatcher_send(self.hass, self.signal_device_update)
         if new_device:
@@ -374,7 +401,10 @@ class GLinetRouter:
         ifaces = await self._update_platform(self._api.wifi_ifaces_get)
         if not ifaces:
             return
+        new_iface = False
         for name, iface in ifaces.items():
+            if name not in self._wifi_ifaces:
+                new_iface = True
             self._wifi_ifaces[name] = WifiInterface(
                 name=name,
                 enabled=iface.get("enabled", False),
@@ -383,6 +413,8 @@ class GLinetRouter:
                 hidden=iface.get("hidden", False),
                 encryption=iface.get("encryption", "UNKNOWN"),
             )
+        if new_iface:
+            async_dispatcher_send(self.hass, self.signal_iface_new)
 
     async def update_tailscale_state(self) -> None:
         """Make a call to the API to get the tailscale state."""
@@ -491,6 +523,11 @@ class GLinetRouter:
         return f"{DOMAIN}-device-update-{self._factory_mac}"
 
     @property
+    def signal_iface_new(self) -> str:
+        """Event specific per GL-iNet entry to signal a new WiFi interface."""
+        return f"{DOMAIN}-iface-new-{self._factory_mac}"
+
+    @property
     def host(self) -> str:
         """Return router host."""
         return self._host
@@ -504,6 +541,13 @@ class GLinetRouter:
     def devices(self) -> dict[str, ClientDevInfo]:
         """Return devices."""
         return self._devices
+
+    @property
+    def randomized_mac_mode(self) -> str:
+        """How clients using MAC randomization should be tracked."""
+        return self._options.get(
+            CONF_TRACK_RANDOMIZED_MAC, DEFAULT_TRACK_RANDOMIZED_MAC
+        )
 
     @property
     def api(self) -> GLinet:

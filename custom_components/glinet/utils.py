@@ -1,6 +1,22 @@
 """Utility functions for GL-iNet routers."""
 
 
+def is_randomized_mac(mac: str | None) -> bool:
+    """Return True if a MAC address is locally administered (randomized).
+
+    Modern phones use MAC randomization, setting the locally-administered bit
+    (0x02 of the first octet). Such addresses change on each (re)connection, so
+    a tracker keyed on them is short-lived clutter. Detection is purely from the
+    address itself - no router support required. Malformed input is treated as
+    not randomized.
+    """
+    try:
+        first_octet = int(str(mac).replace(":", "").replace("-", "")[:2], 16)
+    except (ValueError, IndexError):
+        return False
+    return bool(first_octet & 0x02)
+
+
 def adjust_mac(mac: str, delta: int, sep: str = ":") -> str:
     """Increment a MAC address by 1.
 

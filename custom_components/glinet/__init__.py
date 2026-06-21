@@ -26,6 +26,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.runtime_data = router
 
+    # Reload when the user changes options so new settings take effect.
+    entry.async_on_unload(entry.add_update_listener(update_listener))
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -37,9 +40,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Update when config_entry options update."""
-    router: GLinetRouter = entry.runtime_data
-
-    # Currently router.update_options() never returns True
-    if router.update_options(dict(entry.options)):
-        await hass.config_entries.async_reload(entry.entry_id)
+    """Reload the config entry when its options change."""
+    await hass.config_entries.async_reload(entry.entry_id)

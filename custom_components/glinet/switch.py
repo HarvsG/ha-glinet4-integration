@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -20,11 +21,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    _: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up the Pi-hole switch."""
+    """Set up the GL-iNet switches."""
     router: GLinetRouter = entry.runtime_data
-    switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch] = []
+    switches: list[WireGuardSwitch | TailscaleSwitch] = []
     if router.wireguard_clients:
         # TODO detect all configured wireguard, openvpn, shadowsocks and
         # TOR clients & servers with router/vpn/status? and gen a switch for each
@@ -34,10 +35,29 @@ async def async_setup_entry(
         ]
     if router.tailscale_configured:
         switches.append(TailscaleSwitch(router))
-    for iface_name, iface in router.wifi_ifaces.items():
-        switches.append(WifiApSwitch(router, iface_name, iface))
     if switches:
         async_add_entities(switches, True)
+
+    tracked_ifaces: set[str] = set()
+
+    @callback
+    def add_wifi_switches() -> None:
+        """Add switches for any WiFi interfaces not yet tracked."""
+        new_switches = []
+        for iface_name, iface in router.wifi_ifaces.items():
+            if iface_name in tracked_ifaces:
+                continue
+            new_switches.append(WifiApSwitch(router, iface_name, iface))
+            tracked_ifaces.add(iface_name)
+        if new_switches:
+            async_add_entities(new_switches, True)
+
+    # Create switches for WiFi interfaces enabled after setup (e.g. MLO), not
+    # just those present at setup, which previously required a reload (#103).
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, router.signal_iface_new, add_wifi_switches)
+    )
+    add_wifi_switches()
 
 
 class GliSwitchBase(SwitchEntity):
@@ -83,7 +103,7 @@ class WifiApSwitch(GliSwitchBase):
     @property
     def name(self) -> str:
         """Return the name of the switch."""
-        return self._iface.ssid if self._iface.ssid else self._iface.name
+        return self._iface.ssid or self._iface.name
 
     @property
     def unique_id(self) -> str:

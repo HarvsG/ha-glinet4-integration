@@ -40,6 +40,11 @@ known-first-party = [
     "homeassistant",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "INP001", # tests are intentionally not an importable package
+]
+
 [tool.ruff.lint]
 select = [
     "A001", # Variable {name} is shadowing a Python builtin

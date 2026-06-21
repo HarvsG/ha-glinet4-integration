@@ -32,11 +32,16 @@ from homeassistant.helpers.device_registry import format_mac
 from .const import (
     API_PATH,
     CONF_TITLE,
+    CONF_TRACK_RANDOMIZED_MAC,
+    DEFAULT_TRACK_RANDOMIZED_MAC,
     DOMAIN,
     GLINET_DEFAULT_PW,
     GLINET_DEFAULT_URL,
     GLINET_DEFAULT_USERNAME,
     GLINET_FRIENDLY_NAME,
+    TRACK_RANDOMIZED_MAC_DISABLED,
+    TRACK_RANDOMIZED_MAC_ENABLED,
+    TRACK_RANDOMIZED_MAC_IGNORE,
 )
 from .utils import adjust_mac
 
@@ -60,6 +65,26 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()
         ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900)),
+    }
+)
+
+# Options exposed via the options flow: connection details plus settings that
+# only make sense once the integration is running.
+OPTIONS_DATA_SCHEMA = STEP_USER_DATA_SCHEMA.extend(
+    {
+        vol.Optional(
+            CONF_TRACK_RANDOMIZED_MAC, default=DEFAULT_TRACK_RANDOMIZED_MAC
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    TRACK_RANDOMIZED_MAC_ENABLED,
+                    TRACK_RANDOMIZED_MAC_DISABLED,
+                    TRACK_RANDOMIZED_MAC_IGNORE,
+                ],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                translation_key=CONF_TRACK_RANDOMIZED_MAC,
+            )
+        ),
     }
 )
 
@@ -273,13 +298,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 errors["base"] = "unknown"
             else:
                 return self.async_create_entry(
-                    title="", data=self.config_entry.options | info["data"]
+                    title="",
+                    data=self.config_entry.options
+                    | info["data"]
+                    | {
+                        CONF_TRACK_RANDOMIZED_MAC: user_input[CONF_TRACK_RANDOMIZED_MAC]
+                    },
                 )
-        # This exposes the API key back to the user
+        # Pre-fill from current options (falling back to the connection data)
+        suggested = {**self.config_entry.data, **self.config_entry.options}
         data_schema = self.add_suggested_values_to_schema(
-            STEP_USER_DATA_SCHEMA, self.config_entry.data
+            OPTIONS_DATA_SCHEMA, suggested
         )
-        return self.async_show_form(step_id="init", data_schema=data_schema)
+        return self.async_show_form(
+            step_id="init", data_schema=data_schema, errors=errors
+        )
 
 
 class CannotConnect(HomeAssistantError):
