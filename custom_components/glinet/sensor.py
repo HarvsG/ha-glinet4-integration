@@ -170,11 +170,9 @@ async def async_setup_entry(
         )
     )
 
-    for sensor in sensors:
-        if sensor.native_value is None:
-            sensors.remove(sensor)
+    available = [sensor for sensor in sensors if sensor.native_value is not None]
 
-    async_add_entities(sensors, True)
+    async_add_entities(available, True)
 
 
 def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> datetime:
