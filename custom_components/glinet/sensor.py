@@ -13,18 +13,23 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
-from homeassistant.util.dt import utcnow
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .router import GLinetRouter
+    from .coordinator import GlinetConfigEntry, GLinetUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+# Minimum movement in the derived boot time before a new timestamp is committed
+# to state. Mirrors Home Assistant's UniFi integration, which uses the same
+# tolerance to stop derived uptime timestamps flapping on every poll.
+UPTIME_DEVIATION = timedelta(seconds=120)
 
 
 class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=True):
@@ -58,9 +63,10 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            (la := system_status.get("load_average")) and isinstance(la, list) and la[0]
-        )
-        or None,
+            la[0]
+            if isinstance(la := system_status.get("load_average"), list) and len(la) > 0
+            else None
+        ),
     ),
     SystemStatusEntityDescription(
         key="load_avg5",
@@ -71,12 +77,10 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            (la := system_status.get("load_average"))
-            and isinstance(la, list)
-            and len(la) > 1
-            and la[1]
-        )
-        or None,
+            la[1]
+            if isinstance(la := system_status.get("load_average"), list) and len(la) > 1
+            else None
+        ),
     ),
     SystemStatusEntityDescription(
         key="load_avg15",
@@ -87,12 +91,10 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            (la := system_status.get("load_average"))
-            and isinstance(la, list)
-            and len(la) > 2
-            and la[2]
-        )
-        or None,
+            la[2]
+            if isinstance(la := system_status.get("load_average"), list) and len(la) > 2
+            else None
+        ),
     ),
     SystemStatusEntityDescription(
         key="memory_use",
@@ -105,7 +107,11 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         native_unit_of_measurement=PERCENTAGE,
         value_fn=lambda system_status: (
             (memory_total := system_status.get("memory_total", 0)) > 0
-            and (memory_free := system_status.get("memory_free", 0)) >= 0
+            and (
+                memory_free := system_status.get("memory_free", 0)
+                + system_status.get("memory_buff_cache", 0)
+            )
+            >= 0
             and (mu := 100 * (1 - memory_free / memory_total))
             and isinstance(mu, float)
             and 0 <= mu <= 100
@@ -115,6 +121,12 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         extra_attributes_fn=lambda system_status: {
             "memory_total": system_status.get("memory_total"),
             "memory_free": system_status.get("memory_free"),
+            "memory_buff_cache": system_status.get("memory_buff_cache"),
+            "memory_available": system_status.get("memory_free", 0)
+            + system_status.get("memory_buff_cache", 0),
+            "memory_used": system_status.get("memory_total", 0)
+            - system_status.get("memory_free", 0)
+            - system_status.get("memory_buff_cache", 0),
         },
     ),
     SystemStatusEntityDescription(
@@ -144,20 +156,20 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
 
 
 async def async_setup_entry(
-    _: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    _: HomeAssistant, entry: GlinetConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up sensors."""
     _LOGGER.debug("Setting up GL-iNet Sensors")
 
-    router: GLinetRouter = entry.runtime_data
+    coordinator = entry.runtime_data
     sensors: list[SystemStatusSensor | SystemUptimeSensor] = [
-        SystemStatusSensor(router=router, entity_description=description)
+        SystemStatusSensor(coordinator=coordinator, entity_description=description)
         for description in SYSTEM_SENSORS
     ]
     # Special case for uptime as it requires additional data processing
     sensors.append(
         SystemUptimeSensor(
-            router=router,
+            coordinator=coordinator,
             entity_description=SystemStatusEntityDescription(
                 key="uptime",
                 name="Uptime",
@@ -170,47 +182,58 @@ async def async_setup_entry(
         )
     )
 
-    for sensor in sensors:
-        if sensor.native_value is None:
-            sensors.remove(sensor)
+    # Only add sensors whose value is available on this device/model. Build a
+    # new list rather than mutating `sensors` while iterating it, which would
+    # skip elements and leave unavailable sensors in place.
+    available = [sensor for sensor in sensors if sensor.native_value is not None]
 
-    async_add_entities(sensors, True)
-
-
-def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> datetime:
-    """Calculate uptime with deviation."""
-    delta_uptime: datetime = utcnow() - timedelta(seconds=seconds_uptime)
-
-    if not last_value or abs((delta_uptime - last_value).total_seconds()) > 15:
-        return delta_uptime
-
-    return last_value
+    async_add_entities(available)
 
 
-class GliSensorBase(SensorEntity):
+def _derive_boot_time(seconds_uptime: float) -> datetime:
+    """Derive the boot timestamp from the router's uptime counter."""
+    # dt_util.utcnow() is untyped (Any) under the stubs; pin it to datetime so
+    # the subtraction below is typed rather than returning Any.
+    now: datetime = dt_util.utcnow()
+    return now - timedelta(seconds=seconds_uptime)
+
+
+def _boot_time_changed(old: datetime | None, new: datetime) -> bool:
+    """Return whether the boot time moved enough to warrant a state write.
+
+    Mirrors UniFi's ``async_uptime_value_changed_fn``: sub-tolerance fluctuation
+    from second-granularity uptime and poll jitter is ignored so the timestamp
+    stays stable between reboots.
+    """
+    return old is None or abs(new - old) > UPTIME_DEVIATION
+
+
+class GliSensorBase(CoordinatorEntity["GLinetUpdateCoordinator"], SensorEntity):
     """GL-iNet sensor base class."""
+
+    entity_description: SystemStatusEntityDescription
 
     def __init__(
         self,
-        router: GLinetRouter,
+        coordinator: GLinetUpdateCoordinator,
         entity_description: SystemStatusEntityDescription,
     ) -> None:
         """Initialize the sensor class."""
-        self.router = router
-        self.entity_description: SystemStatusEntityDescription = entity_description
-        self._attr_device_info = router.device_info
-
-    @property
-    def unique_id(self) -> str:
-        """Return the unique id of the switch."""
-        return f"glinet_sensor/{self.router.factory_mac}/system_{self.entity_description.key}"
+        super().__init__(coordinator)
+        self.entity_description = entity_description
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = (
+            f"glinet_sensor/{coordinator.factory_mac}/system_{entity_description.key}"
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the state attributes."""
         if self.entity_description.extra_attributes_fn is None:
             return None
-        return self.entity_description.extra_attributes_fn(self.router.system_status)
+        return self.entity_description.extra_attributes_fn(
+            self.coordinator.data.system_status
+        )
 
 
 class SystemStatusSensor(GliSensorBase):
@@ -219,18 +242,30 @@ class SystemStatusSensor(GliSensorBase):
     @property
     def native_value(self) -> int | float | None:
         """Return the native value of the sensor."""
-        return self.entity_description.value_fn(self.router.system_status)
+        return self.entity_description.value_fn(self.coordinator.data.system_status)
 
 
 class SystemUptimeSensor(GliSensorBase):
-    """GL-iNet system uptime sensor class."""
+    """GL-iNet system uptime sensor class.
 
-    _current_value: datetime | None = None
+    The router exposes uptime as a seconds counter, so the boot timestamp is
+    derived as ``now - uptime``. It is recomputed only when the coordinator
+    reports a fresh uptime value, and the committed value is held stable within
+    ``UPTIME_DEVIATION`` -- the same approach core uses for the UniFi integration.
+    """
+
+    _attr_native_value: datetime | None = None
+    _last_uptime: float | None = None
 
     @property
     def native_value(self) -> datetime | None:
-        """Return the native value of the sensor."""
-        self._current_value = _uptime_calculation(
-            self.router.system_status["uptime"], self._current_value
-        )
-        return self._current_value
+        """Return the cached boot timestamp, recomputing only on fresh data."""
+        uptime = self.coordinator.data.system_status.get("uptime")
+        if uptime is None:
+            return self._attr_native_value
+        if uptime != self._last_uptime:
+            self._last_uptime = uptime
+            candidate = _derive_boot_time(uptime)
+            if _boot_time_changed(self._attr_native_value, candidate):
+                self._attr_native_value = candidate
+        return self._attr_native_value

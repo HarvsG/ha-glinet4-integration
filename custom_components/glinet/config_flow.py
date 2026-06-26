@@ -63,6 +63,17 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     }
 )
 
+STEP_REAUTH_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_USERNAME, default=GLINET_DEFAULT_USERNAME): (
+            selector.TextSelector()
+        ),
+        vol.Required(CONF_PASSWORD): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        ),
+    }
+)
+
 
 class TestingHub:
     """Testing class to test connection and authentication."""
@@ -196,6 +207,47 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(
                 STEP_USER_DATA_SCHEMA, defaults
+            ),
+            errors=errors,
+        )
+
+    async def async_step_reauth(self, _: dict[str, Any]) -> ConfigFlowResult:
+        """Handle re-authentication when the stored token is rejected.
+
+        Triggered by the coordinator raising ``ConfigEntryAuthFailed``; prompts
+        for fresh credentials and refreshes the stored token in place.
+        """
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm re-authentication with a freshly entered password."""
+        reauth_entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            data = {**reauth_entry.data, **user_input}
+            try:
+                info = await validate_input(data, self.hass)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            # Broad excepts are permitted in config flows
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            else:
+                return self.async_update_reload_and_abort(
+                    reauth_entry, data_updates=info["data"]
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=self.add_suggested_values_to_schema(
+                STEP_REAUTH_DATA_SCHEMA,
+                {CONF_USERNAME: reauth_entry.data.get(CONF_USERNAME)},
             ),
             errors=errors,
         )

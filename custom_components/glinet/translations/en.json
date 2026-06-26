@@ -16,6 +16,18 @@
           "password": "The password you use to login to your router's admin page, this is unlikely to be the same as your WiFi password",
           "consider_home": "Seconds to wait before deciding that a device is away"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate with your GL-iNet router",
+        "description": "The stored credentials for your GL-iNet router were rejected. Enter the current password to reconnect.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "This is always 'root' by default on GL-iNet devices",
+          "password": "The password you use to login to your router's admin page, this is unlikely to be the same as your WiFi password"
+        }
       }
     },
     "error": {
@@ -24,7 +36,8 @@
       "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "Device is already configured"
+      "already_configured": "Device is already configured",
+      "reauth_successful": "Re-authentication was successful"
     }
   },
   "options": {

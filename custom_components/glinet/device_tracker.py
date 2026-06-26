@@ -7,75 +7,64 @@ from typing import TYPE_CHECKING, Any
 
 from propcache.api import cached_property
 
-from homeassistant.components.device_tracker import SourceType
-from homeassistant.components.device_tracker.config_entry import ScannerEntity
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.components.device_tracker import ScannerEntity, SourceType
+from homeassistant.core import callback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-    from .router import ClientDevInfo, GLinetRouter
+    from .coordinator import GlinetConfigEntry, GLinetUpdateCoordinator
+    from .models import ClientDevInfo
+
+_LOGGER = logging.getLogger(__name__)
 
 DEFAULT_DEVICE_NAME = "Unknown device"
 
 
 async def async_setup_entry(
     _: HomeAssistant,
-    entry: ConfigEntry,
+    entry: GlinetConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up device tracker for GLinet component."""
-    router: GLinetRouter = entry.runtime_data
+    coordinator = entry.runtime_data
     tracked: set[str] = set()
 
     @callback
-    def update_router() -> None:
-        """Update the values of the router."""
-        add_entities(router, async_add_entities, tracked)
+    def add_new_entities() -> None:
+        """Add tracker entities for devices not yet seen."""
+        new_tracked = []
+        for mac, device in coordinator.data.devices.items():
+            if mac in tracked:
+                continue
+            new_tracked.append(GLinetDevice(coordinator, device))
+            tracked.add(mac)
+        if new_tracked:
+            async_add_entities(new_tracked)
 
-    update_router()
-
-
-_LOGGER = logging.getLogger(__name__)
-
-
-@callback
-def add_entities(
-    router: GLinetRouter,
-    async_add_entities: AddConfigEntryEntitiesCallback,
-    tracked: set[str],
-) -> None:
-    """Add all new tracker entities from the router."""
-    new_tracked = []
-    for mac, device in router.devices.items():
-        if mac in tracked:
-            continue
-
-        new_tracked.append(GLinetDevice(router, device))
-        tracked.add(mac)
-
-    if new_tracked:
-        async_add_entities(new_tracked)
+    # Discover new devices on every coordinator refresh (replaces the old
+    # signal_device_new dispatcher), and add the ones already known now.
+    entry.async_on_unload(coordinator.async_add_listener(add_new_entities))
+    add_new_entities()
 
 
-class GLinetDevice(ScannerEntity):
+class GLinetDevice(CoordinatorEntity["GLinetUpdateCoordinator"], ScannerEntity):
     """Representation of a GLinet tracked device."""
 
-    _attr_hostname: str
-    _attr_ip_address: str | None
-    _attr_mac_address: str
     _attr_source_type: SourceType = SourceType.ROUTER
 
-    def __init__(self, router: GLinetRouter, device: ClientDevInfo) -> None:
+    def __init__(
+        self, coordinator: GLinetUpdateCoordinator, device: ClientDevInfo
+    ) -> None:
         """Initialize a GLinet device."""
-        self._router: GLinetRouter = router
+        super().__init__(coordinator)
         self._device: ClientDevInfo = device
         self._icon = "mdi:radar"
-        self._attr_hostname: str = self._device.name or DEFAULT_DEVICE_NAME
-        self._attr_ip_address: str | None = self._device.ip_address
-        self._attr_mac_address: str = self._device.mac
+        self._attr_hostname: str = device.name or DEFAULT_DEVICE_NAME
+        self._attr_ip_address: str | None = device.ip_address
+        self._attr_mac_address: str = device.mac
 
     @property
     def unique_id(self) -> str:
@@ -93,6 +82,16 @@ class GLinetDevice(ScannerEntity):
         return self._attr_hostname
 
     @property
+    def available(self) -> bool:
+        """Trackers stay available across transient poll failures.
+
+        Presence (home/away) is carried by is_connected + consider_home, so the
+        tracker should not flip to ``unavailable`` just because one poll failed
+        (which CoordinatorEntity.available would otherwise do).
+        """
+        return True
+
+    @property
     def is_connected(self) -> bool:
         """Return true if the device is connected to the network."""
         return self._device.is_connected
@@ -105,9 +104,7 @@ class GLinetDevice(ScannerEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the attributes."""
-
-        attrs = {}
-
+        attrs: dict[str, Any] = {}
         attrs["interface_type"] = str(self._device.interface_type)
         if self._device.last_activity:
             attrs["last_time_reachable"] = self._device.last_activity.isoformat(
@@ -129,24 +126,3 @@ class GLinetDevice(ScannerEntity):
     def mac_address(self) -> str | None:
         """Return the mac address of the device."""
         return self._attr_mac_address
-
-    @property
-    def should_poll(self) -> bool:
-        """No polling needed."""
-        return True
-
-    @callback
-    def async_on_demand_update(self) -> None:
-        """Update state."""
-        self._device = self._router.devices[self._device.mac]
-        self.async_write_ha_state()
-
-    async def async_added_to_hass(self) -> None:
-        """Register state update callback."""
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                self._router.signal_device_update,
-                self.async_on_demand_update,
-            )
-        )
