@@ -13,9 +13,14 @@ dependencies = [
 ]
 
 [dependency-groups]
+# Pin homeassistant-stubs to the SAME Home Assistant core version that the test
+# group resolves to (pytest-homeassistant-custom-component==0.13.313 -> HA
+# 2026.2.0). uv resolves all dependency groups together, so a mismatch here
+# makes `uv run` (and every pre-commit hook) fail to resolve. Bump both in
+# lockstep when you target a newer HA.
 dev = [
     "codespell>=2.4.1",
-    "homeassistant-stubs==2026.2.3",
+    "homeassistant-stubs==2026.2.0",
     "mypy>=1.16.1",
     "PyGithub>=2.6",
     "pylint>=3.3.7",
@@ -24,6 +29,19 @@ dev = [
     "types-requests<2.32.4.20260108",
     "voluptuous-stubs>=0.1.1",
 ]
+# Test group pulls Home Assistant's test helpers. pytest-homeassistant-custom-
+# component pins an exact HA core version (0.13.313 -> HA 2026.2.0); bump it in
+# lockstep with the HA version you target. gli4py is the integration's runtime
+# dependency (see manifest.json) and is needed to import the package under test.
+test = [
+    "pytest-homeassistant-custom-component==0.13.313",
+    "gli4py==0.0.17b3",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
 
 [tool.hatch.version]
 source = "vcs"
@@ -133,6 +151,14 @@ ignore = [
     "ISC001",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Tests annotate fixtures with runtime types and use helper functions freely;
+# the type-checking-import and docstring rules add noise without value here.
+"tests/**" = ["TC001", "TC002", "TC003", "D103", "SLF001"]
+# scripts/ are committed standalone CLIs, not an importable package (INP001),
+# and reach into the gli4py client internals to capture fixtures (SLF001).
+"scripts/**" = ["TC001", "TC002", "TC003", "INP001", "D103", "SLF001"]
+
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
 mark-parentheses = false
@@ -155,6 +181,12 @@ load-plugins = [
 # Pylint CodeStyle plugin
 # consider-using-assignment-expr - decision to use := better left to devs
 # consider-using-assignment-expr - too opinionated
+# ---
+# wrong-import-order - ruff's isort treats `homeassistant` as first-party
+#   (known-first-party); ruff is the authority for import ordering.
+# unused-argument / redefined-outer-name / protected-access - pytest fixtures
+#   are passed for their side effects, shadow the fixture function name, and
+#   reach into client internals in conftest; ruff (SLF001) still guards source.
 disable = [
     "duplicate-code",
     "line-too-long",
@@ -166,6 +198,10 @@ disable = [
     "too-many-positional-arguments",
     "consider-using-assignment-expr",
     "consider-using-tuple",
+    "wrong-import-order",
+    "unused-argument",
+    "redefined-outer-name",
+    "protected-access",
 ]
 
 [tool.pylint.format]
@@ -175,6 +211,12 @@ min-similarity-lines = 7
 
 [tool.mypy]
 python_version = "3.13"
+# The integration package lives under custom_components/ (a namespace package
+# with no __init__.py). Without explicit_package_bases, passing a source file by
+# path lets mypy name it both "glinet.const" and "custom_components.glinet.const"
+# and abort with "source file found twice". This anchors module names to the
+# repo root so the package is always "custom_components.glinet.*".
+explicit_package_bases = true
 show_error_codes = true
 strict = true
 disallow_any_explicit = true

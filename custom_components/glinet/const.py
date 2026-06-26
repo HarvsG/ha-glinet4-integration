@@ -1,6 +1,9 @@
 """Constants for the GL-iNet integration."""
 
+from datetime import timedelta
+
 DOMAIN = "glinet"
+SCAN_INTERVAL = timedelta(seconds=30)
 DATA_GLINET = "glinet"
 API_PATH = "/rpc"
 GLINET_FRIENDLY_NAME = "GL-iNet"

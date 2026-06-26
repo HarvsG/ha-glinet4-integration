@@ -1,0 +1,9 @@
+[
+  {
+    "peer_id": 1,
+    "tunnel_id": 100,
+    "type": "wireguard",
+    "status": 1,
+    "enabled": true
+  }
+]

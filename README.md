@@ -37,6 +37,17 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 8. `ln -s /workspaces/glinet/custom_components/glinet`
 9. You may need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwritten if you rebuild the container
 
+## Testing
+
+```bash
+scripts/test          # run the suite across every router profile
+```
+
+The suite is driven by per-model/firmware "profiles" under `tests/fixtures/` and
+runs every test against each one. To add a router, capture it with
+`scripts/capture-fixtures` (it sanitises MACs/IPs/secrets) and the suite picks it
+up automatically. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
+
 ## TODO
 
 - [ ] Handle all the errors gracefully, including empty client lists that happen after a glinet device restart.
@@ -45,8 +56,8 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
   - worth considering you can have multiple clients, most of the API endpoints act on the last used client config. Can we get a list from the API and create switches for all? Maybe (router/vpn/status?)
 - [ ] Allow deletion of unhelpful device tracker devices/entities, [docs](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices), [example](https://github.com/home-assistant/core/pull/73293/commits/9c253c6072cf60f92228051d918fd550d38b6ac3)
 - [ ] Enable strict type checking with mypy and a github action
-- [ ] Add tests - will need to mock the API
-- [ ] Detect and create a re-configure entry if the password changes
+- [x] Add tests - will need to mock the API
+- [x] Detect and create a re-configure entry if the password changes (reauth flow)
 - [ ] Enable support for `https` as well as `http` and consider enabling it by default.
 - [ ] Static type gli4py and then enable static typing on this repo
 - [ ] Add features:

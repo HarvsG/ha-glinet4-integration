@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Capture and sanitise a live router into a new test profile under
+# tests/fixtures/<profile-id>/. The whole suite then runs against it with no
+# code changes (the profile is discovered by tests/conftest.py).
+#
+#   GLINET_PASSWORD=... scripts/capture-fixtures \
+#       --host http://192.168.8.1 --username root --profile-id flint3
+#
+# Only read-only endpoints are called; no router state is changed.
+set -e
+
+cd "$(dirname "$0")/.."
+
+uv run --no-project --python 3.13 \
+  --with gli4py==0.0.17b3 \
+  python scripts/capture_fixtures.py "$@"

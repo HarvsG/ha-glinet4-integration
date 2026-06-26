@@ -1,0 +1,225 @@
+{
+  "client": [
+    {
+      "auto_remove_offline": false,
+      "cable_total": 3,
+      "wireless_total": 11
+    }
+  ],
+  "network": [
+    {
+      "interface": "REDACTED",
+      "online": true,
+      "up": false
+    },
+    {
+      "interface": "REDACTED",
+      "online": true,
+      "up": false
+    },
+    {
+      "interface": "REDACTED",
+      "online": true,
+      "up": false
+    },
+    {
+      "interface": "REDACTED",
+      "online": true,
+      "up": false
+    },
+    {
+      "interface": "REDACTED",
+      "online": true,
+      "up": false
+    },
+    {
+      "interface": "REDACTED",
+      "online": true,
+      "up": false
+    },
+    {
+      "interface": "REDACTED",
+      "online": true,
+      "up": false
+    },
+    {
+      "interface": "REDACTED",
+      "online": true,
+      "up": false
+    },
+    {
+      "interface": "REDACTED",
+      "online": true,
+      "up": true
+    },
+    {
+      "interface": "REDACTED",
+      "online": true,
+      "up": false
+    }
+  ],
+  "service": [
+    {
+      "name": "name-14",
+      "status": 1
+    },
+    {
+      "name": "name-15",
+      "status": 0
+    },
+    {
+      "name": "name-16",
+      "status": 1
+    },
+    {
+      "name": "name-17",
+      "status": 0
+    },
+    {
+      "name": "name-18",
+      "status": 0
+    },
+    {
+      "name": "name-19",
+      "status": 0
+    },
+    {
+      "name": "name-20",
+      "status": 0
+    },
+    {
+      "name": "name-21",
+      "status": 0
+    },
+    {
+      "name": "name-22",
+      "status": 0
+    }
+  ],
+  "system": {
+    "content_protection_enabled": false,
+    "cpu": {
+      "temperature": 47
+    },
+    "ddns_enabled": true,
+    "dpi_info": {
+      "lib_update_time": "REDACTED",
+      "lib_version": "REDACTED",
+      "status": "1"
+    },
+    "flash_app": 458964992,
+    "flash_free": 7238369280,
+    "flash_total": 7818182656,
+    "flow_statistics_enabled": false,
+    "guest_ip": "192.0.2.2",
+    "guest_netmask": "192.0.2.1",
+    "iot_ip": "192.0.2.4",
+    "iot_netmask": "192.0.2.1",
+    "ipv6_enabled": false,
+    "lan_ip": "192.0.2.3",
+    "lan_netmask": "192.0.2.1",
+    "load_average": [
+      0.13,
+      0.08,
+      0.01
+    ],
+    "memory_buff_cache": 284426240,
+    "memory_free": 328925184,
+    "memory_total": 1037430784,
+    "mode": 0,
+    "netnat_enabled": false,
+    "prio_enabled": false,
+    "qos_enabled": false,
+    "sqm_enabled": true,
+    "time_sync_status": true,
+    "timestamp": 1782198862,
+    "tzoffset": "REDACTED",
+    "uptime": 695435.84
+  },
+  "wifi": [
+    {
+      "band": "REDACTED",
+      "channel": 6,
+      "encryption": "psk2",
+      "guest": false,
+      "hidden": false,
+      "init": true,
+      "iot": false,
+      "mld": false,
+      "name": "name-3",
+      "passwd": null,
+      "ssid": "ssid-2",
+      "up": true
+    },
+    {
+      "band": "REDACTED",
+      "channel": 149,
+      "encryption": "sae",
+      "guest": false,
+      "hidden": false,
+      "init": true,
+      "iot": false,
+      "mld": false,
+      "name": "name-5",
+      "passwd": null,
+      "ssid": "ssid-4",
+      "up": true
+    },
+    {
+      "band": "REDACTED",
+      "channel": 6,
+      "encryption": "psk2",
+      "guest": true,
+      "hidden": false,
+      "init": false,
+      "iot": false,
+      "mld": false,
+      "name": "name-7",
+      "passwd": null,
+      "ssid": "ssid-6",
+      "up": false
+    },
+    {
+      "band": "REDACTED",
+      "channel": 149,
+      "encryption": "psk2",
+      "guest": true,
+      "hidden": false,
+      "init": false,
+      "iot": false,
+      "mld": false,
+      "name": "name-9",
+      "passwd": null,
+      "ssid": "ssid-8",
+      "up": false
+    },
+    {
+      "band": "REDACTED",
+      "channel": 6,
+      "encryption": "psk2",
+      "guest": false,
+      "hidden": false,
+      "init": false,
+      "iot": true,
+      "mld": false,
+      "name": "name-11",
+      "passwd": null,
+      "ssid": "ssid-10",
+      "up": false
+    },
+    {
+      "band": "REDACTED",
+      "channel": 149,
+      "encryption": "psk2",
+      "guest": false,
+      "hidden": false,
+      "init": false,
+      "iot": true,
+      "mld": false,
+      "name": "name-13",
+      "passwd": null,
+      "ssid": "ssid-12",
+      "up": false
+    }
+  ]
+}

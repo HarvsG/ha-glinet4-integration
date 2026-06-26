@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "lan_enabled": false,
+  "lan_ip": "REDACTED",
+  "masq": false,
+  "run_exit_node": false,
+  "wan_enabled": false
+}

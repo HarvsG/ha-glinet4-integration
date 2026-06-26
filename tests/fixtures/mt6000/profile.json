@@ -1,0 +1,30 @@
+{
+  "id": "mt6000",
+  "model": "MT6000",
+  "firmware_version": "4.9.0",
+  "factory_mac": "00:11:22:00:00:01",
+  "title": "GL-iNet MT6000",
+  "description": "Real, sanitised capture from a live GL-iNet Flint 2 (MT6000). WireGuard and Tailscale were not active on this router, so those responses are hand-authored to exercise the code paths.",
+  "capabilities": {
+    "has_wireguard": true,
+    "has_tailscale": true,
+    "tailscale_connected": true
+  },
+  "endpoints": {
+    "tailscale_configured": true,
+    "tailscale_connection_state": "CONNECTED"
+  },
+  "expected": {
+    "connected_client_count": 14,
+    "tracked_device_count": 14,
+    "unnamed_client_count": 0,
+    "wifi_iface_count": 6,
+    "wireguard_client_count": 1,
+    "wireguard_connection_count": 1
+  },
+  "semantic": {
+    "cpu_temp": "47",
+    "load_avg1": "0.13",
+    "uptime_seconds": 695435.84
+  }
+}

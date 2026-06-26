@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Run the integration test suite (parametrized over every router profile).
+#
+#   scripts/test                       # whole suite
+#   scripts/test tests/test_sensor.py  # a subset
+#   scripts/test --snapshot-update     # regenerate syrupy snapshots
+#
+# Uses an ephemeral uv environment with the pinned test dependencies, matching
+# .github/workflows/pytest.yml, so it needs no project sync or lockfile.
+set -e
+
+cd "$(dirname "$0")/.."
+
+uv run --no-project --python 3.13 \
+  --with pytest-homeassistant-custom-component==0.13.313 \
+  --with gli4py==0.0.17b3 \
+  pytest "$@"

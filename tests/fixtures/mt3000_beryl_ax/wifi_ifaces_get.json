@@ -1,0 +1,28 @@
+{
+  "wifi2g": {
+    "bssid": "00:11:22:00:00:10",
+    "enabled": true,
+    "encryption": "psk2",
+    "guest": false,
+    "hidden": false,
+    "init": true,
+    "iot": false,
+    "key": null,
+    "name": "name-3",
+    "random_bssid": false,
+    "ssid": "ssid-2"
+  },
+  "wifi5g": {
+    "bssid": "00:11:22:00:00:13",
+    "enabled": true,
+    "encryption": "sae",
+    "guest": false,
+    "hidden": false,
+    "init": true,
+    "iot": false,
+    "key": null,
+    "name": "name-5",
+    "random_bssid": false,
+    "ssid": "ssid-4"
+  }
+}

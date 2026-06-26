@@ -26,9 +26,15 @@ repos:
         entry: uv run mypy
         language: system
         types: [python]
+        # mypy runs in strict mode against the integration source only; the test
+        # suite leans on AsyncMock and pytest fixtures that strict typing can't
+        # model, so it is exercised by pytest rather than mypy.
+        exclude: ^(tests|scripts)/
         require_serial: true
       - id: pylint
         name: pylint
+        # Additional disables (wrong-import-order, unused-argument, pytest fixture
+        # friction) live in [tool.pylint.messages_control] in pyproject.toml.
         entry: uv run pylint --disable=import-error,fixme,line-too-long,invalid-name,too-many-public-methods,abstract-method,overridden-final-method,too-many-instance-attributes,too-many-public-methods,too-few-public-methods,too-many-branches
         language: system
         types: [python]
@@ -43,7 +49,11 @@ repos:
     rev: v3.1.0
     hooks:
       - id: prettier
-        exclude: ^custom_components/google_home/manifest\.json$
+        # tests/fixtures are captured router responses authored by
+        # scripts/capture_fixtures.py + synthesize_profiles.py, and tests/snapshots
+        # are syrupy-generated; both own their formatting, so keep prettier off
+        # them (otherwise it fights the generators on every regeneration).
+        exclude: ^(custom_components/google_home/manifest\.json|tests/(fixtures|snapshots)/)
   - repo: https://github.com/cdce8p/python-typing-update
     rev: v0.7.0
     hooks:

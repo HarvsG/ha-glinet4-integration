@@ -1,0 +1,29 @@
+{
+  "id": "mt3000_beryl_ax",
+  "model": "MT3000",
+  "firmware_version": "4.7.0",
+  "factory_mac": "00:11:22:00:03:01",
+  "title": "GL-iNet MT3000",
+  "description": "Synthetic Beryl AX (MT3000): dual-band, no VPN.",
+  "capabilities": {
+    "has_wireguard": false,
+    "has_tailscale": false,
+    "tailscale_connected": false
+  },
+  "endpoints": {
+    "tailscale_configured": false
+  },
+  "expected": {
+    "connected_client_count": 14,
+    "tracked_device_count": 14,
+    "unnamed_client_count": 0,
+    "wifi_iface_count": 2,
+    "wireguard_client_count": 0,
+    "wireguard_connection_count": 0
+  },
+  "semantic": {
+    "cpu_temp": "47",
+    "load_avg1": "0.13",
+    "uptime_seconds": 695435.84
+  }
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "peer_id": 1,
+    "name": "wg-test",
+    "group_id": 10,
+    "tunnel_id": 100
+  }
+]

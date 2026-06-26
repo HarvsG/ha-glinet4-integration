@@ -1,0 +1,34 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Run pytest
+        # Ephemeral uv env: no project build required (tests import the
+        # integration via pythonpath), and the lockfile is left untouched.
+        # Versions mirror the `test` dependency group in pyproject.toml. The
+        # suite is parametrized over every router profile in-process, so a
+        # single job already covers the whole matrix; --snapshot-update is
+        # deliberately omitted so any drift in the committed snapshots fails CI.
+        run: >
+          uv run --no-project --python 3.13
+          --with pytest-homeassistant-custom-component==0.13.313
+          --with gli4py==0.0.17b3
+          --with pytest-cov
+          pytest --cov=custom_components/glinet --cov-report=term-missing

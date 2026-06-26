@@ -1,0 +1,80 @@
+{
+  "guest2g": {
+    "bssid": "00:11:22:00:00:11",
+    "enabled": false,
+    "encryption": "psk2",
+    "guest": true,
+    "hidden": false,
+    "init": false,
+    "iot": false,
+    "key": null,
+    "name": "name-7",
+    "random_bssid": true,
+    "ssid": "ssid-41"
+  },
+  "guest5g": {
+    "bssid": "00:11:22:00:00:14",
+    "enabled": false,
+    "encryption": "psk2",
+    "guest": true,
+    "hidden": false,
+    "init": false,
+    "iot": false,
+    "key": null,
+    "name": "name-9",
+    "random_bssid": true,
+    "ssid": "ssid-8"
+  },
+  "iot2g": {
+    "bssid": "00:11:22:00:00:12",
+    "enabled": false,
+    "encryption": "psk2",
+    "guest": false,
+    "hidden": false,
+    "init": false,
+    "iot": true,
+    "key": null,
+    "name": "name-11",
+    "random_bssid": true,
+    "ssid": "ssid-10"
+  },
+  "iot5g": {
+    "bssid": "00:11:22:00:00:15",
+    "enabled": false,
+    "encryption": "psk2",
+    "guest": false,
+    "hidden": false,
+    "init": false,
+    "iot": true,
+    "key": null,
+    "name": "name-13",
+    "random_bssid": true,
+    "ssid": "ssid-12"
+  },
+  "wifi2g": {
+    "bssid": "00:11:22:00:00:10",
+    "enabled": true,
+    "encryption": "psk2",
+    "guest": false,
+    "hidden": false,
+    "init": true,
+    "iot": false,
+    "key": null,
+    "name": "name-3",
+    "random_bssid": false,
+    "ssid": "ssid-2"
+  },
+  "wifi5g": {
+    "bssid": "00:11:22:00:00:13",
+    "enabled": true,
+    "encryption": "sae",
+    "guest": false,
+    "hidden": false,
+    "init": true,
+    "iot": false,
+    "key": null,
+    "name": "name-5",
+    "random_bssid": false,
+    "ssid": "ssid-4"
+  }
+}
