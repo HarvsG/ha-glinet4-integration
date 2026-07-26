@@ -45,7 +45,7 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
   - worth considering you can have multiple clients, most of the API endpoints act on the last used client config. Can we get a list from the API and create switches for all? Maybe (router/vpn/status?)
 - [ ] Allow deletion of unhelpful device tracker devices/entities, [docs](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices), [example](https://github.com/home-assistant/core/pull/73293/commits/9c253c6072cf60f92228051d918fd550d38b6ac3)
 - [ ] Enable strict type checking with mypy and a github action
-- [ ] Add tests - will need to mock the API
+- [x] Add tests - will need to mock the API
 - [x] Detect and create a re-configure entry if the password changes
 - [ ] Enable support for `https` as well as `http` and consider enabling it by default.
 - [ ] Static type gli4py and then enable static typing on this repo

@@ -6,7 +6,9 @@ build-backend = "hatchling.build"
 name = "glinet"
 description = "Home Assistant GL-iNet community integration"
 readme = "README.md"
-requires-python = ">=3.13.2"
+# Upper bound: homeassistant 2026.2.3 and pytest-homeassistant-custom-component
+# 0.13.316 do not support Python 3.14; raise it together with those pins
+requires-python = ">=3.13.2,<3.14"
 dynamic = ["version"]
 dependencies = [
     "homeassistant>=2025.9.0",
@@ -15,11 +17,17 @@ dependencies = [
 [dependency-groups]
 dev = [
     "codespell>=2.4.1",
+    # Must match the requirement pinned in custom_components/glinet/manifest.json
+    "gli4py==0.0.17b3",
     "homeassistant-stubs==2026.2.3",
     "mypy>=1.16.1",
     "PyGithub>=2.6",
     "pylint>=3.3.7",
     "pytest>=8.3.5",
+    "pytest-cov>=7.0.0",
+    # Pins homeassistant==2026.2.3 exactly; bump in lockstep with homeassistant
+    # and homeassistant-stubs. NOTE: 0.13.317+ requires Python >= 3.14.
+    "pytest-homeassistant-custom-component==0.13.316",
     "ruff>=0.12.0",
     "types-requests<2.32.4.20260108",
     "voluptuous-stubs>=0.1.1",
@@ -133,6 +141,14 @@ ignore = [
     "ISC001",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "SLF001", # tests assert on private state such as router._connect_error
+    "TC001", # TYPE_CHECKING import blocks are noise in tests
+    "TC002",
+    "TC003",
+]
+
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
 mark-parentheses = false
@@ -181,6 +197,17 @@ disallow_any_explicit = true
 disallow_any_unimported = true
 warn_no_return = true
 warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+# Home Assistant's loader imports the custom_components namespace package
+# from the repository root
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["custom_components/glinet"]
 
 [tool.codespell]
 quiet-level = 2
