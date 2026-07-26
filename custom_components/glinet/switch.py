@@ -1,4 +1,4 @@
-"""Support for turning on and off Pi-hole system."""
+"""Switch platform for the GL-iNet integration."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     _: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up the Pi-hole switch."""
+    """Set up GL-iNet switches."""
     router: GLinetRouter = entry.runtime_data
     switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch] = []
     if router.wireguard_clients:

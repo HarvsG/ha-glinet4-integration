@@ -1,4 +1,4 @@
-"""Support for turning on and off Pi-hole system."""
+"""Button platform for the GL-iNet integration."""
 
 from __future__ import annotations
 
