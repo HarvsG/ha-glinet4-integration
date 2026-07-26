@@ -18,11 +18,10 @@ from homeassistant.util.dt import utcnow
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .router import GLinetRouter
+    from .router import GLinetConfigEntry, GLinetRouter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,8 +36,7 @@ class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=Tr
 SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
     SystemStatusEntityDescription(
         key="cpu_temp",
-        name="CPU temperature",
-        has_entity_name=True,
+        translation_key="cpu_temp",
         icon="mdi:thermometer",
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class=SensorDeviceClass.TEMPERATURE,
@@ -51,8 +49,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
     ),
     SystemStatusEntityDescription(
         key="load_avg1",
-        name="Load avg (1m)",
-        has_entity_name=True,
+        translation_key="load_avg1",
         icon="mdi:cpu-64-bit",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
@@ -64,8 +61,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
     ),
     SystemStatusEntityDescription(
         key="load_avg5",
-        name="Load avg (5m)",
-        has_entity_name=True,
+        translation_key="load_avg5",
         icon="mdi:cpu-64-bit",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
@@ -80,8 +76,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
     ),
     SystemStatusEntityDescription(
         key="load_avg15",
-        name="Load avg (15m)",
-        has_entity_name=True,
+        translation_key="load_avg15",
         icon="mdi:cpu-64-bit",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
@@ -96,8 +91,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
     ),
     SystemStatusEntityDescription(
         key="memory_use",
-        name="Memory usage",
-        has_entity_name=True,
+        translation_key="memory_use",
         icon="mdi:memory",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
@@ -119,8 +113,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
     ),
     SystemStatusEntityDescription(
         key="flash_use",
-        name="Flash usage",
-        has_entity_name=True,
+        translation_key="flash_use",
         icon="mdi:harddisk",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
@@ -144,12 +137,12 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
 
 
 async def async_setup_entry(
-    _: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    _: HomeAssistant, entry: GLinetConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up sensors."""
     _LOGGER.debug("Setting up GL-iNet Sensors")
 
-    router: GLinetRouter = entry.runtime_data
+    router = entry.runtime_data
     sensors: list[SystemStatusSensor | SystemUptimeSensor] = [
         SystemStatusSensor(router=router, entity_description=description)
         for description in SYSTEM_SENSORS
@@ -160,8 +153,7 @@ async def async_setup_entry(
             router=router,
             entity_description=SystemStatusEntityDescription(
                 key="uptime",
-                name="Uptime",
-                has_entity_name=True,
+                translation_key="uptime",
                 icon="mdi:clock",
                 device_class=SensorDeviceClass.TIMESTAMP,
                 entity_category=EntityCategory.DIAGNOSTIC,
@@ -170,9 +162,12 @@ async def async_setup_entry(
         )
     )
 
-    for sensor in sensors:
-        if sensor.native_value is None:
-            sensors.remove(sensor)
+    # Filter out sensors this router model doesn't report (e.g. no CPU
+    # temperature), but only when we have status data to judge by: if the
+    # first poll failed, dropping every sensor would leave them all missing
+    # until the entry is reloaded.
+    if router.system_status:
+        sensors = [sensor for sensor in sensors if sensor.native_value is not None]
 
     async_add_entities(sensors, True)
 
@@ -190,6 +185,8 @@ def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> d
 class GliSensorBase(SensorEntity):
     """GL-iNet sensor base class."""
 
+    _attr_has_entity_name = True
+
     def __init__(
         self,
         router: GLinetRouter,
@@ -204,6 +201,11 @@ class GliSensorBase(SensorEntity):
     def unique_id(self) -> str:
         """Return the unique id of the switch."""
         return f"glinet_sensor/{self.router.factory_mac}/system_{self.entity_description.key}"
+
+    @property
+    def available(self) -> bool:
+        """Return True when the router is reachable."""
+        return self.router.available
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -230,7 +232,8 @@ class SystemUptimeSensor(GliSensorBase):
     @property
     def native_value(self) -> datetime | None:
         """Return the native value of the sensor."""
-        self._current_value = _uptime_calculation(
-            self.router.system_status["uptime"], self._current_value
-        )
+        uptime = self.router.system_status.get("uptime")
+        if uptime is None:
+            return self._current_value
+        self._current_value = _uptime_calculation(uptime, self._current_value)
         return self._current_value

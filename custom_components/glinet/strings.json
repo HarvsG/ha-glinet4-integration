@@ -16,6 +16,28 @@
           "password": "The password you use to login to your router's admin page, this is unlikely to be the same as your WiFi password",
           "consider_home": "Seconds to wait before deciding that a device is away"
         }
+      },
+      "reauth_confirm": {
+        "description": "The password for {host} is no longer valid. Enter the current password to re-authenticate.",
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]"
+        },
+        "data_description": {
+          "password": "The password you use to login to your router's admin page, this is unlikely to be the same as your WiFi password"
+        }
+      },
+      "reconfigure": {
+        "description": "Update the connection settings for your GL-iNet router",
+        "data": {
+          "username": "[%key:common::config_flow::data::username%]",
+          "host": "[%key:common::config_flow::data::host%]",
+          "password": "[%key:common::config_flow::data::password%]"
+        },
+        "data_description": {
+          "username": "This is always 'root' by default on GL-iNet devices",
+          "host": "The hostname or IP address of your GL-iNet router.",
+          "password": "The password you use to login to your router's admin page, this is unlikely to be the same as your WiFi password"
+        }
       }
     },
     "error": {
@@ -24,25 +46,40 @@
       "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]",
+      "unique_id_mismatch": "This router's MAC address does not match the previously configured router"
     }
   },
   "options": {
     "step": {
       "init": {
         "data": {
-          "username": "[%key:common::config_flow::data::username%]",
-          "host": "[%key:common::config_flow::data::host%]",
-          "password": "[%key:common::config_flow::data::password%]",
           "consider_home": "Consider Home"
         },
         "data_description": {
-          "username": "This is always 'root' by default on GL-iNet devices",
-          "host": "The hostname or IP address of your GL-iNet router.",
-          "password": "The password you use to login to your router's admin page, this is unlikely to be the same as your WiFi password",
           "consider_home": "Seconds to wait before deciding that a device is away"
         }
       }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cpu_temp": { "name": "CPU temperature" },
+      "load_avg1": { "name": "Load avg (1m)" },
+      "load_avg5": { "name": "Load avg (5m)" },
+      "load_avg15": { "name": "Load avg (15m)" },
+      "memory_use": { "name": "Memory usage" },
+      "flash_use": { "name": "Flash usage" },
+      "uptime": { "name": "Uptime" }
+    },
+    "switch": {
+      "tailscale": { "name": "Tailscale" },
+      "wireguard_client": { "name": "WG Client {client_name}" }
+    },
+    "button": {
+      "reboot": { "name": "Reboot" }
     }
   }
 }

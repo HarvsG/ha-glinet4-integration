@@ -13,21 +13,20 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-    from .router import ClientDevInfo, GLinetRouter
+    from .router import ClientDevInfo, GLinetConfigEntry, GLinetRouter
 
 DEFAULT_DEVICE_NAME = "Unknown device"
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: GLinetConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up device tracker for GLinet component."""
-    router: GLinetRouter = entry.runtime_data
+    router = entry.runtime_data
     tracked: set[str] = set()
 
     @callback

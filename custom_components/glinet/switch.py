@@ -7,23 +7,21 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
-from homeassistant.core import callback
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .router import GLinetRouter, WifiInterface, WireGuardClient
+    from .router import GLinetConfigEntry, GLinetRouter, WifiInterface, WireGuardClient
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    _: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    _: HomeAssistant, entry: GLinetConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up GL-iNet switches."""
-    router: GLinetRouter = entry.runtime_data
+    router = entry.runtime_data
     switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch] = []
     if router.wireguard_clients:
         # TODO detect all configured wireguard, openvpn, shadowsocks and
@@ -60,6 +58,11 @@ class GliSwitchBase(SwitchEntity):
     def entity_category(self) -> EntityCategory:
         """A config entity."""
         return EntityCategory.CONFIG
+
+    @property
+    def available(self) -> bool:
+        """Return True when the router is reachable."""
+        return self._router.available
 
 
 class WifiApSwitch(GliSwitchBase):
@@ -139,7 +142,6 @@ class WifiApSwitch(GliSwitchBase):
             await self._router.update_wifi_ifaces_state()
             await self.async_update()
 
-    @callback
     async def async_update(self) -> None:
         """Update the switch state."""
         _LOGGER.debug(
@@ -154,12 +156,7 @@ class TailscaleSwitch(GliSwitchBase):
     """A tailscale switch."""
 
     _attr_icon = "mdi:vpn"  # TODO would be better to have MDI style icons for each of the VPN types
-
-    @property
-    def name(self) -> str:
-        """Return the name of the switch."""
-        # TODO we could add the login_name here, but we lose access to that value when the connection drops
-        return "Tailscale"
+    _attr_translation_key = "tailscale"
 
     @property
     def unique_id(self) -> str:
@@ -207,7 +204,6 @@ class TailscaleSwitch(GliSwitchBase):
         """Enabled by default."""
         return self._router.tailscale_configured
 
-    @callback
     async def async_update(self) -> None:
         """Update the switch state. Only one tailscale connection can be configured so this is not expensive."""
         _LOGGER.debug("Updating Tailscale switch state")
@@ -226,15 +222,11 @@ class WireGuardSwitch(GliSwitchBase):
         """Initialize a GLinet device."""
         super().__init__(router)
         self._client = client
-        self._attr_device_info = router.device_info
         self._attr_is_on: bool = False
+        self._attr_translation_placeholders = {"client_name": client.name}
 
     _attr_icon = "mdi:vpn"  # TODO would be better to have MDI style icons for each of the VPN types
-
-    @property
-    def name(self) -> str:
-        """Return the name of the switch."""
-        return f"WG Client {self._client.name}"
+    _attr_translation_key = "wireguard_client"
 
     @property
     def unique_id(self) -> str:
@@ -282,8 +274,9 @@ class WireGuardSwitch(GliSwitchBase):
             await self._router.update_wireguard_client_state()
             await self.async_update()
 
-    @callback
     async def async_update(self) -> None:
         """Update the switch state. A user may have many so don't call the API for each."""
         _LOGGER.debug("Updating WG client switch state from stored info")
-        self._attr_is_on = self._client in (self._router.wireguard_connections or [])
+        self._attr_is_on = self._client in (
+            self._router.connected_wireguard_clients or []
+        )
