@@ -199,7 +199,7 @@ class GLinetRouter:
         for entry in track_entries:
             if entry.domain == TRACKER_DOMAIN:
                 self._devices[entry.unique_id] = ClientDevInfo(
-                    entry.unique_id, entry.original_name
+                    entry.unique_id, entry.name or entry.original_name
                 )
 
         # Update device tracker and switch entities
@@ -425,8 +425,8 @@ class GLinetRouter:
 
             alias = dev_info.get("alias", "").strip()
             name = dev_info.get("name", "").strip()
-            # Skip if both alias and name are empty
-            if not alias and not name:
+            # Skip if both alias and name are empty or unassigned
+            if not alias and (not name or name == "*"):
                 continue
 
             new_device = True
@@ -716,10 +716,10 @@ class ClientDevInfo:
             else:
                 # If no alias, fallback to auto-assigned name field
                 name = dev_info.get("name", "")
-                if name == "*" or not name.strip():
-                    self._name = self._mac.replace(":", "_")
-                else:
+                if name and name.strip() and name != "*":
                     self._name = name
+                elif not self._name:
+                    self._name = self._mac.replace(":", "_")
             self._ip_address = dev_info.get("ip")
             self._last_activity = now
             self._connected = dev_info.get("online", False)

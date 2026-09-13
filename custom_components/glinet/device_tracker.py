@@ -141,6 +141,9 @@ class GLinetDevice(ScannerEntity):
     def async_on_demand_update(self) -> None:
         """Update state."""
         self._device = self._router.devices[self._device.mac]
+        if self._device.name:
+            self._attr_hostname = self._device.name
+        self._attr_ip_address = self._device.ip_address
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
