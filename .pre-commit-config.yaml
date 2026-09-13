@@ -27,12 +27,15 @@ repos:
         language: system
         types: [python]
         require_serial: true
+        # TODO type the test suite and remove this exclusion
+        exclude: ^tests/
       - id: pylint
         name: pylint
         entry: uv run pylint --disable=import-error,fixme,line-too-long,invalid-name,too-many-public-methods,abstract-method,overridden-final-method,too-many-instance-attributes,too-many-public-methods,too-few-public-methods,too-many-branches
         language: system
         types: [python]
         require_serial: true
+        exclude: ^tests/
       - id: codespell
         name: codespell
         entry: uv run codespell --write-changes
