@@ -270,9 +270,12 @@ async def test_router_async_init_ssl_error(
     with (
         patch.object(router, "_create_api"),
         patch.object(router, "renew_token", side_effect=wrapped_err),
-        pytest.raises(ConfigEntryNotReady),
+        pytest.raises(ConfigEntryNotReady) as exc_info,
     ):
         await router.async_init()
 
+    assert "SSL certificate verification failed for GL-iNet router" in str(
+        exc_info.value
+    )
     # The broad exception traceback should not have been logged
     assert "Error connecting to GL-iNet router" not in caplog.text

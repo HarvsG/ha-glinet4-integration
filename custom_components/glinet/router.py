@@ -154,11 +154,15 @@ class GLinetRouter:
         except ConfigEntryAuthFailed:
             raise
         except Exception as exc:
-            if not is_ssl_error(exc):
-                _LOGGER.exception(
-                    "Error connecting to GL-iNet router %s",
-                    self._host,
-                )
+            if is_ssl_error(exc):
+                raise ConfigEntryNotReady(
+                    f"SSL certificate verification failed for GL-iNet router {self._host}. "
+                    "If using a self-signed certificate, disable SSL verification in integration options or reconfiguration"
+                ) from exc
+            _LOGGER.exception(
+                "Error connecting to GL-iNet router %s",
+                self._host,
+            )
             raise ConfigEntryNotReady from exc
         try:
             router_info = await self._update_platform(self._api.router_info)
