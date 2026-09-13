@@ -15,7 +15,13 @@ from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
     DEFAULT_CONSIDER_HOME,
 )
-from homeassistant.const import CONF_HOST, CONF_MAC, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_MAC,
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    CONF_VERIFY_SSL,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.exceptions import HomeAssistantError
@@ -26,6 +32,7 @@ from homeassistant.helpers.device_registry import format_mac
 from .const import (
     API_PATH,
     CONF_TITLE,
+    DEFAULT_VERIFY_SSL,
     DOMAIN,
     GLINET_DEFAULT_PW,
     GLINET_DEFAULT_URL,
@@ -56,6 +63,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()
         ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900)),
+        vol.Optional(
+            CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
+        ): selector.BooleanSelector(),
     }
 )
 
@@ -70,6 +80,9 @@ STEP_RECONFIGURE_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_PASSWORD): selector.TextSelector(
             selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
         ),
+        vol.Optional(
+            CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
+        ): selector.BooleanSelector(),
     }
 )
 
@@ -86,6 +99,9 @@ OPTIONS_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()
         ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900)),
+        vol.Optional(
+            CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
+        ): selector.BooleanSelector(),
     }
 )
 
@@ -93,13 +109,21 @@ OPTIONS_SCHEMA = vol.Schema(
 class TestingHub:
     """Testing class to test connection and authentication."""
 
-    def __init__(self, username: str, host: str, hass: HomeAssistant) -> None:
+    def __init__(
+        self,
+        username: str,
+        host: str,
+        hass: HomeAssistant,
+        verify_ssl: bool = DEFAULT_VERIFY_SSL,
+    ) -> None:
         """Initialize."""
         self.host: str = host
         self.username: str = username
         self.router: GLinet = GLinet(
             base_url=self.host + API_PATH,
-            client=AiohttpClient(session=async_get_clientsession(hass)),
+            client=AiohttpClient(
+                session=async_get_clientsession(hass, verify_ssl=verify_ssl)
+            ),
             sync=False,
         )
         self.router_mac: str = ""
@@ -148,7 +172,10 @@ async def validate_input(
     """
 
     hub = TestingHub(
-        data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME), data[CONF_HOST], hass
+        data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME),
+        data[CONF_HOST],
+        hass,
+        verify_ssl=data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
     )
 
     if not await hub.connect():
@@ -176,6 +203,7 @@ async def validate_input(
             CONF_CONSIDER_HOME: data.get(
                 CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()
             ),
+            CONF_VERIFY_SSL: data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
         },
     }
 
@@ -367,7 +395,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             CONF_CONSIDER_HOME,
                             DEFAULT_CONSIDER_HOME.total_seconds(),
                         ),
-                    )
+                    ),
+                    CONF_VERIFY_SSL: self.config_entry.options.get(
+                        CONF_VERIFY_SSL,
+                        self.config_entry.data.get(
+                            CONF_VERIFY_SSL,
+                            DEFAULT_VERIFY_SSL,
+                        ),
+                    ),
                 },
             ),
         )

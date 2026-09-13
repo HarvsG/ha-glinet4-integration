@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from freezegun.api import FrozenDateTimeFactory
 from gli4py.error_handling import AuthenticationError, TokenError
@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.glinet.const import DOMAIN
 from custom_components.glinet.router import (
     DEVICE_INTERFACE_TYPE_MAP,
     ClientDevInfo,
@@ -21,6 +22,7 @@ from custom_components.glinet.router import (
     GLinetRouter,
 )
 from homeassistant.config_entries import SOURCE_REAUTH
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
 
 from .const import MOCK_STATUS, POLLED_METHODS
@@ -180,3 +182,24 @@ def test_client_dev_info_consider_home(freezer: FrozenDateTimeFactory) -> None:
     freezer.tick(timedelta(seconds=30))
     device.update(None, consider_home=180)
     assert not device.is_connected
+
+
+async def test_router_create_api_verify_ssl(hass: HomeAssistant) -> None:
+    """Test router _create_api respects verify_ssl configuration."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="GL-iNet MT6000",
+        data={
+            CONF_USERNAME: "root",
+            CONF_HOST: "https://192.168.8.1",
+            CONF_PASSWORD: "goodlife",
+        },
+        options={CONF_VERIFY_SSL: False},
+        unique_id="94:83:c4:aa:bb:cc",
+    )
+    with patch(
+        "custom_components.glinet.router.async_get_clientsession"
+    ) as mock_get_session:
+        router = GLinetRouter(hass, entry)
+        router._create_api()
+        mock_get_session.assert_called_once_with(hass, verify_ssl=False)

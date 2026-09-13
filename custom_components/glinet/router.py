@@ -25,6 +25,7 @@ from homeassistant.const import (
     CONF_MODEL,
     CONF_PASSWORD,
     CONF_USERNAME,
+    CONF_VERIFY_SSL,
 )
 from homeassistant.core import callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
@@ -36,7 +37,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
-from .const import API_PATH, DOMAIN
+from .const import API_PATH, DEFAULT_VERIFY_SSL, DOMAIN
 from .utils import adjust_mac
 
 if TYPE_CHECKING:
@@ -217,7 +218,10 @@ class GLinetRouter:
     def _create_api(self) -> GLinet:
         """Optimistically return a GLinet object for connection to the API, no test included."""
         conf = self._entry.data
-        shared_session = async_get_clientsession(self.hass)
+        verify_ssl = self._entry.options.get(
+            CONF_VERIFY_SSL, conf.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+        )
+        shared_session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
         ha_client = AiohttpClient(session=shared_session)
 
         if CONF_PASSWORD in conf:

@@ -10,7 +10,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.glinet.const import DOMAIN
 from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
 from homeassistant.config_entries import SOURCE_DHCP, SOURCE_USER
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
@@ -52,7 +52,7 @@ async def test_user_flow_success(
         CONF_HOST: MOCK_HOST,
         CONF_PASSWORD: "goodlife",
     }
-    assert result["options"] == {CONF_CONSIDER_HOME: 180}
+    assert result["options"] == {CONF_CONSIDER_HOME: 180, CONF_VERIFY_SSL: True}
     assert result["result"].unique_id == MOCK_MAC
 
 
@@ -338,3 +338,43 @@ async def test_options_flow_prefills_from_data_fallback(
         for key in schema.schema
     }
     assert suggested[CONF_CONSIDER_HOME] == 240
+    assert suggested[CONF_VERIFY_SSL] is True
+
+
+async def test_user_flow_disable_verify_ssl(
+    hass: HomeAssistant, mock_glinet: MagicMock, mock_setup_entry: AsyncMock
+) -> None:
+    """Test creating an entry with SSL verification disabled."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    assert result["type"] is FlowResultType.FORM
+
+    user_input = {
+        **USER_INPUT,
+        CONF_HOST: "https://192.168.8.1",
+        CONF_VERIFY_SSL: False,
+    }
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_HOST] == "https://192.168.8.1"
+    assert result["options"][CONF_VERIFY_SSL] is False
+
+
+async def test_options_flow_updates_verify_ssl(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test updating verify_ssl through the options flow."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_CONSIDER_HOME: 180, CONF_VERIFY_SSL: False}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options[CONF_VERIFY_SSL] is False
