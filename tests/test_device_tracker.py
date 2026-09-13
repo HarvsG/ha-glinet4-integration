@@ -7,6 +7,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock
 
 from freezegun.api import FrozenDateTimeFactory
+import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -163,17 +164,26 @@ async def test_restored_registry_entities_recreated(
     assert state.state == STATE_NOT_HOME
 
 
+@pytest.mark.parametrize(
+    "empty_name",
+    [
+        pytest.param("", id="empty_string"),
+        pytest.param("*", id="asterisk"),
+        pytest.param("   ", id="whitespace"),
+    ],
+)
 async def test_device_with_no_name_skipped(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     mock_glinet: MagicMock,
     mock_api: MagicMock,
+    empty_name: str,
 ) -> None:
-    """Test a client with neither alias nor name gets no tracker entity."""
+    """Test a client with neither alias nor valid name gets no tracker entity."""
     clients = deepcopy(MOCK_CLIENTS)
     clients["aa:bb:cc:dd:ee:04"] = {
         "alias": "",
-        "name": "",
+        "name": empty_name,
         "ip": "192.168.8.103",
         "online": True,
         "type": 0,
@@ -189,3 +199,40 @@ async def test_device_with_no_name_skipped(
         registry.async_get_entity_id("device_tracker", DOMAIN, "aa:bb:cc:dd:ee:04")
         is None
     )
+
+
+async def test_restored_device_tracker_name_preserved_on_unassigned_update(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test a restored device tracker preserves its friendly name when client poll reports no name."""
+    mac = "aa:bb:cc:dd:ee:88"
+    mock_config_entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "device_tracker",
+        DOMAIN,
+        mac,
+        config_entry=mock_config_entry,
+        original_name="GL-B1300",
+    )
+
+    clients = deepcopy(MOCK_CLIENTS)
+    clients[mac] = {
+        "alias": "",
+        "name": "*",
+        "ip": "192.168.8.105",
+        "online": True,
+        "type": 2,
+    }
+    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(_entity_id(hass, mac))
+    assert state is not None
+    assert state.name == "GL-B1300"
+    assert state.attributes.get("friendly_name") == "GL-B1300"
