@@ -242,7 +242,9 @@ class SystemUptimeSensor(GliSensorBase):
     @property
     def native_value(self) -> datetime | None:
         """Return the cached boot timestamp, recomputing only on fresh data."""
-        uptime = self.router.system_status["uptime"]
+        if (uptime := self.router.system_status.get("uptime")) is None:
+            return self._attr_native_value
+
         if uptime != self._last_uptime:
             self._last_uptime = uptime
             candidate = _derive_boot_time(uptime)

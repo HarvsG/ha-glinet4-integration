@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  pytest:
+    name: Pytest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest --cov=custom_components/glinet --cov-report=term-missing
