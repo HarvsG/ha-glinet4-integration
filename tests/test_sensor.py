@@ -165,18 +165,23 @@ async def test_uptime_moves_after_reboot(
     assert state is not None
     initial = state.state
 
+    reboot_boot_time = dt_util.utcnow() - timedelta(seconds=5)
     status: dict[str, Any] = deepcopy(MOCK_STATUS)
-    status["system"]["uptime"] = 5.0
-    mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(status)
+    mock_api.router_get_status.side_effect = lambda *_a, **_kw: {
+        **status,
+        "system": {
+            **status["system"],
+            "uptime": (dt_util.utcnow() - reboot_boot_time).total_seconds(),
+        },
+    }
 
-    # Two ticks: one for the router poll to store the new uptime, one for
-    # the entity poll to be certain to read it (both run on the same clock)
+    # Two ticks guarantee that both the router poll and entity poll fire
     await _tick(hass, freezer)
     await _tick(hass, freezer)
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.state != initial
-    expected = (dt_util.utcnow() - timedelta(seconds=5)).replace(microsecond=0)
+    expected = reboot_boot_time.replace(microsecond=0)
     assert dt_util.parse_datetime(state.state) == expected
 
 
