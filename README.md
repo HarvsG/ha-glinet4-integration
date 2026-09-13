@@ -36,6 +36,26 @@ Contributions are welcome, for ideas see the TODO list below or the various `#TO
 7. `mkdir -p /workspaces/core/config/custom_components && cd /workspaces/core/config/custom_components`
 8. `ln -s /workspaces/glinet/custom_components/glinet`
 9. You may need to config a new ssh key inside the container. [Use this](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) - this will be overwritten if you rebuild the container
+10. Since 3.13.X AioHttp breaks parsing of responses with duplicate headers (all GLinet responses) - this is strictly enforced in dev environments and must be disabled by adding `"PYTHONASYNCIODEBUG": ""` to your `.vscode/launch.json`
+    ```
+    "configurations": [
+     {
+       "name": "Home Assistant",
+       "type": "debugpy",
+       "request": "launch",
+       "module": "homeassistant",
+       "justMyCode": false,
+       "args": [
+         "--debug",
+         "-c",
+         "config"
+       ],
+       "env": {
+         "PYTHONASYNCIODEBUG": ""
+       },
+       "preLaunchTask": "Compile English translations"
+     },
+    ```
 
 ## TODO
 
