@@ -180,3 +180,51 @@ def test_client_dev_info_consider_home(freezer: FrozenDateTimeFactory) -> None:
     freezer.tick(timedelta(seconds=30))
     device.update(None, consider_home=180)
     assert not device.is_connected
+
+
+async def test_empty_client_list_ignored_during_reboot_grace(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test an empty client list right after reboot does not disconnect devices."""
+    router: GLinetRouter = init_integration.runtime_data
+    # Ensure devices are tracked
+    assert len(router.devices) > 0
+    test_device = next(iter(router.devices.values()))
+    assert test_device.is_connected
+
+    # Set router uptime to low value (within grace period)
+    router._system_status["uptime"] = 30
+    mock_api.connected_clients.side_effect = None
+    mock_api.connected_clients.return_value = {}
+
+    await router.update_device_trackers()
+    assert test_device.is_connected
+    assert router.connected_devices_count > 0
+
+
+async def test_empty_client_list_processed_after_reboot_grace(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test an empty client list outside grace period updates device connection states."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert len(router.devices) > 0
+    test_device = next(iter(router.devices.values()))
+    assert test_device.is_connected
+
+    # Set router uptime beyond grace period
+    router._system_status["uptime"] = 1000
+    mock_api.connected_clients.side_effect = None
+    mock_api.connected_clients.return_value = {}
+
+    await router.update_device_trackers()
+    assert router.connected_devices_count == 0
+
+    # Advance past consider_home
+    freezer.tick(timedelta(seconds=200))
+    await router.update_device_trackers()
+    assert not test_device.is_connected
