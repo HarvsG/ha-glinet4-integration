@@ -72,7 +72,14 @@
       "load_avg15": { "name": "Load avg (15m)" },
       "memory_use": { "name": "Memory usage" },
       "flash_use": { "name": "Flash usage" },
-      "uptime": { "name": "Uptime" }
+      "uptime": { "name": "Uptime" },
+      "wan_status": {
+        "state": {
+          "connected": "Connected",
+          "failing": "Failing",
+          "disconnected": "Disconnected"
+        }
+      }
     },
     "switch": {
       "tailscale": { "name": "Tailscale" },

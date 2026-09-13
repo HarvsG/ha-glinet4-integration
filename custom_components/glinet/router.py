@@ -38,6 +38,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import API_PATH, DOMAIN
 from .utils import adjust_mac
+from .wan import WanInterfaceState, parse_network_array
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -135,6 +136,9 @@ class GLinetRouter:
         self._wireguard_connections: list[WireGuardClient] | None = None
         self._tailscale_config: dict = {}
         self._tailscale_connection: bool | None = None
+        self._wan_status: dict[str, WanInterfaceState] = {}
+        self._known_wan_interfaces: set[str] = set()
+        self._warned_wan_interfaces: set[str] = set()
 
         # Flow control
         self._late_init_complete: bool = False
@@ -195,7 +199,7 @@ class GLinetRouter:
         for entry in track_entries:
             if entry.domain == TRACKER_DOMAIN:
                 self._devices[entry.unique_id] = ClientDevInfo(
-                    entry.unique_id, entry.original_name
+                    entry.unique_id, entry.name or entry.original_name
                 )
 
         # Update device tracker and switch entities
@@ -354,12 +358,33 @@ class GLinetRouter:
         return response
 
     async def update_system_status(self) -> None:
-        """Update the system status from the API."""
-
+        """Update the system status and WAN interface states from the API."""
         status = await self._update_platform(self._api.router_get_status)
-        # For now only the content of the `system` field seems of use
-        if status:
-            self._system_status = status.get("system", {})
+        if not status:
+            return
+        self._system_status = status.get("system", {})
+        result = parse_network_array(status.get("network", []))
+        self._wan_status = result.states
+
+        for iface in result.malformed_interfaces:
+            if iface not in self._warned_wan_interfaces:
+                _LOGGER.warning(
+                    "GL-iNet router %s returned a malformed entry for WAN interface %s; "
+                    "missing up/online field defaulted to False",
+                    self._host,
+                    iface,
+                )
+                self._warned_wan_interfaces.add(iface)
+
+        currently_up = {name for name, state in result.states.items() if state.up}
+        new_to_register = currently_up - self._known_wan_interfaces
+        if new_to_register:
+            self._known_wan_interfaces.update(new_to_register)
+            async_dispatcher_send(
+                self.hass, self.signal_wan_new, sorted(new_to_register)
+            )
+
+        async_dispatcher_send(self.hass, self.signal_wan_update)
 
     async def update_device_trackers(self) -> None:
         """Update the device trackers."""
@@ -400,8 +425,8 @@ class GLinetRouter:
 
             alias = dev_info.get("alias", "").strip()
             name = dev_info.get("name", "").strip()
-            # Skip if both alias and name are empty
-            if not alias and not name:
+            # Skip if both alias and name are empty or unassigned
+            if not alias and (not name or name == "*"):
                 continue
 
             new_device = True
@@ -536,6 +561,16 @@ class GLinetRouter:
         return f"{DOMAIN}-device-update-{self._factory_mac}"
 
     @property
+    def signal_wan_new(self) -> str:
+        """Dispatcher signal: a never-before-seen WAN interface is now up."""
+        return f"{DOMAIN}-wan-new-{self._factory_mac}"
+
+    @property
+    def signal_wan_update(self) -> str:
+        """Dispatcher signal: WAN states have been refreshed (fired every poll)."""
+        return f"{DOMAIN}-wan-update-{self._factory_mac}"
+
+    @property
     def host(self) -> str:
         """Return router host."""
         return self._host
@@ -625,6 +660,15 @@ class GLinetRouter:
 
         return self._system_status
 
+    @property
+    def wan_status(self) -> dict[str, WanInterfaceState]:
+        """Return the latest WAN interface states keyed by interface name."""
+        return self._wan_status
+
+    def register_known_wan_interfaces(self, interfaces: set[str]) -> None:
+        """Mark interfaces as already-registered so we don't fire signal_wan_new for them."""
+        self._known_wan_interfaces.update(interfaces)
+
 
 @dataclass
 class WireGuardClient:
@@ -672,10 +716,10 @@ class ClientDevInfo:
             else:
                 # If no alias, fallback to auto-assigned name field
                 name = dev_info.get("name", "")
-                if name == "*" or not name.strip():
-                    self._name = self._mac.replace(":", "_")
-                else:
+                if name and name.strip() and name != "*":
                     self._name = name
+                elif not self._name:
+                    self._name = self._mac.replace(":", "_")
             self._ip_address = dev_info.get("ip")
             self._last_activity = now
             self._connected = dev_info.get("online", False)
