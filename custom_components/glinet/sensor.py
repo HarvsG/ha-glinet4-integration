@@ -19,7 +19,13 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
 
-from .wan_sensor import WanStatusSensor
+from .wan import (
+    STATE_CONNECTED,
+    STATE_DISCONNECTED,
+    STATE_FAILING,
+    friendly_name,
+    state_for,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -301,3 +307,70 @@ class SystemUptimeSensor(GliSensorBase):
             if _boot_time_changed(self._attr_native_value, candidate):
                 self._attr_native_value = candidate
         return self._attr_native_value
+
+
+_ICON_FOR_WAN_STATE: dict[str, str] = {
+    STATE_CONNECTED: "mdi:lan-connect",
+    STATE_FAILING: "mdi:lan-disconnect",
+    STATE_DISCONNECTED: "mdi:lan-pending",
+}
+
+
+class WanStatusSensor(SensorEntity):
+    """Sensor showing the connectivity state of one WAN interface."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [STATE_CONNECTED, STATE_FAILING, STATE_DISCONNECTED]
+    _attr_translation_key = "wan_status"
+
+    def __init__(self, router: GLinetRouter, interface: str) -> None:
+        """Initialise a WAN status sensor for the given interface name."""
+        self._router = router
+        self._interface = interface
+        self._attr_unique_id = f"glinet_sensor/{router.factory_mac}/wan_{interface}"
+        self._attr_name = friendly_name(interface)
+        self._attr_device_info = router.device_info
+
+    @property
+    def available(self) -> bool:
+        """Return True when the router is reachable."""
+        return self._router.available
+
+    @property
+    def native_value(self) -> str:
+        """Return one of connected / failing / disconnected."""
+        state = self._router.wan_status.get(self._interface)
+        if state is None:
+            return STATE_DISCONNECTED
+        return state_for(up=state.up, online=state.online)
+
+    @property
+    def icon(self) -> str:
+        """Pick an mdi icon based on the current state."""
+        return _ICON_FOR_WAN_STATE.get(self.native_value, "mdi:lan-pending")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose raw interface name and link-layer state."""
+        state = self._router.wan_status.get(self._interface)
+        return {
+            "interface": self._interface,
+            "up": state.up if state else False,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to the router's per-poll WAN-update signal."""
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                self._router.signal_wan_update,
+                self._handle_update,
+            )
+        )
+
+    @callback
+    def _handle_update(self) -> None:
+        """Re-render this entity's state."""
+        self.async_write_ha_state()

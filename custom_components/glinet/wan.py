@@ -2,7 +2,7 @@
 
 Pure helpers (state mapping, friendly names, malformed-input parsing) live
 here so they can be unit-tested without a Home Assistant harness. The
-WanStatusSensor entity class lives in wan_sensor.
+WanStatusSensor entity class lives in sensor.
 """
 
 from __future__ import annotations
