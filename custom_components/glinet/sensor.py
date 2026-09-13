@@ -58,9 +58,10 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            (la := system_status.get("load_average")) and isinstance(la, list) and la[0]
-        )
-        or None,
+            la[0]
+            if isinstance(la := system_status.get("load_average"), list) and len(la) > 0
+            else None
+        ),
     ),
     SystemStatusEntityDescription(
         key="load_avg5",
@@ -71,12 +72,10 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            (la := system_status.get("load_average"))
-            and isinstance(la, list)
-            and len(la) > 1
-            and la[1]
-        )
-        or None,
+            la[1]
+            if isinstance(la := system_status.get("load_average"), list) and len(la) > 1
+            else None
+        ),
     ),
     SystemStatusEntityDescription(
         key="load_avg15",
@@ -87,12 +86,10 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            (la := system_status.get("load_average"))
-            and isinstance(la, list)
-            and len(la) > 2
-            and la[2]
-        )
-        or None,
+            la[2]
+            if isinstance(la := system_status.get("load_average"), list) and len(la) > 2
+            else None
+        ),
     ),
     SystemStatusEntityDescription(
         key="memory_use",
