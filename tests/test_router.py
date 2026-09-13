@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import timedelta
+import ssl
 from unittest.mock import MagicMock, patch
 
+import aiohttp
 from freezegun.api import FrozenDateTimeFactory
 from gli4py.error_handling import AuthenticationError, TokenError
 import pytest
@@ -24,6 +26,7 @@ from custom_components.glinet.router import (
 from homeassistant.config_entries import SOURCE_REAUTH
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import MOCK_STATUS, POLLED_METHODS
 
@@ -203,3 +206,73 @@ async def test_router_create_api_verify_ssl(hass: HomeAssistant) -> None:
         router = GLinetRouter(hass, entry)
         router._create_api()
         mock_get_session.assert_called_once_with(hass, verify_ssl=False)
+
+
+async def test_router_renew_token_ssl_error(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test renew_token logs clear message when SSL certificate verification fails."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="GL-iNet MT1300",
+        data={
+            CONF_USERNAME: "root",
+            CONF_HOST: "https://192.168.0.1",
+            CONF_PASSWORD: "goodlife",
+        },
+        options={CONF_VERIFY_SSL: True},
+        unique_id="94:83:c4:14:73:76",
+    )
+    router = GLinetRouter(hass, entry)
+    mock_api = MagicMock()
+    ssl_err = ssl.SSLCertVerificationError(
+        "certificate verify failed: self-signed certificate"
+    )
+    cert_err = aiohttp.ClientConnectorCertificateError(None, ssl_err)  # type: ignore[arg-type]
+    wrapped_err = KeyError("Parameter Exception:")
+    wrapped_err.__cause__ = cert_err
+    mock_api.login.side_effect = wrapped_err
+    router._api = mock_api
+
+    with pytest.raises(KeyError):
+        await router.renew_token()
+
+    assert (
+        "SSL certificate verification failed for GL-iNet router https://192.168.0.1"
+        in caplog.text
+    )
+    assert "self-signed certificate" in caplog.text
+
+
+async def test_router_async_init_ssl_error(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test async_init raises ConfigEntryNotReady without traceback dump on SSL error."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="GL-iNet MT1300",
+        data={
+            CONF_USERNAME: "root",
+            CONF_HOST: "https://192.168.0.1",
+            CONF_PASSWORD: "goodlife",
+        },
+        options={CONF_VERIFY_SSL: True},
+        unique_id="94:83:c4:14:73:76",
+    )
+    router = GLinetRouter(hass, entry)
+    ssl_err = ssl.SSLCertVerificationError(
+        "certificate verify failed: self-signed certificate"
+    )
+    cert_err = aiohttp.ClientConnectorCertificateError(None, ssl_err)  # type: ignore[arg-type]
+    wrapped_err = KeyError("Parameter Exception:")
+    wrapped_err.__cause__ = cert_err
+
+    with (
+        patch.object(router, "_create_api"),
+        patch.object(router, "renew_token", side_effect=wrapped_err),
+        pytest.raises(ConfigEntryNotReady),
+    ):
+        await router.async_init()
+
+    # The broad exception traceback should not have been logged
+    assert "Error connecting to GL-iNet router" not in caplog.text

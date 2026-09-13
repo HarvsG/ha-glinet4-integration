@@ -38,7 +38,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
 from .const import API_PATH, DEFAULT_VERIFY_SSL, DOMAIN
-from .utils import adjust_mac
+from .utils import adjust_mac, is_ssl_error
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -154,10 +154,11 @@ class GLinetRouter:
         except ConfigEntryAuthFailed:
             raise
         except Exception as exc:
-            _LOGGER.exception(
-                "Error connecting to GL-iNet router %s",
-                self._host,
-            )
+            if not is_ssl_error(exc):
+                _LOGGER.exception(
+                    "Error connecting to GL-iNet router %s",
+                    self._host,
+                )
             raise ConfigEntryNotReady from exc
         try:
             router_info = await self._update_platform(self._api.router_info)
@@ -250,9 +251,16 @@ class GLinetRouter:
             )
             raise ConfigEntryAuthFailed from exc
         except Exception as exc:
-            _LOGGER.warning(
-                "Could not connect to GL-iNet router to renew token: %s", exc
-            )
+            if is_ssl_error(exc):
+                _LOGGER.warning(
+                    "SSL certificate verification failed for GL-iNet router %s. "
+                    "If using a self-signed certificate, disable SSL verification in the integration options or reconfiguration",
+                    self._host,
+                )
+            else:
+                _LOGGER.warning(
+                    "Could not connect to GL-iNet router to renew token: %s", exc
+                )
             raise  # Let generic network/timeout exceptions bubble up normally
 
     async def update_all(self, _: datetime | None = None) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
 from gli4py import GLinet
 from gli4py.error_handling import NonZeroResponse
 from uplink import AiohttpClient
@@ -39,7 +40,7 @@ from .const import (
     GLINET_DEFAULT_USERNAME,
     GLINET_FRIENDLY_NAME,
 )
-from .utils import adjust_mac
+from .utils import adjust_mac, is_ssl_error
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -133,10 +134,17 @@ class TestingHub:
         """Test if we can communicate with the host."""
         try:
             res: bool = await self.router.router_reachable(self.username)
-        except ConnectionError:
-            _LOGGER.exception(
-                "Failed to connect to %s, is it really a GL-iNet router?", self.host
-            )
+        except (ConnectionError, aiohttp.ClientError, OSError) as err:
+            if is_ssl_error(err):
+                _LOGGER.warning(
+                    "SSL certificate verification failed when connecting to %s. "
+                    "If using a self-signed certificate, disable SSL verification",
+                    self.host,
+                )
+            else:
+                _LOGGER.exception(
+                    "Failed to connect to %s, is it really a GL-iNet router?", self.host
+                )
         except TypeError:
             _LOGGER.exception(
                 "Failed to parse router response to %s, is it the right firmware version?",
@@ -152,7 +160,12 @@ class TestingHub:
         try:
             await self.router.login(self.username, password)
             res = await self.router.router_info()
-        except (ConnectionRefusedError, NonZeroResponse):
+        except (
+            ConnectionRefusedError,
+            NonZeroResponse,
+            KeyError,
+            aiohttp.ClientError,
+        ):
             _LOGGER.info(
                 "Failed to authenticate with Gl-inet router during testing, this may be expected at times"
             )
@@ -352,14 +365,31 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(format_mac(info[CONF_MAC]))
                 self._abort_if_unique_id_mismatch()
+                data_updates = dict(info["data"])
+                if CONF_VERIFY_SSL in reconfigure_entry.data:
+                    data_updates[CONF_VERIFY_SSL] = info["options"][CONF_VERIFY_SSL]
                 return self.async_update_reload_and_abort(
-                    reconfigure_entry, data_updates=info["data"]
+                    reconfigure_entry,
+                    data_updates=data_updates,
+                    options={
+                        **reconfigure_entry.options,
+                        CONF_VERIFY_SSL: info["options"][CONF_VERIFY_SSL],
+                    },
                 )
+        suggested_values = {
+            CONF_VERIFY_SSL: reconfigure_entry.options.get(
+                CONF_VERIFY_SSL,
+                reconfigure_entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+            ),
+            **reconfigure_entry.data,
+            **reconfigure_entry.options,
+            **(user_input or {}),
+        }
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=self.add_suggested_values_to_schema(
                 STEP_RECONFIGURE_DATA_SCHEMA,
-                {**reconfigure_entry.data, **(user_input or {})},
+                suggested_values,
             ),
             errors=errors,
         )
