@@ -137,7 +137,7 @@ If you want to contribute to this integration:
 
 - [ ] **Migrate to `DataUpdateCoordinator`**: Refactor `GLinetRouter` away from custom `async_track_time_interval` polling and manual dispatcher signals to Home Assistant's standard `DataUpdateCoordinator` pattern (including tiered polling rates for high-frequency device trackers vs low-frequency status endpoints).
 - [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
-- [ ] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
+- [x] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
 - [ ] **Strict Typing**: Add complete typing to upstream [`gli4py`](https://github.com/HarvsG/gli4py) and enforce strict typing with `mypy` in CI.
 - [ ] **Error Recovery**: Further refine error recovery to handle transient empty client lists immediately following a router reboot.
 - [ ] **HTTPS Support**: Add support for `https://` router communication with optional handling for local self-signed certificates.

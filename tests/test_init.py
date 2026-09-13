@@ -13,11 +13,13 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.glinet import async_remove_config_entry_device
+from custom_components.glinet.const import DOMAIN
 from custom_components.glinet.router import GLinetRouter
 from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 
 async def test_setup_entry_ok(
@@ -101,3 +103,82 @@ async def test_update_listener_reloads_entry(
     assert mock_glinet.call_count == 2
     router: GLinetRouter = init_integration.runtime_data
     assert router._consider_home == pytest.approx(60)
+
+
+async def test_remove_config_entry_device_router_rejected(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Test that the router itself cannot be removed via device registry."""
+    device_registry = dr.async_get(hass)
+    router_device = device_registry.async_get_device_by_identifier(
+        (DOMAIN, init_integration.unique_id), init_integration.entry_id
+    )
+    assert router_device is not None
+    assert not await async_remove_config_entry_device(
+        hass, init_integration, router_device
+    )
+
+
+async def test_remove_config_entry_device_connected_client_rejected(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Test that an actively connected client device cannot be removed."""
+    device_registry = dr.async_get(hass)
+    active_mac = "aa:bb:cc:dd:ee:01"
+    client_device = device_registry.async_get_or_create(
+        config_entry_id=init_integration.entry_id,
+        connections={(dr.CONNECTION_NETWORK_MAC, active_mac)},
+    )
+    assert not await async_remove_config_entry_device(
+        hass, init_integration, client_device
+    )
+    router: GLinetRouter = init_integration.runtime_data
+    assert active_mac in router.devices
+
+
+async def test_remove_config_entry_device_disconnected_client_success(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Test that a disconnected client device can be removed and pruned."""
+    device_registry = dr.async_get(hass)
+    client_mac = "aa:bb:cc:dd:ee:01"
+    router: GLinetRouter = init_integration.runtime_data
+    router.devices[client_mac]._connected = False
+
+    client_device = device_registry.async_get_or_create(
+        config_entry_id=init_integration.entry_id,
+        connections={(dr.CONNECTION_NETWORK_MAC, client_mac)},
+    )
+    assert await async_remove_config_entry_device(hass, init_integration, client_device)
+    assert client_mac not in router.devices
+
+
+async def test_remove_config_entry_device_unknown_device_success(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Test that an unknown/stale client device not in memory can be removed."""
+    device_registry = dr.async_get(hass)
+    stale_device = device_registry.async_get_or_create(
+        config_entry_id=init_integration.entry_id,
+        connections={(dr.CONNECTION_NETWORK_MAC, "aa:bb:cc:dd:ee:99")},
+    )
+    assert await async_remove_config_entry_device(hass, init_integration, stale_device)
+
+
+async def test_remove_config_entry_device_invalid_device(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Test that devices without MAC connections are rejected."""
+    device_registry = dr.async_get(hass)
+    no_mac_device = device_registry.async_get_or_create(
+        config_entry_id=init_integration.entry_id,
+        identifiers={("other_domain", "random_id")},
+    )
+    assert not await async_remove_config_entry_device(
+        hass, init_integration, no_mac_device
+    )

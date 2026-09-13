@@ -189,3 +189,32 @@ async def test_device_with_no_name_skipped(
         registry.async_get_entity_id("device_tracker", DOMAIN, "aa:bb:cc:dd:ee:04")
         is None
     )
+
+
+async def test_device_retracked_after_removal(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test that a device can be rediscovered and re-tracked after being removed."""
+    mac = "aa:bb:cc:dd:ee:01"
+    await _setup_with_known_devices(hass, mock_config_entry, [mac])
+
+    entity_reg = er.async_get(hass)
+    entity_id = _entity_id(hass, mac)
+    assert hass.states.get(entity_id) is not None
+
+    # Remove entity
+    entity_reg.async_remove(entity_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id) is None
+
+    # Router signals discovery of new devices again
+    router = mock_config_entry.runtime_data
+    router.devices.pop(mac, None)
+    await router.update_device_trackers()
+    await hass.async_block_till_done()
+
+    # Verify device tracker entity is re-created
+    assert entity_reg.async_get_entity_id("device_tracker", DOMAIN, mac) is not None
