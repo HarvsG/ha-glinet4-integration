@@ -168,7 +168,14 @@ If you want to contribute to this integration:
 - [ ] **Home Assistant Code Quality**: Build towards gold and platinum [code-quality](https://developers.home-assistant.io/docs/core/integration-quality-scale/) by comparing against their [checklist](https://developers.home-assistant.io/docs/core/integration-quality-scale/checklist/) and a [similar integration](https://github.com/home-assistant/core/tree/dev/homeassistant/components/fritz)
 - [ ] **Switch from `.get()` to attributes**: Build on the new strongly types responses from gli4py and replace `.get()` methods with accessing attributes - this will require using the types in many tests instead of the mock dictionaries - it may be appropriate to switch these tests to use gli4py's mock api instead.
 - [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
+<<<<<<< HEAD
 - [ ] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
+=======
+- [x] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
+- [ ] **Strict Typing**: Add complete typing to upstream [`gli4py`](https://github.com/HarvsG/gli4py) and enforce strict typing with `mypy` in CI.
+- [x] **Error Recovery**: Further refine error recovery to handle transient empty client lists immediately following a router reboot.
+- [x] **HTTPS Support**: Add support for `https://` router communication with optional handling for local self-signed certificates.
+>>>>>>> 7473111 (feat: support device registry pruning for stale client devices)
 
 ### 💡 Features Under Consideration
 

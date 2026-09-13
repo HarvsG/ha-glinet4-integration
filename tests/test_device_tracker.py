@@ -376,3 +376,32 @@ async def test_restored_device_tracker_name_preserved_on_unassigned_update(
     assert state is not None
     assert state.name == "GL-B1300"
     assert state.attributes.get("friendly_name") == "GL-B1300"
+
+
+async def test_device_retracked_after_removal(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test that a device can be rediscovered and re-tracked after being removed."""
+    mac = "00:bb:cc:dd:ee:01"
+    await _setup_with_known_devices(hass, mock_config_entry, [mac])
+
+    entity_reg = er.async_get(hass)
+    entity_id = _entity_id(hass, mac)
+    assert hass.states.get(entity_id) is not None
+
+    # Remove entity
+    entity_reg.async_remove(entity_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id) is None
+
+    # Router signals discovery of new devices again
+    router = mock_config_entry.runtime_data
+    router.devices.pop(mac, None)
+    await router.update_device_trackers()
+    await hass.async_block_till_done()
+
+    # Verify device tracker entity is re-created
+    assert entity_reg.async_get_entity_id("device_tracker", DOMAIN, mac) is not None
