@@ -6,9 +6,7 @@ build-backend = "hatchling.build"
 name = "glinet"
 description = "Home Assistant GL-iNet community integration"
 readme = "README.md"
-# Upper bound: homeassistant 2026.2.3 and pytest-homeassistant-custom-component
-# 0.13.316 do not support Python 3.14; raise it together with those pins
-requires-python = ">=3.13.2,<3.14"
+requires-python = ">=3.14.2"
 dynamic = ["version"]
 dependencies = [
     "homeassistant>=2025.9.0",
@@ -19,15 +17,18 @@ dev = [
     "codespell>=2.4.1",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
     "gli4py==0.0.17b3",
-    "homeassistant-stubs==2026.2.3",
+    "habluetooth>=6.26.11",
+    "homeassistant-stubs==2026.9.2",
+    "josepy>=2.2.0",
+    "mashumaro>=3.17.0",
     "mypy>=1.16.1",
     "PyGithub>=2.6",
     "pylint>=3.3.7",
     "pytest>=8.3.5",
     "pytest-cov>=7.0.0",
-    # Pins homeassistant==2026.2.3 exactly; bump in lockstep with homeassistant
+    # Pins homeassistant==2026.9.2 exactly; bump in lockstep with homeassistant
     # and homeassistant-stubs. NOTE: 0.13.317+ requires Python >= 3.14.
-    "pytest-homeassistant-custom-component==0.13.316",
+    "pytest-homeassistant-custom-component==0.13.365",
     "ruff>=0.12.0",
     "types-requests<2.32.4.20260108",
     "voluptuous-stubs>=0.1.1",
@@ -38,7 +39,7 @@ source = "vcs"
 
 [tool.ruff]
 required-version = ">=0.11.0"
-target-version = "py313"
+target-version = "py314"
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
@@ -157,7 +158,7 @@ mark-parentheses = false
 max-complexity = 25
 
 [tool.pylint.main]
-py-version = "3.13"
+py-version = "3.14"
 load-plugins = [
     "pylint.extensions.code_style",
     "pylint.extensions.typing",
@@ -190,7 +191,7 @@ max-line-length = 100
 min-similarity-lines = 7
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 show_error_codes = true
 strict = true
 disallow_any_explicit = true

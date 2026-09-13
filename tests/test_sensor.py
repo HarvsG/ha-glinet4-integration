@@ -169,9 +169,6 @@ async def test_uptime_moves_after_reboot(
     status["system"]["uptime"] = 5.0
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(status)
 
-    # Two ticks: one for the router poll to store the new uptime, one for
-    # the entity poll to be certain to read it (both run on the same clock)
-    await _tick(hass, freezer)
     await _tick(hass, freezer)
     state = hass.states.get(entity_id)
     assert state is not None
