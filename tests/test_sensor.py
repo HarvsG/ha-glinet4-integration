@@ -15,7 +15,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.glinet.const import DOMAIN
-from custom_components.glinet.sensor import _uptime_calculation
+from custom_components.glinet.sensor import _boot_time_changed, _derive_boot_time
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -139,16 +139,18 @@ async def test_empty_first_status_keeps_all_sensors(
 
 def test_uptime_calculation_smoothing(freezer: FrozenDateTimeFactory) -> None:
     """Test small uptime deviations do not change the calculated boot time."""
-    first = _uptime_calculation(3600.0, None)
+    first = _derive_boot_time(3600.0)
     assert first == dt_util.utcnow() - timedelta(seconds=3600)
+    assert _boot_time_changed(None, first) is True
 
-    # A deviation within 15 seconds keeps the previous boot time
-    assert _uptime_calculation(3610.0, first) == first
+    # A deviation within 120 seconds keeps the previous boot time
+    small_deviation = _derive_boot_time(3610.0)
+    assert _boot_time_changed(first, small_deviation) is False
 
     # A larger deviation produces a new boot time
-    assert _uptime_calculation(3620.0, first) == dt_util.utcnow() - timedelta(
-        seconds=3620
-    )
+    large_deviation = _derive_boot_time(3730.0)
+    assert _boot_time_changed(first, large_deviation) is True
+    assert large_deviation == dt_util.utcnow() - timedelta(seconds=3730)
 
 
 async def test_uptime_moves_after_reboot(
