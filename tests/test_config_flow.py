@@ -206,6 +206,7 @@ async def test_reauth_flow_success(
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
+    assert result.get("translation_domain") is None
     assert mock_config_entry.data[CONF_PASSWORD] == "new-password"
     assert mock_config_entry.data[CONF_HOST] == MOCK_HOST
     assert mock_config_entry.data[CONF_USERNAME] == "root"
@@ -262,6 +263,7 @@ async def test_reconfigure_flow_success(
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
+    assert result.get("translation_domain") is None
     assert mock_config_entry.data[CONF_HOST] == "http://192.168.9.1"
 
 
