@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "glinet"
-description = "Home Assistant Google Home community integration"
+description = "Home Assistant GL-iNet community integration"
 readme = "README.md"
 requires-python = ">=3.13.2"
 dynamic = ["version"]

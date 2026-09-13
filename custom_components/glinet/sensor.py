@@ -13,7 +13,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
-from homeassistant.util.dt import utcnow
+from homeassistant.util import dt as dt_util
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -58,9 +58,10 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            (la := system_status.get("load_average")) and isinstance(la, list) and la[0]
-        )
-        or None,
+            la[0]
+            if isinstance(la := system_status.get("load_average"), list) and len(la) > 0
+            else None
+        ),
     ),
     SystemStatusEntityDescription(
         key="load_avg5",
@@ -71,12 +72,10 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            (la := system_status.get("load_average"))
-            and isinstance(la, list)
-            and len(la) > 1
-            and la[1]
-        )
-        or None,
+            la[1]
+            if isinstance(la := system_status.get("load_average"), list) and len(la) > 1
+            else None
+        ),
     ),
     SystemStatusEntityDescription(
         key="load_avg15",
@@ -87,12 +86,10 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            (la := system_status.get("load_average"))
-            and isinstance(la, list)
-            and len(la) > 2
-            and la[2]
-        )
-        or None,
+            la[2]
+            if isinstance(la := system_status.get("load_average"), list) and len(la) > 2
+            else None
+        ),
     ),
     SystemStatusEntityDescription(
         key="memory_use",
@@ -177,14 +174,19 @@ async def async_setup_entry(
     async_add_entities(sensors, True)
 
 
-def _uptime_calculation(seconds_uptime: float, last_value: datetime | None) -> datetime:
-    """Calculate uptime with deviation."""
-    delta_uptime: datetime = utcnow() - timedelta(seconds=seconds_uptime)
+# Minimum movement in the derived boot time before a new timestamp is committed
+UPTIME_DEVIATION = timedelta(seconds=120)
 
-    if not last_value or abs((delta_uptime - last_value).total_seconds()) > 15:
-        return delta_uptime
 
-    return last_value
+def _derive_boot_time(seconds_uptime: float) -> datetime:
+    """Derive the boot timestamp from the router's uptime counter."""
+    now: datetime = dt_util.utcnow()
+    return now - timedelta(seconds=seconds_uptime)
+
+
+def _boot_time_changed(old: datetime | None, new: datetime) -> bool:
+    """Return whether the boot time moved enough to warrant a state write."""
+    return old is None or abs(new - old) > UPTIME_DEVIATION
 
 
 class GliSensorBase(SensorEntity):
@@ -223,14 +225,25 @@ class SystemStatusSensor(GliSensorBase):
 
 
 class SystemUptimeSensor(GliSensorBase):
-    """GL-iNet system uptime sensor class."""
+    """GL-iNet system uptime sensor class.
 
-    _current_value: datetime | None = None
+    The router exposes uptime as a seconds counter, so the boot timestamp is
+    derived as ``now - uptime``. It is recomputed only when the router reports a
+    fresh uptime value (otherwise reading the property between polls would drift
+    the estimate against an advancing clock), and the committed value is held
+    stable within ``UPTIME_DEVIATION``.
+    """
+
+    _attr_native_value: datetime | None = None
+    _last_uptime: float | None = None
 
     @property
     def native_value(self) -> datetime | None:
-        """Return the native value of the sensor."""
-        self._current_value = _uptime_calculation(
-            self.router.system_status["uptime"], self._current_value
-        )
-        return self._current_value
+        """Return the cached boot timestamp, recomputing only on fresh data."""
+        uptime = self.router.system_status["uptime"]
+        if uptime != self._last_uptime:
+            self._last_uptime = uptime
+            candidate = _derive_boot_time(uptime)
+            if _boot_time_changed(self._attr_native_value, candidate):
+                self._attr_native_value = candidate
+        return self._attr_native_value
