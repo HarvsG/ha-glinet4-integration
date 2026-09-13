@@ -21,7 +21,7 @@ async def async_setup_entry(
     _: HomeAssistant, entry: GLinetConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up GL-iNet switches."""
-    router = entry.runtime_data
+    router: GLinetRouter = entry.runtime_data
     switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch] = []
     if router.wireguard_clients:
         # TODO detect all configured wireguard, openvpn, shadowsocks and
