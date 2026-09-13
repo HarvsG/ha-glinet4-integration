@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
+REBOOT_GRACE_PERIOD: int = 90
 T = TypeVar("T")
 
 # PEP 695 type aliases are evaluated lazily, so the forward
@@ -390,16 +391,29 @@ class GLinetRouter:
 
         new_device = False
         wrt_devices = await self._update_platform(self._api.connected_clients)
-        if not wrt_devices:
+        if wrt_devices is None:
+            return
+
+        if not isinstance(wrt_devices, dict):
             _LOGGER.warning(
-                "Router returned no valid connected devices. It returned %s of type %s",
-                str(wrt_devices),
+                "Router returned unexpected connected devices payload: %s",
                 type(wrt_devices),
             )
-            if wrt_devices is None or wrt_devices == {}:
-                self._connected_devices = 0
             return
-        # TODO - ensure the output of gli4py devices has the correct data structure
+
+        uptime = self._system_status.get("uptime")
+        if (
+            not wrt_devices
+            and uptime is not None
+            and uptime < REBOOT_GRACE_PERIOD
+            and self._devices
+        ):
+            _LOGGER.debug(
+                "Ignoring empty client list during post-reboot startup (uptime %ss)",
+                uptime,
+            )
+            return
+
         for device_mac, device in self._devices.items():
             dev_info = wrt_devices.get(device_mac)
             device.update(dev_info, self._consider_home)
