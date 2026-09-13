@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import ssl
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import aiohttp
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.glinet.const import DOMAIN
 from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
 from homeassistant.config_entries import SOURCE_DHCP, SOURCE_USER
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
@@ -52,7 +54,7 @@ async def test_user_flow_success(
         CONF_HOST: MOCK_HOST,
         CONF_PASSWORD: "goodlife",
     }
-    assert result["options"] == {CONF_CONSIDER_HOME: 180}
+    assert result["options"] == {CONF_CONSIDER_HOME: 180, CONF_VERIFY_SSL: True}
     assert result["result"].unique_id == MOCK_MAC
 
 
@@ -204,6 +206,7 @@ async def test_reauth_flow_success(
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
+    assert result.get("translation_domain") is None
     assert mock_config_entry.data[CONF_PASSWORD] == "new-password"
     assert mock_config_entry.data[CONF_HOST] == MOCK_HOST
     assert mock_config_entry.data[CONF_USERNAME] == "root"
@@ -260,6 +263,7 @@ async def test_reconfigure_flow_success(
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
+    assert result.get("translation_domain") is None
     assert mock_config_entry.data[CONF_HOST] == "http://192.168.9.1"
 
 
@@ -338,3 +342,116 @@ async def test_options_flow_prefills_from_data_fallback(
         for key in schema.schema
     }
     assert suggested[CONF_CONSIDER_HOME] == 240
+    assert suggested[CONF_VERIFY_SSL] is True
+
+
+async def test_user_flow_disable_verify_ssl(
+    hass: HomeAssistant, mock_glinet: MagicMock, mock_setup_entry: AsyncMock
+) -> None:
+    """Test creating an entry with SSL verification disabled."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    assert result["type"] is FlowResultType.FORM
+
+    user_input = {
+        **USER_INPUT,
+        CONF_HOST: "https://192.168.8.1",
+        CONF_VERIFY_SSL: False,
+    }
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_HOST] == "https://192.168.8.1"
+    assert result["options"][CONF_VERIFY_SSL] is False
+
+
+async def test_options_flow_updates_verify_ssl(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test updating verify_ssl through the options flow."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_CONSIDER_HOME: 180, CONF_VERIFY_SSL: False}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options[CONF_VERIFY_SSL] is False
+
+
+async def test_reconfigure_flow_disable_verify_ssl(
+    hass: HomeAssistant,
+    mock_glinet: MagicMock,
+    mock_setup_entry: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test reconfiguring an entry to update verify_ssl."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+    # Verify suggested values default to existing entry values
+    schema = result["data_schema"]
+    assert schema is not None
+    suggested = {
+        str(key): (key.description or {}).get("suggested_value")
+        for key in schema.schema
+    }
+    assert suggested[CONF_VERIFY_SSL] is True
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_USERNAME: "root",
+            CONF_HOST: "https://192.168.0.1",
+            CONF_PASSWORD: "goodlife",
+            CONF_VERIFY_SSL: False,
+        },
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert mock_config_entry.data[CONF_HOST] == "https://192.168.0.1"
+    assert mock_config_entry.options[CONF_VERIFY_SSL] is False
+
+    # Starting reconfigure again should pre-fill verify_ssl from options as False
+    result2 = await mock_config_entry.start_reconfigure_flow(hass)
+    schema2 = result2["data_schema"]
+    assert schema2 is not None
+    suggested2 = {
+        str(key): (key.description or {}).get("suggested_value")
+        for key in schema2.schema
+    }
+    assert suggested2[CONF_VERIFY_SSL] is False
+
+
+async def test_connect_ssl_error(
+    hass: HomeAssistant,
+    mock_glinet: MagicMock,
+    mock_setup_entry: AsyncMock,
+) -> None:
+    """Test SSL certificate verification failure produces cannot_connect error."""
+    mock_api = mock_glinet.return_value
+    ssl_err = ssl.SSLCertVerificationError("self-signed certificate")
+    cert_err = aiohttp.ClientConnectorCertificateError(None, ssl_err)  # type: ignore[arg-type]
+    mock_api.router_reachable.side_effect = cert_err
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    user_input = {
+        **USER_INPUT,
+        CONF_HOST: "https://192.168.0.1",
+        CONF_VERIFY_SSL: True,
+    }
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}

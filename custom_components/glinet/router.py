@@ -25,6 +25,7 @@ from homeassistant.const import (
     CONF_MODEL,
     CONF_PASSWORD,
     CONF_USERNAME,
+    CONF_VERIFY_SSL,
 )
 from homeassistant.core import callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
@@ -36,8 +37,8 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
-from .const import API_PATH, DOMAIN
-from .utils import adjust_mac
+from .const import API_PATH, DEFAULT_VERIFY_SSL, DOMAIN
+from .utils import adjust_mac, is_ssl_error
 from .wan import WanInterfaceState, parse_network_array
 
 if TYPE_CHECKING:
@@ -158,6 +159,11 @@ class GLinetRouter:
         except ConfigEntryAuthFailed:
             raise
         except Exception as exc:
+            if is_ssl_error(exc):
+                raise ConfigEntryNotReady(
+                    f"SSL certificate verification failed for GL-iNet router {self._host}. "
+                    "If using a self-signed certificate, disable SSL verification in integration options or reconfiguration"
+                ) from exc
             _LOGGER.exception(
                 "Error connecting to GL-iNet router %s",
                 self._host,
@@ -222,7 +228,10 @@ class GLinetRouter:
     def _create_api(self) -> GLinet:
         """Optimistically return a GLinet object for connection to the API, no test included."""
         conf = self._entry.data
-        shared_session = async_get_clientsession(self.hass)
+        verify_ssl = self._entry.options.get(
+            CONF_VERIFY_SSL, conf.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+        )
+        shared_session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
         ha_client = AiohttpClient(session=shared_session)
 
         if CONF_PASSWORD in conf:
@@ -251,9 +260,16 @@ class GLinetRouter:
             )
             raise ConfigEntryAuthFailed from exc
         except Exception as exc:
-            _LOGGER.warning(
-                "Could not connect to GL-iNet router to renew token: %s", exc
-            )
+            if is_ssl_error(exc):
+                _LOGGER.warning(
+                    "SSL certificate verification failed for GL-iNet router %s. "
+                    "If using a self-signed certificate, disable SSL verification in the integration options or reconfiguration",
+                    self._host,
+                )
+            else:
+                _LOGGER.warning(
+                    "Could not connect to GL-iNet router to renew token: %s", exc
+                )
             raise  # Let generic network/timeout exceptions bubble up normally
 
     async def update_all(self, _: datetime | None = None) -> None:
