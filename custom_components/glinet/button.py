@@ -1,32 +1,28 @@
-"""Support for turning on and off Pi-hole system."""
+"""Button platform for the GL-iNet integration."""
 
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
 
-from homeassistant.components.button import ButtonEntity
+from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
 from homeassistant.const import EntityCategory
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .router import GLinetRouter
+    from .router import GLinetConfigEntry, GLinetRouter
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    _: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    _: HomeAssistant, entry: GLinetConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the button entities."""
-    router: GLinetRouter = entry.runtime_data
-    buttons: list[RebootButton] = []
-    buttons.append(RebootButton(router))
-    if buttons:
-        async_add_entities(buttons, True)
+    router = entry.runtime_data
+    async_add_entities([RebootButton(router)], True)
 
 
 class RebootButton(ButtonEntity):
@@ -39,16 +35,18 @@ class RebootButton(ButtonEntity):
 
     _attr_icon = "mdi:restart"
     _attr_has_entity_name = True
-
-    @property
-    def name(self) -> str:
-        """Return the name of the button."""
-        return "Reboot"
+    _attr_translation_key = "reboot"
+    _attr_device_class = ButtonDeviceClass.RESTART
 
     @property
     def unique_id(self) -> str:
         """Return the unique id of the button."""
         return f"glinet_button/{self._router.factory_mac}/reboot"
+
+    @property
+    def available(self) -> bool:
+        """Return True when the router is reachable."""
+        return self._router.available
 
     async def async_press(self) -> None:
         """Reboot the router."""

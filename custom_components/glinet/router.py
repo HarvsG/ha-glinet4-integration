@@ -18,6 +18,7 @@ from homeassistant.components.device_tracker import (
     DEFAULT_CONSIDER_HOME,
     DOMAIN as TRACKER_DOMAIN,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_HOST,
     CONF_MAC,
@@ -25,6 +26,7 @@ from homeassistant.const import (
     CONF_PASSWORD,
     CONF_USERNAME,
 )
+from homeassistant.core import callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -40,13 +42,16 @@ from .utils import adjust_mac
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
 
-    from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import CALLBACK_TYPE, HomeAssistant
     from homeassistant.helpers.entity_registry import RegistryEntry
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
 T = TypeVar("T")
+
+# PEP 695 type aliases are evaluated lazily, so the forward
+# reference to GLinetRouter is resolved when first used
+type GLinetConfigEntry = ConfigEntry[GLinetRouter]  # pylint: disable=used-before-assignment
 
 
 class DeviceInterfaceType(StrEnum):
@@ -60,11 +65,29 @@ class DeviceInterfaceType(StrEnum):
     UNKNOWN = "Unknown"
     DONGLE = "Dongle"
     BYPASS_ROUTE = "Bypass Route"
-    UNKNOWN2 = "Unknown"
     MLO = "MLO"
     MLO_GUEST = "MLO Guest"
     WIFI_6 = "6GHz"
     WIFI_6_GUEST = "6GHz Guest"
+
+
+# Maps the integer interface type reported by the API to a member of
+# DeviceInterfaceType. The API uses two distinct indices for "unknown".
+DEVICE_INTERFACE_TYPE_MAP: dict[int, DeviceInterfaceType] = {
+    0: DeviceInterfaceType.WIFI_24,
+    1: DeviceInterfaceType.WIFI_5,
+    2: DeviceInterfaceType.LAN,
+    3: DeviceInterfaceType.WIFI_24_GUEST,
+    4: DeviceInterfaceType.WIFI_5_GUEST,
+    5: DeviceInterfaceType.UNKNOWN,
+    6: DeviceInterfaceType.DONGLE,
+    7: DeviceInterfaceType.BYPASS_ROUTE,
+    8: DeviceInterfaceType.UNKNOWN,
+    9: DeviceInterfaceType.MLO,
+    10: DeviceInterfaceType.MLO_GUEST,
+    11: DeviceInterfaceType.WIFI_6,
+    12: DeviceInterfaceType.WIFI_6_GUEST,
+}
 
 
 class GLinetRouter:
@@ -77,7 +100,7 @@ class GLinetRouter:
     that are connected to it.
     """
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(self, hass: HomeAssistant, entry: GLinetConfigEntry) -> None:
         """Initialize a GLinet router.
 
         Should not be called directly,
@@ -85,9 +108,13 @@ class GLinetRouter:
         """
         # Context info
         self.hass: HomeAssistant = hass
-        self._entry: ConfigEntry = entry
-        self._options: dict = {}
-        self._options.update(entry.options)
+        self._entry: GLinetConfigEntry = entry
+        # Options take precedence, but fall back to entry data for entries
+        # created before consider_home moved to options
+        self._consider_home: float = entry.options.get(
+            CONF_CONSIDER_HOME,
+            entry.data.get(CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()),
+        )
 
         # gli4py API
         self._api: GLinet
@@ -112,6 +139,7 @@ class GLinetRouter:
         self._late_init_complete: bool = False
         self._connect_error: bool = False
         self._token_error: bool = False
+        self._unsub_update: CALLBACK_TYPE | None = None
 
     async def async_init(self) -> None:
         """Set up a GL-iNet router.
@@ -119,12 +147,12 @@ class GLinetRouter:
         Do some late initialization
         """
 
+        self._api = self._create_api()
         try:
-            self._api = await self.get_api()
-            await self._api.login(
-                self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD]
-            )
-        except OSError as exc:
+            await self.renew_token()
+        except ConfigEntryAuthFailed:
+            raise
+        except Exception as exc:
             _LOGGER.exception(
                 "Error connecting to GL-iNet router %s",
                 self._host,
@@ -169,29 +197,33 @@ class GLinetRouter:
                     entry.unique_id, entry.original_name
                 )
 
-        # Each new setup should renew the token
-        await self.renew_token()
-
         # Update device tracker and switch entities
         await self.update_all()
 
         # TODO here we ask this to update all on the same scan interval
         # but in future some sensors e.g WANip need to update less regularly than
         # others
-        async_track_time_interval(self.hass, self.update_states, SCAN_INTERVAL)
+        self._unsub_update = async_track_time_interval(
+            self.hass, self.update_states, SCAN_INTERVAL
+        )
 
-    async def get_api(self) -> GLinet:
-        """Optimistically returns a GLinet object for connection to the API, no test included."""
+    @callback
+    def unload(self) -> None:
+        """Cancel the periodic update timer."""
+        if self._unsub_update is not None:
+            self._unsub_update()
+            self._unsub_update = None
+
+    def _create_api(self) -> GLinet:
+        """Optimistically return a GLinet object for connection to the API, no test included."""
         conf = self._entry.data
         shared_session = async_get_clientsession(self.hass)
         ha_client = AiohttpClient(session=shared_session)
 
         if CONF_PASSWORD in conf:
-            router = GLinet(
+            return GLinet(
                 sync=False, base_url=conf[CONF_HOST] + API_PATH, client=ha_client
             )
-            await router.login(conf[CONF_USERNAME], conf[CONF_PASSWORD])
-            return router
         _LOGGER.error(
             "Error setting up GL-iNet router, no auth details found in configuration"
         )
@@ -229,11 +261,16 @@ class GLinetRouter:
 
     async def update_states(self, _: datetime | None = None) -> None:
         """Update platforms and states that aren't handled elsewhere."""
-        await self.update_system_status()
-        await self.update_device_trackers()
-        # If a user may have many switches, best to update in bulk
-        await self.update_wifi_ifaces_state()
-        await self.update_wireguard_client_state()
+        try:
+            await self.update_system_status()
+            await self.update_device_trackers()
+            # If a user may have many switches, best to update in bulk
+            await self.update_wifi_ifaces_state()
+            await self.update_wireguard_client_state()
+        except ConfigEntryAuthFailed:
+            # ConfigEntryAuthFailed is only handled by HA when raised from
+            # entry setup or entity updates, not from a timer callback
+            self._entry.async_start_reauth(self.hass)
 
     async def _update_platform(
         self, api_callable: Callable[[], Coroutine[Any, Any, T]]
@@ -337,15 +374,10 @@ class GLinetRouter:
             if wrt_devices is None or wrt_devices == {}:
                 self._connected_devices = 0
             return
-        consider_home = self._options.get(
-            CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()
-        )
-        # track_unknown = self._options.get(CONF_TRACK_UNKNOWN, DEFAULT_TRACK_UNKNOWN)
-
         # TODO - ensure the output of gli4py devices has the correct data structure
         for device_mac, device in self._devices.items():
             dev_info = wrt_devices.get(device_mac)
-            device.update(dev_info, consider_home)
+            device.update(dev_info, self._consider_home)
 
         for device_mac, dev_info in wrt_devices.items():
             # Skip if we've already have this device
@@ -387,7 +419,11 @@ class GLinetRouter:
     async def update_tailscale_state(self) -> None:
         """Make a call to the API to get the tailscale state."""
 
-        if not await self._api.tailscale_configured():
+        configured = await self._update_platform(self._api.tailscale_configured)
+        if configured is None:
+            # The request failed - keep the previous state
+            return
+        if not configured:
             self._tailscale_config = {}
             return
         # TODO this is a placeholder that needs to be replaced with a pulic method that combines useful info in _tailscale_status and _tailscale_get_config
@@ -397,14 +433,13 @@ class GLinetRouter:
             )
             or {}
         )
-        response: TailscaleConnection = await self._update_platform(
+        state: TailscaleConnection | None = await self._update_platform(
             self._api.tailscale_connection_state
         )
-
-        if response == TailscaleConnection.CONNECTED:
-            self._tailscale_connection = True
-        else:
-            self._tailscale_connection = False
+        if state is None:
+            # The request failed - keep the previous state
+            return
+        self._tailscale_connection = state == TailscaleConnection.CONNECTED
 
     async def update_wireguard_client_state(self) -> None:
         """Make call to the API to get the wireguard client state."""
@@ -414,16 +449,23 @@ class GLinetRouter:
         response = await self._update_platform(self._api.wireguard_client_list)
         if not response:
             return
-        # TODO wireguard_client_list outputs some private info, we don't want it to end up in the logs.
-        # TODO we need to do some validation before we start accessing dictionary keys, I've had errors before
-        # May be best to redact it in gli4py.
         for config in response:
-            self._wireguard_clients[config["peer_id"]] = WireGuardClient(
-                name=config["name"],
+            name = config.get("name")
+            peer_id = config.get("peer_id")
+            group_id = config.get("group_id")
+            if name is None or peer_id is None or group_id is None:
+                # Don't log the config values, they contain private key material
+                _LOGGER.debug(
+                    "Skipping malformed WireGuard client config with keys: %s",
+                    sorted(config),
+                )
+                continue
+            self._wireguard_clients[peer_id] = WireGuardClient(
+                name=name,
                 connected=False,
-                group_id=config["group_id"],
-                peer_id=config["peer_id"],
-                tunnel_id=config.get("tunnel_id", None),
+                group_id=group_id,
+                peer_id=peer_id,
+                tunnel_id=config.get("tunnel_id"),
             )
 
         if len(self._wireguard_clients) == 0:
@@ -443,25 +485,14 @@ class GLinetRouter:
             # if config["enabled"] is false then status does not exist
             connected: bool = config.get("status", 0) != 0
 
-            if self._wireguard_clients[config["peer_id"]]:
-                client: WireGuardClient = self._wireguard_clients[config["peer_id"]]
-                client.tunnel_id = config.get("tunnel_id", None)
-                client.connected = connected
-                if connected:
-                    # If more modern firmware supports more than 1 client being connected, we need to change this
-                    self._wireguard_connections.append(client)
-
-    def update_options(self, new_options: dict) -> bool:
-        """Update router options.
-
-        Returns True if a reload is required
-        Called in __init__.py
-        placeholder function because it may become
-        necessary to reload in future.
-        """
-        req_reload = False
-        self._options.update(new_options)
-        return req_reload
+            client = self._wireguard_clients.get(config.get("peer_id"))
+            if client is None:
+                continue
+            client.tunnel_id = config.get("tunnel_id")
+            client.connected = connected
+            if connected:
+                # If more modern firmware supports more than 1 client being connected, we need to change this
+                self._wireguard_connections.append(client)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -521,6 +552,21 @@ class GLinetRouter:
         return self._model.upper()
 
     @property
+    def sw_version(self) -> str:
+        """Return router firmware version."""
+        return self._sw_v
+
+    @property
+    def available(self) -> bool:
+        """Return True when the last poll of the router succeeded."""
+        return not self._connect_error
+
+    @property
+    def connected_devices_count(self) -> int:
+        """Return the number of currently connected client devices."""
+        return self._connected_devices
+
+    @property
     def name(self) -> str:
         """Return router name."""
         # TODO retrieve the friendly name of the router e.g MT1300 is Beryl
@@ -538,13 +584,7 @@ class GLinetRouter:
 
     @property
     def connected_wireguard_clients(self) -> None | list[WireGuardClient]:
-        """Return the wirguard client that is connected, if any."""
-        return self._wireguard_connections
-
-    @property
-    def wireguard_connections(self) -> None | list[WireGuardClient]:
-        """Return the wirguard client that is connected, if any."""
-        # TODO this property looks like a duplicate of the above
+        """Return the wireguard clients that are connected, if any."""
         return self._wireguard_connections
 
     @property
@@ -607,7 +647,7 @@ class ClientDevInfo:
         self._connected: bool = False
         self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN
 
-    def update(self, dev_info: dict | None = None, consider_home: int = 0) -> None:
+    def update(self, dev_info: dict | None = None, consider_home: float = 0) -> None:
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
         if dev_info:
@@ -625,9 +665,9 @@ class ClientDevInfo:
             self._ip_address = dev_info.get("ip")
             self._last_activity = now
             self._connected = dev_info.get("online", False)
-            self._if_type = list(DeviceInterfaceType)[
-                dev_info.get("type", 5)
-            ]  # TODO be more index safe
+            self._if_type = DEVICE_INTERFACE_TYPE_MAP.get(
+                dev_info.get("type", 5), DeviceInterfaceType.UNKNOWN
+            )
         # a device might not actually be online but we want to consider it home
         elif self._connected:
             self._connected = (

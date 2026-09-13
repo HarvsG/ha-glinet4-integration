@@ -4,9 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "glinet"
-description = "Home Assistant Google Home community integration"
+description = "Home Assistant GL-iNet community integration"
 readme = "README.md"
-requires-python = ">=3.13.2"
+license = "Apache-2.0"
+requires-python = ">=3.14.2"
 dynamic = ["version"]
 dependencies = [
     "homeassistant>=2025.9.0",
@@ -15,11 +16,20 @@ dependencies = [
 [dependency-groups]
 dev = [
     "codespell>=2.4.1",
-    "homeassistant-stubs==2026.2.3",
+    # Must match the requirement pinned in custom_components/glinet/manifest.json
+    "gli4py==0.0.17b3",
+    "habluetooth>=6.26.11",
+    "homeassistant-stubs==2026.9.2",
+    "josepy>=2.2.0",
+    "mashumaro>=3.17.0",
     "mypy>=1.16.1",
     "PyGithub>=2.6",
     "pylint>=4.0.5",
     "pytest>=8.3.5",
+    "pytest-cov>=7.0.0",
+    # Pins homeassistant==2026.9.2 exactly; bump in lockstep with homeassistant
+    # and homeassistant-stubs. NOTE: 0.13.317+ requires Python >= 3.14.
+    "pytest-homeassistant-custom-component==0.13.365",
     "ruff>=0.12.0",
     "types-requests<2.32.4.20260108",
     "voluptuous-stubs>=0.1.1",
@@ -30,7 +40,7 @@ source = "vcs"
 
 [tool.ruff]
 required-version = ">=0.11.0"
-target-version = "py313"
+target-version = "py314"
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
@@ -133,6 +143,14 @@ ignore = [
     "ISC001",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "SLF001", # tests assert on private state such as router._connect_error
+    "TC001", # TYPE_CHECKING import blocks are noise in tests
+    "TC002",
+    "TC003",
+]
+
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
 mark-parentheses = false
@@ -141,7 +159,7 @@ mark-parentheses = false
 max-complexity = 25
 
 [tool.pylint.main]
-py-version = "3.13"
+py-version = "3.14"
 load-plugins = [
     "pylint.extensions.code_style",
     "pylint.extensions.typing",
@@ -174,13 +192,24 @@ max-line-length = 100
 min-similarity-lines = 7
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 show_error_codes = true
 strict = true
 disallow_any_explicit = true
 disallow_any_unimported = true
 warn_no_return = true
 warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+# Home Assistant's loader imports the custom_components namespace package
+# from the repository root
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["custom_components/glinet"]
 
 [tool.codespell]
 quiet-level = 2
