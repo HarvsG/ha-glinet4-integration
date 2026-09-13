@@ -52,7 +52,7 @@ from .utils import adjust_mac, is_randomized_mac, is_ssl_error
 from .wan import WanInterfaceState, parse_network_array
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Iterable
 
     from gli4py.models import ClientEntry, TailscaleConfigResponse, WifiInterface
 
@@ -774,6 +774,27 @@ class GLinetRouter:
     def devices(self) -> dict[str, ClientDevInfo]:
         """Return devices."""
         return self._devices
+
+    def is_device_connected(self, macs: Iterable[str]) -> bool:
+        """Return True if any of the given MAC addresses correspond to a connected client."""
+        formatted_targets = {format_mac(m) for m in macs}
+        return any(
+            format_mac(mac) in formatted_targets and device.is_connected
+            for mac, device in self._devices.items()
+        )
+
+    def prune_devices(self, macs: Iterable[str]) -> list[str]:
+        """Prune client devices matching the given MAC addresses from memory."""
+        formatted_targets = {format_mac(m) for m in macs}
+        pruned = [
+            dev_mac
+            for dev_mac in list(self._devices)
+            if format_mac(dev_mac) in formatted_targets
+        ]
+        for dev_mac in pruned:
+            self._devices.pop(dev_mac, None)
+            _LOGGER.debug("Pruned client device %s from router memory", dev_mac)
+        return pruned
 
     @property
     def options(self) -> GLinetOptions:

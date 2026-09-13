@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 from homeassistant.const import Platform
+from homeassistant.helpers import device_registry as dr
 
+from .const import DOMAIN
 from .router import GLinetRouter
+from .utils import adjust_mac
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -50,3 +54,43 @@ async def async_unload_entry(hass: HomeAssistant, entry: GLinetConfigEntry) -> b
 async def update_listener(hass: HomeAssistant, entry: GLinetConfigEntry) -> None:
     """Reload the config entry when its data or options change."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_remove_config_entry_device(
+    _hass: HomeAssistant,
+    config_entry: GLinetConfigEntry,
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Remove a device from a config entry."""
+    router = getattr(config_entry, "runtime_data", None)
+    if router is None:
+        return False
+
+    # Never remove the router device itself
+    router_macs: set[str] = set()
+    if router.factory_mac and router.factory_mac != "UNKNOWN":
+        router_macs.add(dr.format_mac(router.factory_mac))
+        with suppress(ValueError, TypeError):
+            router_macs.add(dr.format_mac(adjust_mac(router.factory_mac, 1)))
+
+    if config_entry.unique_id:
+        with suppress(ValueError, TypeError):
+            router_macs.add(dr.format_mac(config_entry.unique_id))
+
+    if any(identifier[0] == DOMAIN for identifier in device_entry.identifiers):
+        return False
+
+    device_macs = {
+        dr.format_mac(connection[1])
+        for connection in device_entry.connections
+        if connection[0] == dr.CONNECTION_NETWORK_MAC
+    }
+
+    if not device_macs or bool(device_macs & router_macs):
+        return False
+
+    if router.is_device_connected(device_macs):
+        return False
+
+    router.prune_devices(device_macs)
+    return True

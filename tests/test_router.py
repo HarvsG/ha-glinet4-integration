@@ -960,3 +960,30 @@ async def test_update_system_status_registers_new_wan_interface(
 
     await router.update_system_status()
     assert "new_wan_iface" in router._known_wan_interfaces
+
+
+def test_router_is_device_connected_and_prune(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Test is_device_connected and prune_devices methods."""
+    router: GLinetRouter = init_integration.runtime_data
+    connected_mac = "B8:27:EB:44:55:66"
+    assert connected_mac in router.devices
+
+    # Test is_device_connected with matching case and different case
+    assert router.is_device_connected([connected_mac])
+    assert router.is_device_connected([connected_mac.lower()])
+    assert not router.is_device_connected(["00:00:00:00:00:00"])
+
+    # Disconnect the device
+    router.devices[connected_mac].update(None, consider_home=0)
+    assert not router.is_device_connected([connected_mac])
+
+    # Test prune_devices
+    pruned = router.prune_devices([connected_mac.lower()])
+    assert connected_mac in pruned
+    assert connected_mac not in router.devices
+
+    # Pruning non-existent device returns empty list
+    assert router.prune_devices(["00:00:00:00:00:00"]) == []

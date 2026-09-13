@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.components.device_tracker import ScannerEntity, SourceType
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import TRACK_RANDOMIZED_MAC_DISABLED, TRACK_RANDOMIZED_MAC_ENABLED
@@ -54,11 +55,12 @@ def add_entities(
     """Add all new tracker entities from the router."""
     new_tracked = []
     for mac, device in router.devices.items():
-        if mac in tracked:
+        formatted_mac = dr.format_mac(mac)
+        if formatted_mac in tracked:
             continue
 
-        new_tracked.append(GLinetDevice(router, device))
-        tracked.add(mac)
+        new_tracked.append(GLinetDevice(router, device, tracked))
+        tracked.add(formatted_mac)
 
     if new_tracked:
         async_add_entities(new_tracked)
@@ -72,10 +74,16 @@ class GLinetDevice(ScannerEntity):
     _attr_mac_address: str
     _attr_source_type: SourceType = SourceType.ROUTER
 
-    def __init__(self, router: GLinetRouter, device: ClientDevInfo) -> None:
+    def __init__(
+        self,
+        router: GLinetRouter,
+        device: ClientDevInfo,
+        tracked: set[str] | None = None,
+    ) -> None:
         """Initialize a GLinet device."""
         self._router: GLinetRouter = router
         self._device: ClientDevInfo = device
+        self._tracked: set[str] | None = tracked
         self._icon = "mdi:radar"
         self._is_randomized = is_randomized_mac(self._device.mac)
         self._attr_hostname: str = self._device.name or DEFAULT_DEVICE_NAME
@@ -153,10 +161,11 @@ class GLinetDevice(ScannerEntity):
     @callback
     def async_on_demand_update(self) -> None:
         """Update state."""
-        self._device = self._router.devices[self._device.mac]
-        self._attr_hostname = self.hostname
-        self._attr_ip_address = self.ip_address
-        self.async_write_ha_state()
+        if device := self._router.devices.get(self._device.mac):
+            self._device = device
+            self._attr_hostname = self.hostname
+            self._attr_ip_address = self.ip_address
+            self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
         """Register state update callback."""
@@ -167,3 +176,6 @@ class GLinetDevice(ScannerEntity):
                 self.async_on_demand_update,
             )
         )
+        if (tracked := self._tracked) is not None:
+            formatted_mac = dr.format_mac(self._attr_mac_address)
+            self.async_on_remove(lambda: tracked.discard(formatted_mac))
