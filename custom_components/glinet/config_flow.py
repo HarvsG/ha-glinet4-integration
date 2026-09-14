@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
 from gli4py import GLinet
 from gli4py.error_handling import NonZeroResponse
 from uplink import AiohttpClient
@@ -16,11 +17,11 @@ from homeassistant.components.device_tracker import (
     DEFAULT_CONSIDER_HOME,
 )
 from homeassistant.const import (
-    CONF_API_TOKEN,
     CONF_HOST,
     CONF_MAC,
     CONF_PASSWORD,
     CONF_USERNAME,
+    CONF_VERIFY_SSL,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import AbortFlow
@@ -32,15 +33,18 @@ from homeassistant.helpers.device_registry import format_mac
 from .const import (
     API_PATH,
     CONF_TITLE,
+    DEFAULT_VERIFY_SSL,
     DOMAIN,
     GLINET_DEFAULT_PW,
     GLINET_DEFAULT_URL,
     GLINET_DEFAULT_USERNAME,
     GLINET_FRIENDLY_NAME,
 )
-from .utils import adjust_mac
+from .utils import adjust_mac, is_ssl_error
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from homeassistant.config_entries import ConfigFlowResult
     from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
@@ -60,6 +64,45 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()
         ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900)),
+        vol.Optional(
+            CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
+        ): selector.BooleanSelector(),
+    }
+)
+
+STEP_RECONFIGURE_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(
+            CONF_USERNAME, default=GLINET_DEFAULT_USERNAME
+        ): selector.TextSelector(),
+        vol.Required(CONF_HOST, default=GLINET_DEFAULT_URL): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.URL)
+        ),
+        vol.Required(CONF_PASSWORD): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        ),
+        vol.Optional(
+            CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
+        ): selector.BooleanSelector(),
+    }
+)
+
+STEP_REAUTH_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_PASSWORD): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        ),
+    }
+)
+
+OPTIONS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(
+            CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()
+        ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900)),
+        vol.Optional(
+            CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
+        ): selector.BooleanSelector(),
     }
 )
 
@@ -67,13 +110,21 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 class TestingHub:
     """Testing class to test connection and authentication."""
 
-    def __init__(self, username: str, host: str, hass: HomeAssistant) -> None:
+    def __init__(
+        self,
+        username: str,
+        host: str,
+        hass: HomeAssistant,
+        verify_ssl: bool = DEFAULT_VERIFY_SSL,
+    ) -> None:
         """Initialize."""
         self.host: str = host
         self.username: str = username
         self.router: GLinet = GLinet(
             base_url=self.host + API_PATH,
-            client=AiohttpClient(session=async_get_clientsession(hass)),
+            client=AiohttpClient(
+                session=async_get_clientsession(hass, verify_ssl=verify_ssl)
+            ),
             sync=False,
         )
         self.router_mac: str = ""
@@ -83,10 +134,17 @@ class TestingHub:
         """Test if we can communicate with the host."""
         try:
             res: bool = await self.router.router_reachable(self.username)
-        except ConnectionError:
-            _LOGGER.exception(
-                "Failed to connect to %s, is it really a GL-iNet router?", self.host
-            )
+        except (ConnectionError, aiohttp.ClientError, OSError) as err:
+            if is_ssl_error(err):
+                _LOGGER.warning(
+                    "SSL certificate verification failed when connecting to %s. "
+                    "If using a self-signed certificate, disable SSL verification",
+                    self.host,
+                )
+            else:
+                _LOGGER.exception(
+                    "Failed to connect to %s, is it really a GL-iNet router?", self.host
+                )
         except TypeError:
             _LOGGER.exception(
                 "Failed to parse router response to %s, is it the right firmware version?",
@@ -102,7 +160,12 @@ class TestingHub:
         try:
             await self.router.login(self.username, password)
             res = await self.router.router_info()
-        except (ConnectionRefusedError, NonZeroResponse):
+        except (
+            ConnectionRefusedError,
+            NonZeroResponse,
+            KeyError,
+            aiohttp.ClientError,
+        ):
             _LOGGER.info(
                 "Failed to authenticate with Gl-inet router during testing, this may be expected at times"
             )
@@ -122,7 +185,10 @@ async def validate_input(
     """
 
     hub = TestingHub(
-        data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME), data[CONF_HOST], hass
+        data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME),
+        data[CONF_HOST],
+        hass,
+        verify_ssl=data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
     )
 
     if not await hub.connect():
@@ -142,13 +208,15 @@ async def validate_input(
         "data": {
             CONF_USERNAME: data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME),
             CONF_HOST: data[CONF_HOST],
-            CONF_API_TOKEN: hub.router.sid,
             CONF_PASSWORD: (
                 data.get(CONF_PASSWORD, GLINET_DEFAULT_PW) if valid_auth else ""
             ),
+        },
+        "options": {
             CONF_CONSIDER_HOME: data.get(
                 CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()
             ),
+            CONF_VERIFY_SSL: data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
         },
     }
 
@@ -187,7 +255,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=info[CONF_TITLE], data=info["data"]
+                    title=info[CONF_TITLE],
+                    data=info["data"],
+                    options=info["options"],
                 )
 
         # If we have discovered data, we can pre-fill the form
@@ -236,10 +306,95 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "Connected to device using DHCP information, default password in use: %s",
                 entry["data"][CONF_PASSWORD] == GLINET_DEFAULT_PW,
             )
-            entry["data"].pop(CONF_API_TOKEN)
             self._discovered_data = entry["data"]
             return await self.async_step_user()
         return self.async_abort(reason="cannot_connect")
+
+    async def async_step_reauth(
+        self, _entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Handle a reauthentication flow request."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for the new router password and validate it."""
+        errors: dict[str, str] = {}
+        reauth_entry = self._get_reauth_entry()
+        if user_input is not None:
+            try:
+                await validate_input({**reauth_entry.data, **user_input}, self.hass)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            # Broad excepts are permitted in config flows
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            else:
+                return self.async_update_reload_and_abort(
+                    reauth_entry,
+                    data_updates={CONF_PASSWORD: user_input[CONF_PASSWORD]},
+                    reason="reauth_successful",
+                )
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=STEP_REAUTH_DATA_SCHEMA,
+            description_placeholders={CONF_HOST: reauth_entry.data[CONF_HOST]},
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration of the host and credentials."""
+        errors: dict[str, str] = {}
+        reconfigure_entry = self._get_reconfigure_entry()
+        if user_input is not None:
+            try:
+                info = await validate_input(user_input, self.hass)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            # Broad excepts are permitted in config flows
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            else:
+                await self.async_set_unique_id(format_mac(info[CONF_MAC]))
+                self._abort_if_unique_id_mismatch()
+                data_updates = dict(info["data"])
+                if CONF_VERIFY_SSL in reconfigure_entry.data:
+                    data_updates[CONF_VERIFY_SSL] = info["options"][CONF_VERIFY_SSL]
+                return self.async_update_reload_and_abort(
+                    reconfigure_entry,
+                    data_updates=data_updates,
+                    options={
+                        **reconfigure_entry.options,
+                        CONF_VERIFY_SSL: info["options"][CONF_VERIFY_SSL],
+                    },
+                    reason="reconfigure_successful",
+                )
+        suggested_values = {
+            CONF_VERIFY_SSL: reconfigure_entry.options.get(
+                CONF_VERIFY_SSL,
+                reconfigure_entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+            ),
+            **reconfigure_entry.data,
+            **reconfigure_entry.options,
+            **(user_input or {}),
+        }
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                STEP_RECONFIGURE_DATA_SCHEMA,
+                suggested_values,
+            ),
+            errors=errors,
+        )
 
     @staticmethod
     @callback
@@ -251,35 +406,38 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle a option flow for GL-iNet."""
+    """Handle an options flow for GL-iNet."""
 
     async def async_step_init(
-        self, user_input: dict | None = None
-    ) -> config_entries.ConfigFlowResult:
-        """Handle options flow."""
-        errors = {}
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the GL-iNet options."""
         if user_input is not None:
-            try:
-                info = await validate_input(user_input, self.hass)
-                # In future we could do additional checks such as
-                # decting API version warning about unsupported versions
-            except CannotConnect:
-                errors["base"] = "cannot_connect"
-            except InvalidAuth:
-                errors["base"] = "invalid_auth"
-            # Broad excepts are permitted in config flows
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
-            else:
-                return self.async_create_entry(
-                    title="", data=self.config_entry.options | info["data"]
-                )
-        # This exposes the API key back to the user
-        data_schema = self.add_suggested_values_to_schema(
-            STEP_USER_DATA_SCHEMA, self.config_entry.data
+            return self.async_create_entry(data=user_input)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                OPTIONS_SCHEMA,
+                {
+                    # Fall back to entry data for entries created before
+                    # consider_home moved to options
+                    CONF_CONSIDER_HOME: self.config_entry.options.get(
+                        CONF_CONSIDER_HOME,
+                        self.config_entry.data.get(
+                            CONF_CONSIDER_HOME,
+                            DEFAULT_CONSIDER_HOME.total_seconds(),
+                        ),
+                    ),
+                    CONF_VERIFY_SSL: self.config_entry.options.get(
+                        CONF_VERIFY_SSL,
+                        self.config_entry.data.get(
+                            CONF_VERIFY_SSL,
+                            DEFAULT_VERIFY_SSL,
+                        ),
+                    ),
+                },
+            ),
         )
-        return self.async_show_form(step_id="init", data_schema=data_schema)
 
 
 class CannotConnect(HomeAssistantError):

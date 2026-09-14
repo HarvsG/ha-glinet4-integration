@@ -9,3 +9,4 @@ GLINET_DEFAULT_PW = "goodlife"
 GLINET_DEFAULT_USERNAME = "root"
 
 CONF_TITLE = "title"
+DEFAULT_VERIFY_SSL = True
