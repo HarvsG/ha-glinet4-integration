@@ -27,7 +27,11 @@ from homeassistant.components.device_tracker import DOMAIN as TRACKER_DOMAIN
 from homeassistant.config_entries import SOURCE_REAUTH
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
 from homeassistant.helpers import entity_registry as er
 
 from .const import MOCK_STATUS, POLLED_METHODS
@@ -384,11 +388,11 @@ async def test_router_async_init_device_info_failure(
     assert "Error getting basic device info from GL-iNet router" in caplog.text
 
 
-async def test_router_create_api_missing_password_raises_auth_failed(
+async def test_router_create_api_missing_password_raises_config_entry_error(
     hass: HomeAssistant,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test _create_api raises ConfigEntryAuthFailed when password is missing."""
+    """Test _create_api raises ConfigEntryError when password is missing."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="GL-iNet MT6000",
@@ -399,7 +403,7 @@ async def test_router_create_api_missing_password_raises_auth_failed(
         unique_id="94:83:c4:aa:bb:cc",
     )
     router = GLinetRouter(hass, entry)
-    with pytest.raises(ConfigEntryAuthFailed):
+    with pytest.raises(ConfigEntryError):
         router._create_api()
 
     assert "no auth details found in configuration" in caplog.text

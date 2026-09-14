@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 from gli4py import GLinet
-from gli4py.error_handling import NonZeroResponse
+from gli4py.error_handling import APIClientError
 from uplink import AiohttpClient
 import voluptuous as vol
 
@@ -160,20 +160,20 @@ class TestingHub:
         try:
             await self.router.login(self.username, password)
             res = await self.router.router_info()
+            self.router_mac = res[CONF_MAC]
+            self.router_model = res["model"]
         except (
             ConnectionRefusedError,
-            NonZeroResponse,
+            APIClientError,
             KeyError,
             aiohttp.ClientError,
         ):
             _LOGGER.info(
                 "Failed to authenticate with Gl-inet router during testing, this may be expected at times"
             )
+            return False
 
-        else:
-            self.router_mac = res[CONF_MAC]
-            self.router_model = res["model"]
-        return bool(self.router.logged_in)
+        return bool(self.router.logged_in and self.router_mac)
 
 
 async def validate_input(
