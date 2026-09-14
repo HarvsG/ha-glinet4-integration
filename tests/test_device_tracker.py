@@ -13,7 +13,12 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
-from custom_components.glinet.const import DOMAIN
+from custom_components.glinet.const import (
+    CONF_TRACK_RANDOMIZED_MAC,
+    DOMAIN,
+    TRACK_RANDOMIZED_MAC_ENABLED,
+    TRACK_RANDOMIZED_MAC_IGNORE,
+)
 from homeassistant.const import STATE_HOME, STATE_NOT_HOME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -172,16 +177,17 @@ async def test_restored_registry_entities_recreated(
         pytest.param("   ", id="whitespace"),
     ],
 )
-async def test_device_with_no_name_skipped(
+async def test_device_with_no_name_tracked(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     mock_glinet: MagicMock,
     mock_api: MagicMock,
     empty_name: str,
 ) -> None:
-    """Test a client with neither alias nor valid name gets no tracker entity."""
+    """Test a client with neither alias nor valid name gets a tracker entity with MAC-derived name."""
+    mac = "00:bb:cc:dd:ee:04"
     clients = deepcopy(MOCK_CLIENTS)
-    clients["aa:bb:cc:dd:ee:04"] = {
+    clients[mac] = {
         "alias": "",
         "name": empty_name,
         "ip": "192.168.8.103",
@@ -190,15 +196,154 @@ async def test_device_with_no_name_skipped(
     }
     mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
+    await _setup_with_known_devices(
+        hass,
+        mock_config_entry,
+        ["aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02", mac],
+    )
+
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("device_tracker", DOMAIN, mac)
+    assert entity_id is not None
+
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_HOME
+    assert state.name == mac.replace(":", "_")
+    assert state.attributes["mac_randomized"] is False
+
+
+async def test_randomized_mac_disabled_by_default(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test a client using a randomized MAC is registered as disabled by default."""
+    random_mac = "9a:bb:cc:dd:ee:99"
+    clients = deepcopy(MOCK_CLIENTS)
+    clients[random_mac] = {
+        "alias": "Phone",
+        "name": "pixel",
+        "ip": "192.168.8.199",
+        "online": True,
+        "type": 1,
+    }
+    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
     mock_config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
     registry = er.async_get(hass)
-    assert (
-        registry.async_get_entity_id("device_tracker", DOMAIN, "aa:bb:cc:dd:ee:04")
-        is None
+    entity_id = registry.async_get_entity_id("device_tracker", DOMAIN, random_mac)
+    assert entity_id is not None
+    entry = registry.async_get(entity_id)
+    assert entry is not None
+    assert entry.disabled_by == er.RegistryEntryDisabler.INTEGRATION
+
+
+async def test_randomized_mac_enabled_option(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test a randomized-MAC client is enabled when track_randomized_mac is enabled."""
+    random_mac = "9a:bb:cc:dd:ee:99"
+    clients = deepcopy(MOCK_CLIENTS)
+    clients[random_mac] = {
+        "alias": "Phone",
+        "name": "pixel",
+        "ip": "192.168.8.199",
+        "online": True,
+        "type": 1,
+    }
+    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        options={CONF_TRACK_RANDOMIZED_MAC: TRACK_RANDOMIZED_MAC_ENABLED},
     )
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(_entity_id(hass, random_mac))
+    assert state is not None
+    assert state.state == STATE_HOME
+    assert state.attributes["mac_randomized"] is True
+
+
+async def test_randomized_mac_ignore_option(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test a randomized-MAC client is completely ignored when mode is ignore."""
+    random_mac = "9a:bb:cc:dd:ee:99"
+    clients = deepcopy(MOCK_CLIENTS)
+    clients[random_mac] = {
+        "alias": "Phone",
+        "name": "pixel",
+        "ip": "192.168.8.199",
+        "online": True,
+        "type": 1,
+    }
+    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        options={CONF_TRACK_RANDOMIZED_MAC: TRACK_RANDOMIZED_MAC_IGNORE},
+    )
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    assert registry.async_get_entity_id("device_tracker", DOMAIN, random_mac) is None
+
+
+async def test_device_tracker_live_attributes_update(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test tracker entity reflects updated IP and name on subsequent polls."""
+    mac = "00:bb:cc:dd:ee:01"
+    clients = deepcopy(MOCK_CLIENTS)
+    clients[mac] = {
+        "alias": "Phone",
+        "name": "phone",
+        "ip": "192.168.8.100",
+        "online": True,
+        "type": 1,
+    }
+    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
+    await _setup_with_known_devices(hass, mock_config_entry, [mac])
+
+    state = hass.states.get(_entity_id(hass, mac))
+    assert state is not None
+    assert state.attributes.get("ip") == "192.168.8.100"
+
+    # Simulate router poll returning an updated IP and alias
+    updated_clients = deepcopy(clients)
+    updated_clients[mac]["ip"] = "192.168.8.200"
+    updated_clients[mac]["alias"] = "New Phone Name"
+    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(
+        updated_clients
+    )
+
+    await _tick(hass, freezer)
+
+    state = hass.states.get(_entity_id(hass, mac))
+    assert state is not None
+    assert state.attributes.get("ip") == "192.168.8.200"
+    assert "New Phone Name" in state.name
 
 
 async def test_restored_device_tracker_name_preserved_on_unassigned_update(

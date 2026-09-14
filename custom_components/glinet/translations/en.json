@@ -61,11 +61,13 @@
       "init": {
         "data": {
           "consider_home": "Consider Home",
-          "verify_ssl": "Verify SSL certificate"
+          "verify_ssl": "Verify SSL certificate",
+          "track_randomized_mac": "Randomized-MAC devices"
         },
         "data_description": {
           "consider_home": "Seconds to wait before deciding that a device is away",
-          "verify_ssl": "Enable SSL certificate verification (disable for local self-signed certificates; ignored for HTTP connections)."
+          "verify_ssl": "Enable SSL certificate verification (disable for local self-signed certificates; ignored for HTTP connections).",
+          "track_randomized_mac": "How to handle clients that use MAC-address randomization (e.g. phones). These change address on each reconnection."
         }
       }
     }
@@ -93,6 +95,15 @@
     },
     "button": {
       "reboot": { "name": "Reboot" }
+    }
+  },
+  "selector": {
+    "track_randomized_mac": {
+      "options": {
+        "disabled": "Track (disabled by default)",
+        "enabled": "Track (enabled by default)",
+        "ignore": "Ignore (don't create entities)"
+      }
     }
   }
 }

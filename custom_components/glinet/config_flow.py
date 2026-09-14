@@ -33,12 +33,17 @@ from homeassistant.helpers.device_registry import format_mac
 from .const import (
     API_PATH,
     CONF_TITLE,
+    CONF_TRACK_RANDOMIZED_MAC,
+    DEFAULT_TRACK_RANDOMIZED_MAC,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
     GLINET_DEFAULT_PW,
     GLINET_DEFAULT_URL,
     GLINET_DEFAULT_USERNAME,
     GLINET_FRIENDLY_NAME,
+    TRACK_RANDOMIZED_MAC_DISABLED,
+    TRACK_RANDOMIZED_MAC_ENABLED,
+    TRACK_RANDOMIZED_MAC_IGNORE,
 )
 from .utils import adjust_mac, is_ssl_error
 
@@ -103,6 +108,19 @@ OPTIONS_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
         ): selector.BooleanSelector(),
+        vol.Optional(
+            CONF_TRACK_RANDOMIZED_MAC, default=DEFAULT_TRACK_RANDOMIZED_MAC
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    TRACK_RANDOMIZED_MAC_DISABLED,
+                    TRACK_RANDOMIZED_MAC_ENABLED,
+                    TRACK_RANDOMIZED_MAC_IGNORE,
+                ],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                translation_key=CONF_TRACK_RANDOMIZED_MAC,
+            )
+        ),
     }
 )
 
@@ -433,6 +451,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         self.config_entry.data.get(
                             CONF_VERIFY_SSL,
                             DEFAULT_VERIFY_SSL,
+                        ),
+                    ),
+                    CONF_TRACK_RANDOMIZED_MAC: self.config_entry.options.get(
+                        CONF_TRACK_RANDOMIZED_MAC,
+                        self.config_entry.data.get(
+                            CONF_TRACK_RANDOMIZED_MAC,
+                            DEFAULT_TRACK_RANDOMIZED_MAC,
                         ),
                     ),
                 },
