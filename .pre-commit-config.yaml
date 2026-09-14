@@ -31,32 +31,18 @@ repos:
         exclude: ^tests/
       - id: pylint
         name: pylint
-        entry: uv run pylint --disable=import-error,fixme,line-too-long,invalid-name,too-many-public-methods,abstract-method,overridden-final-method,too-many-instance-attributes,too-many-public-methods,too-few-public-methods,too-many-branches
+        entry: uv run pylint
         language: system
         types: [python]
-        require_serial: true
+        stages: [pre-push, manual]
         exclude: ^tests/
       - id: codespell
         name: codespell
         entry: uv run codespell --write-changes
         language: system
-        pass_filenames: false
-        always_run: true
+        types: [text]
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v3.1.0
     hooks:
       - id: prettier
         exclude: ^custom_components/glinet/manifest\.json$
-  - repo: https://github.com/cdce8p/python-typing-update
-    rev: v0.7.0
-    hooks:
-      # Run `python-typing-update` hook manually from time to time
-      # to update python typing syntax.
-      # Will require manual work, before submitting changes!
-      - id: python-typing-update
-        stages: [manual]
-        args:
-          - --py310-plus
-          - --force
-          - --keep-updates
-        files: ^.+\.py$
