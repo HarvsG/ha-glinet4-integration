@@ -19,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Prepare and install deps
         uses: ./.github/actions/install-deps
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         name: Cache pre-commit hooks
         with:
           path: ~/.cache/pre-commit/
