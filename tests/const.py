@@ -26,14 +26,14 @@ MOCK_STATUS = {
 }
 
 MOCK_CLIENTS = {
-    "aa:bb:cc:dd:ee:01": {
+    "00:bb:cc:dd:ee:01": {
         "alias": "Phone",
         "name": "phone",
         "ip": "192.168.8.100",
         "online": True,
         "type": 1,
     },
-    "aa:bb:cc:dd:ee:02": {
+    "00:bb:cc:dd:ee:02": {
         "alias": "",
         "name": "laptop",
         "ip": "192.168.8.101",
