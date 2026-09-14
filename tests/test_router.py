@@ -216,19 +216,19 @@ async def test_unhandled_interface_type_warning_is_deduplicated(
     router: GLinetRouter = init_integration.runtime_data
     mock_api.connected_clients.side_effect = None
     mock_api.connected_clients.return_value = {
-        "aa:bb:cc:dd:ee:99": {
+        "00:bb:cc:dd:ee:99": {
             "name": "unknown-interface-device",
             "iface": "future-radio",
             "type": 99,
         },
-        "aa:bb:cc:dd:ee:98": {
+        "00:bb:cc:dd:ee:98": {
             "name": "known-interface-device",
             "iface": "6G",
             "type": 98,
         },
-        "aa:bb:cc:dd:ee:05": {"name": "unknown-5", "type": 5},
-        "aa:bb:cc:dd:ee:08": {"name": "unknown-8", "type": 8},
-        "aa:bb:cc:dd:ee:00": {"name": "unknown-none", "type": None},
+        "00:bb:cc:dd:ee:05": {"name": "unknown-5", "type": 5},
+        "00:bb:cc:dd:ee:08": {"name": "unknown-8", "type": 8},
+        "00:bb:cc:dd:ee:00": {"name": "unknown-none", "type": None},
     }
     caplog.clear()
 
@@ -238,7 +238,7 @@ async def test_unhandled_interface_type_warning_is_deduplicated(
     assert caplog.text.count("reported an unhandled client interface") == 1
     assert "model: mt6000" in caplog.text
     assert "firmware: 4.8.2" in caplog.text
-    assert "type=99, iface=future-radio, mac=aa:bb:cc:dd:ee:99" in caplog.text
+    assert "type=99, iface=future-radio, mac=00:bb:cc:dd:ee:99" in caplog.text
 
     caplog.clear()
     await router.update_device_trackers()
