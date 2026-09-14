@@ -67,7 +67,7 @@
         "data_description": {
           "consider_home": "Seconds to wait before deciding that a device is away",
           "verify_ssl": "Enable SSL certificate verification (disable for local self-signed certificates; ignored for HTTP connections).",
-          "track_randomized_mac": "How to handle clients that use MAC-address randomization (e.g. phones). These change address on each reconnection."
+          "track_randomized_mac": "How to handle clients that use MAC-address randomization (e.g. phones). Warning: each new connection of a randomised MAC will create a new short-lived entity."
         }
       }
     }
