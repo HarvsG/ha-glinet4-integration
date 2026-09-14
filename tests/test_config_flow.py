@@ -9,7 +9,12 @@ from unittest.mock import AsyncMock, MagicMock
 import aiohttp
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.glinet.const import DOMAIN
+from custom_components.glinet.const import (
+    CONF_TRACK_RANDOMIZED_MAC,
+    DEFAULT_TRACK_RANDOMIZED_MAC,
+    DOMAIN,
+    TRACK_RANDOMIZED_MAC_ENABLED,
+)
 from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
 from homeassistant.config_entries import SOURCE_DHCP, SOURCE_USER
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
@@ -343,6 +348,7 @@ async def test_options_flow_prefills_from_data_fallback(
     }
     assert suggested[CONF_CONSIDER_HOME] == 240
     assert suggested[CONF_VERIFY_SSL] is True
+    assert suggested[CONF_TRACK_RANDOMIZED_MAC] == DEFAULT_TRACK_RANDOMIZED_MAC
 
 
 async def test_user_flow_disable_verify_ssl(
@@ -382,6 +388,31 @@ async def test_options_flow_updates_verify_ssl(
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert mock_config_entry.options[CONF_VERIFY_SSL] is False
+
+
+async def test_options_flow_updates_track_randomized_mac(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test updating track_randomized_mac through the options flow."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_CONSIDER_HOME: 180,
+            CONF_VERIFY_SSL: True,
+            CONF_TRACK_RANDOMIZED_MAC: TRACK_RANDOMIZED_MAC_ENABLED,
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert (
+        mock_config_entry.options[CONF_TRACK_RANDOMIZED_MAC]
+        == TRACK_RANDOMIZED_MAC_ENABLED
+    )
 
 
 async def test_reconfigure_flow_disable_verify_ssl(
