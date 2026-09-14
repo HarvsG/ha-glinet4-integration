@@ -92,6 +92,45 @@ DEVICE_INTERFACE_TYPE_MAP: dict[int, DeviceInterfaceType] = {
     12: DeviceInterfaceType.WIFI_6_GUEST,
 }
 
+# Prefer the router's self-describing interface string when available.
+DEVICE_INTERFACE_IFACE_MAP: dict[str, DeviceInterfaceType] = {
+    "2.4g": DeviceInterfaceType.WIFI_24,
+    "5g": DeviceInterfaceType.WIFI_5,
+    "6g": DeviceInterfaceType.WIFI_6,
+    "mlo": DeviceInterfaceType.MLO,
+    "cable": DeviceInterfaceType.LAN,
+    "wired": DeviceInterfaceType.LAN,
+    "lan": DeviceInterfaceType.LAN,
+}
+
+
+def device_interface_type_from_client(dev_info: dict) -> DeviceInterfaceType:
+    """Resolve a client interface from iface, falling back to the type index."""
+    iface = str(dev_info.get("iface") or "").strip().lower()
+    interface_type = DEVICE_INTERFACE_IFACE_MAP.get(iface)
+    if interface_type is not None:
+        return interface_type
+
+    if "guest" in iface:
+        guest_interfaces = (
+            ("2.4", DeviceInterfaceType.WIFI_24_GUEST),
+            ("6", DeviceInterfaceType.WIFI_6_GUEST),
+            ("mlo", DeviceInterfaceType.MLO_GUEST),
+            ("5", DeviceInterfaceType.WIFI_5_GUEST),
+        )
+        for marker, guest_type in guest_interfaces:
+            if marker in iface:
+                return guest_type
+    elif "mlo" in iface:
+        return DeviceInterfaceType.MLO
+
+    raw_type = dev_info.get("type", 5)
+    try:
+        type_index = -1 if isinstance(raw_type, bool) else int(raw_type)
+    except (TypeError, ValueError):
+        type_index = -1
+    return DEVICE_INTERFACE_TYPE_MAP.get(type_index, DeviceInterfaceType.UNKNOWN)
+
 
 class GLinetRouter:
     """representation of a GLinet router.
@@ -739,9 +778,7 @@ class ClientDevInfo:
             self._ip_address = dev_info.get("ip")
             self._last_activity = now
             self._connected = dev_info.get("online", False)
-            self._if_type = DEVICE_INTERFACE_TYPE_MAP.get(
-                dev_info.get("type", 5), DeviceInterfaceType.UNKNOWN
-            )
+            self._if_type = device_interface_type_from_client(dev_info)
         # a device might not actually be online but we want to consider it home
         elif self._connected:
             self._connected = (
