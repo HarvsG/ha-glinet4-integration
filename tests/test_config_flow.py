@@ -13,7 +13,7 @@ from custom_components.glinet.const import (
     CONF_TRACK_RANDOMIZED_MAC,
     DEFAULT_TRACK_RANDOMIZED_MAC,
     DOMAIN,
-    TRACK_RANDOMIZED_MAC_IGNORE,
+    TRACK_RANDOMIZED_MAC_ENABLED,
 )
 from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
 from homeassistant.config_entries import SOURCE_DHCP, SOURCE_USER
@@ -405,13 +405,13 @@ async def test_options_flow_updates_track_randomized_mac(
         {
             CONF_CONSIDER_HOME: 180,
             CONF_VERIFY_SSL: True,
-            CONF_TRACK_RANDOMIZED_MAC: TRACK_RANDOMIZED_MAC_IGNORE,
+            CONF_TRACK_RANDOMIZED_MAC: TRACK_RANDOMIZED_MAC_ENABLED,
         },
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert (
         mock_config_entry.options[CONF_TRACK_RANDOMIZED_MAC]
-        == TRACK_RANDOMIZED_MAC_IGNORE
+        == TRACK_RANDOMIZED_MAC_ENABLED
     )
 
 

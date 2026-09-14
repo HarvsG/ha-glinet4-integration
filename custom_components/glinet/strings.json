@@ -100,9 +100,9 @@
   "selector": {
     "track_randomized_mac": {
       "options": {
+        "ignore": "Ignore (don't create entities)",
         "disabled": "Track (disabled by default)",
-        "enabled": "Track (enabled by default)",
-        "ignore": "Ignore (don't create entities)"
+        "enabled": "Track (enabled by default)"
       }
     }
   }

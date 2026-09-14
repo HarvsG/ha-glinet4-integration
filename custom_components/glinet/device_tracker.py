@@ -9,7 +9,7 @@ from homeassistant.components.device_tracker import ScannerEntity, SourceType
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .const import TRACK_RANDOMIZED_MAC_ENABLED
+from .const import TRACK_RANDOMIZED_MAC_DISABLED, TRACK_RANDOMIZED_MAC_ENABLED
 from .utils import is_randomized_mac
 
 if TYPE_CHECKING:
@@ -142,11 +142,11 @@ class GLinetDevice(ScannerEntity):
     @property
     def entity_registry_enabled_default(self) -> bool:
         """Return if entity is enabled by default."""
-        if (
-            self._is_randomized
-            and self._router.randomized_mac_mode == TRACK_RANDOMIZED_MAC_ENABLED
-        ):
-            return True
+        if self._is_randomized:
+            if self._router.randomized_mac_mode == TRACK_RANDOMIZED_MAC_ENABLED:
+                return True
+            if self._router.randomized_mac_mode == TRACK_RANDOMIZED_MAC_DISABLED:
+                return False
         return super().entity_registry_enabled_default
 
     @callback

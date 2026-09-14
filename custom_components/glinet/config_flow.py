@@ -113,9 +113,9 @@ OPTIONS_SCHEMA = vol.Schema(
         ): selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
+                    TRACK_RANDOMIZED_MAC_IGNORE,
                     TRACK_RANDOMIZED_MAC_DISABLED,
                     TRACK_RANDOMIZED_MAC_ENABLED,
-                    TRACK_RANDOMIZED_MAC_IGNORE,
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,
                 translation_key=CONF_TRACK_RANDOMIZED_MAC,
