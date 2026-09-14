@@ -28,7 +28,11 @@ from homeassistant.const import (
     CONF_VERIFY_SSL,
 )
 from homeassistant.core import callback
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format_mac
@@ -37,8 +41,15 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
-from .const import API_PATH, DEFAULT_VERIFY_SSL, DOMAIN
-from .utils import adjust_mac, is_ssl_error
+from .const import (
+    API_PATH,
+    CONF_TRACK_RANDOMIZED_MAC,
+    DEFAULT_TRACK_RANDOMIZED_MAC,
+    DEFAULT_VERIFY_SSL,
+    DOMAIN,
+    TRACK_RANDOMIZED_MAC_IGNORE,
+)
+from .utils import adjust_mac, is_randomized_mac, is_ssl_error
 from .wan import WanInterfaceState, parse_network_array
 
 if TYPE_CHECKING:
@@ -241,7 +252,7 @@ class GLinetRouter:
         _LOGGER.error(
             "Error setting up GL-iNet router, no auth details found in configuration"
         )
-        raise ConfigEntryAuthFailed
+        raise ConfigEntryError("No auth details found in configuration")
 
     async def renew_token(self) -> None:
         """Attempt to get a new token."""
@@ -430,25 +441,38 @@ class GLinetRouter:
             )
             return
 
+        _LOGGER.debug(
+            "connected_clients returned %d online device(s): %s",
+            len(wrt_devices),
+            list(wrt_devices.keys()),
+        )
+
         for device_mac, device in self._devices.items():
             dev_info = wrt_devices.get(device_mac)
             device.update(dev_info, self._consider_home)
 
         for device_mac, dev_info in wrt_devices.items():
-            # Skip if we've already have this device
+            # Skip if we already have this device
             if device_mac in self._devices:
                 continue
 
-            alias = dev_info.get("alias", "").strip()
-            name = dev_info.get("name", "").strip()
-            # Skip if both alias and name are empty or unassigned
-            if not alias and (not name or name == "*"):
+            # Optionally ignore clients using MAC randomization entirely
+            if (
+                self.randomized_mac_mode == TRACK_RANDOMIZED_MAC_IGNORE
+                and is_randomized_mac(device_mac)
+            ):
                 continue
 
             new_device = True
             device = ClientDevInfo(device_mac)
             device.update(dev_info)
             self._devices[device_mac] = device
+            _LOGGER.debug(
+                "Discovered new tracked device %s (name=%r alias=%r)",
+                device_mac,
+                dev_info.get("name"),
+                dev_info.get("alias"),
+            )
 
         async_dispatcher_send(self.hass, self.signal_device_update)
         if new_device:
@@ -600,6 +624,16 @@ class GLinetRouter:
     def devices(self) -> dict[str, ClientDevInfo]:
         """Return devices."""
         return self._devices
+
+    @property
+    def randomized_mac_mode(self) -> str:
+        """How clients using MAC randomization should be tracked."""
+        return self._entry.options.get(
+            CONF_TRACK_RANDOMIZED_MAC,
+            self._entry.data.get(
+                CONF_TRACK_RANDOMIZED_MAC, DEFAULT_TRACK_RANDOMIZED_MAC
+            ),
+        )
 
     @property
     def api(self) -> GLinet:

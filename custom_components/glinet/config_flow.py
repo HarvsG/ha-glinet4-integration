@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 from gli4py import GLinet
-from gli4py.error_handling import NonZeroResponse
+from gli4py.error_handling import APIClientError
 from uplink import AiohttpClient
 import voluptuous as vol
 
@@ -33,12 +33,17 @@ from homeassistant.helpers.device_registry import format_mac
 from .const import (
     API_PATH,
     CONF_TITLE,
+    CONF_TRACK_RANDOMIZED_MAC,
+    DEFAULT_TRACK_RANDOMIZED_MAC,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
     GLINET_DEFAULT_PW,
     GLINET_DEFAULT_URL,
     GLINET_DEFAULT_USERNAME,
     GLINET_FRIENDLY_NAME,
+    TRACK_RANDOMIZED_MAC_DISABLED,
+    TRACK_RANDOMIZED_MAC_ENABLED,
+    TRACK_RANDOMIZED_MAC_IGNORE,
 )
 from .utils import adjust_mac, is_ssl_error
 
@@ -103,6 +108,19 @@ OPTIONS_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
         ): selector.BooleanSelector(),
+        vol.Optional(
+            CONF_TRACK_RANDOMIZED_MAC, default=DEFAULT_TRACK_RANDOMIZED_MAC
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    TRACK_RANDOMIZED_MAC_IGNORE,
+                    TRACK_RANDOMIZED_MAC_DISABLED,
+                    TRACK_RANDOMIZED_MAC_ENABLED,
+                ],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                translation_key=CONF_TRACK_RANDOMIZED_MAC,
+            )
+        ),
     }
 )
 
@@ -160,20 +178,20 @@ class TestingHub:
         try:
             await self.router.login(self.username, password)
             res = await self.router.router_info()
+            self.router_mac = res[CONF_MAC]
+            self.router_model = res["model"]
         except (
             ConnectionRefusedError,
-            NonZeroResponse,
+            APIClientError,
             KeyError,
             aiohttp.ClientError,
         ):
             _LOGGER.info(
                 "Failed to authenticate with Gl-inet router during testing, this may be expected at times"
             )
+            return False
 
-        else:
-            self.router_mac = res[CONF_MAC]
-            self.router_model = res["model"]
-        return bool(self.router.logged_in)
+        return bool(self.router.logged_in and self.router_mac)
 
 
 async def validate_input(
@@ -433,6 +451,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         self.config_entry.data.get(
                             CONF_VERIFY_SSL,
                             DEFAULT_VERIFY_SSL,
+                        ),
+                    ),
+                    CONF_TRACK_RANDOMIZED_MAC: self.config_entry.options.get(
+                        CONF_TRACK_RANDOMIZED_MAC,
+                        self.config_entry.data.get(
+                            CONF_TRACK_RANDOMIZED_MAC,
+                            DEFAULT_TRACK_RANDOMIZED_MAC,
                         ),
                     ),
                 },
