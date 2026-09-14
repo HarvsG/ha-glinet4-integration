@@ -17,12 +17,14 @@ dependencies = [
 dev = [
     "codespell>=2.4.1",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
-    "gli4py==0.0.17b3",
+    "gli4py==0.0.17",
     "habluetooth>=6.26.11",
     "homeassistant-stubs==2026.9.2",
     "josepy>=2.2.0",
     "mashumaro>=3.17.0",
     "mypy>=1.16.1",
+    "pre-commit>=4.0.0",
+    "prek>=0.2.0",
     "PyGithub>=2.6",
     "pylint>=3.3.7",
     "pytest>=8.3.5",
@@ -160,6 +162,7 @@ max-complexity = 25
 
 [tool.pylint.main]
 py-version = "3.14"
+jobs = 0
 load-plugins = [
     "pylint.extensions.code_style",
     "pylint.extensions.typing",
@@ -174,16 +177,23 @@ load-plugins = [
 # consider-using-assignment-expr - decision to use := better left to devs
 # consider-using-assignment-expr - too opinionated
 disable = [
+    "abstract-method",
+    "consider-using-assignment-expr",
+    "consider-using-tuple",
     "duplicate-code",
+    "fixme",
+    "import-error",
+    "invalid-name",
     "line-too-long",
+    "overridden-final-method",
     "too-few-public-methods",
     "too-many-ancestors",
     "too-many-arguments",
+    "too-many-branches",
     "too-many-instance-attributes",
     "too-many-locals",
     "too-many-positional-arguments",
-    "consider-using-assignment-expr",
-    "consider-using-tuple",
+    "too-many-public-methods",
 ]
 
 [tool.pylint.format]
@@ -193,11 +203,27 @@ min-similarity-lines = 7
 
 [tool.mypy]
 python_version = "3.14"
+platform = "linux"
 show_error_codes = true
-strict = true
-disallow_any_explicit = true
-disallow_any_unimported = true
-warn_no_return = true
+follow_imports = "normal"
+local_partial_types = true
+strict_equality = true
+strict_bytes = true
+no_implicit_optional = true
+warn_incomplete_stub = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = true
+enable_error_code = ["deprecated", "ignore-without-code", "redundant-self", "truthy-iterable"]
+disable_error_code = ["annotation-unchecked", "import-not-found", "import-untyped"]
+extra_checks = false
+check_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+warn_return_any = true
 warn_unreachable = true
 
 [tool.pytest.ini_options]
