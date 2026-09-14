@@ -103,6 +103,48 @@ DEVICE_INTERFACE_TYPE_MAP: dict[int, DeviceInterfaceType] = {
     12: DeviceInterfaceType.WIFI_6_GUEST,
 }
 
+# Prefer the router's self-describing interface string when available.
+DEVICE_INTERFACE_IFACE_MAP: dict[str, DeviceInterfaceType] = {
+    "2.4g": DeviceInterfaceType.WIFI_24,
+    "5g": DeviceInterfaceType.WIFI_5,
+    "6g": DeviceInterfaceType.WIFI_6,
+    "mlo": DeviceInterfaceType.MLO,
+    "cable": DeviceInterfaceType.LAN,
+    "wired": DeviceInterfaceType.LAN,
+    "lan": DeviceInterfaceType.LAN,
+}
+
+_GUEST_INTERFACE_MARKERS: tuple[tuple[str, DeviceInterfaceType], ...] = (
+    ("2.4g", DeviceInterfaceType.WIFI_24_GUEST),
+    ("6g", DeviceInterfaceType.WIFI_6_GUEST),
+    ("mlo", DeviceInterfaceType.MLO_GUEST),
+    ("5g", DeviceInterfaceType.WIFI_5_GUEST),
+)
+
+
+def device_interface_type_from_client(dev_info: dict) -> DeviceInterfaceType:
+    """Resolve a client interface from iface, falling back to the type index."""
+    iface = str(dev_info.get("iface") or "").strip().lower()
+    interface_type = DEVICE_INTERFACE_IFACE_MAP.get(iface)
+    if interface_type is not None:
+        return interface_type
+
+    if "guest" in iface:
+        for marker, guest_type in _GUEST_INTERFACE_MARKERS:
+            if marker in iface:
+                return guest_type
+    elif "mlo" in iface:
+        return DeviceInterfaceType.MLO
+
+    raw_type = dev_info.get("type")
+    if raw_type is None:
+        raw_type = 5
+    try:
+        type_index = -1 if isinstance(raw_type, bool) else int(raw_type)
+    except (TypeError, ValueError):
+        type_index = -1
+    return DEVICE_INTERFACE_TYPE_MAP.get(type_index, DeviceInterfaceType.UNKNOWN)
+
 
 class GLinetRouter:
     """representation of a GLinet router.
@@ -151,6 +193,7 @@ class GLinetRouter:
         self._wan_status: dict[str, WanInterfaceState] = {}
         self._known_wan_interfaces: set[str] = set()
         self._warned_wan_interfaces: set[str] = set()
+        self._warned_interface_types: set[int | str] = set()
 
         # Flow control
         self._late_init_complete: bool = False
@@ -450,6 +493,8 @@ class GLinetRouter:
         for device_mac, device in self._devices.items():
             dev_info = wrt_devices.get(device_mac)
             device.update(dev_info, self._consider_home)
+            if dev_info is not None:
+                self._warn_unhandled_client_interface(device, dev_info, device_mac)
 
         for device_mac, dev_info in wrt_devices.items():
             # Skip if we already have this device
@@ -466,6 +511,7 @@ class GLinetRouter:
             new_device = True
             device = ClientDevInfo(device_mac)
             device.update(dev_info)
+            self._warn_unhandled_client_interface(device, dev_info, device_mac)
             self._devices[device_mac] = device
             _LOGGER.debug(
                 "Discovered new tracked device %s (name=%r alias=%r)",
@@ -479,6 +525,40 @@ class GLinetRouter:
             async_dispatcher_send(self.hass, self.signal_device_new)
 
         self._connected_devices = len(wrt_devices)
+
+    def _warn_unhandled_client_interface(
+        self, device: ClientDevInfo, dev_info: dict, device_mac: str
+    ) -> None:
+        """Warn once for each unhandled client interface type."""
+        unmapped_type = dev_info.get("type")
+        if device.interface_type != DeviceInterfaceType.UNKNOWN or unmapped_type in (
+            5,
+            8,
+            None,
+        ):
+            return
+
+        warning_key: int | str
+        if isinstance(unmapped_type, int | str):
+            warning_key = unmapped_type
+        else:
+            warning_key = repr(unmapped_type)
+
+        if warning_key in self._warned_interface_types:
+            return
+
+        self._warned_interface_types.add(warning_key)
+        _LOGGER.warning(
+            "GL-iNet router %s (model: %s, firmware: %s) reported an unhandled client interface "
+            "(type=%s, iface=%s, mac=%s). Please open an issue at "
+            "https://github.com/HarvsG/ha-glinet4-integration/issues",
+            self._host,
+            self._model,
+            self._sw_v,
+            unmapped_type,
+            dev_info.get("iface"),
+            device_mac,
+        )
 
     async def update_wifi_ifaces_state(self) -> None:
         """Make a call to the API to get the WiFi ifaces config state."""
@@ -773,9 +853,7 @@ class ClientDevInfo:
             self._ip_address = dev_info.get("ip")
             self._last_activity = now
             self._connected = dev_info.get("online", False)
-            self._if_type = DEVICE_INTERFACE_TYPE_MAP.get(
-                dev_info.get("type", 5), DeviceInterfaceType.UNKNOWN
-            )
+            self._if_type = device_interface_type_from_client(dev_info)
         # a device might not actually be online but we want to consider it home
         elif self._connected:
             self._connected = (

@@ -22,6 +22,7 @@ from custom_components.glinet.router import (
     ClientDevInfo,
     DeviceInterfaceType,
     GLinetRouter,
+    device_interface_type_from_client,
 )
 from homeassistant.components.device_tracker import DOMAIN as TRACKER_DOMAIN
 from homeassistant.config_entries import SOURCE_REAUTH
@@ -173,6 +174,75 @@ def test_device_interface_type_mapping(
 def test_device_interface_type_map_is_complete() -> None:
     """Test every enum member except aliases is reachable from the map."""
     assert set(DEVICE_INTERFACE_TYPE_MAP.values()) == set(DeviceInterfaceType)
+
+
+@pytest.mark.parametrize(
+    ("dev_info", "expected"),
+    [
+        ({}, DeviceInterfaceType.UNKNOWN),
+        ({"name": "dev"}, DeviceInterfaceType.UNKNOWN),
+        ({"iface": None, "type": None}, DeviceInterfaceType.UNKNOWN),
+        ({"iface": "  2.4G  ", "type": 11}, DeviceInterfaceType.WIFI_24),
+        ({"iface": "5G", "type": 11}, DeviceInterfaceType.WIFI_5),
+        ({"iface": "6G", "type": 1}, DeviceInterfaceType.WIFI_6),
+        ({"iface": "MLO", "type": 1}, DeviceInterfaceType.MLO),
+        ({"iface": "cable", "type": 11}, DeviceInterfaceType.LAN),
+        ({"iface": "2.4G Guest", "type": 1}, DeviceInterfaceType.WIFI_24_GUEST),
+        ({"iface": "5G Guest", "type": 1}, DeviceInterfaceType.WIFI_5_GUEST),
+        ({"iface": "6G Guest", "type": 1}, DeviceInterfaceType.WIFI_6_GUEST),
+        ({"iface": "MLO Guest", "type": 1}, DeviceInterfaceType.MLO_GUEST),
+        ({"iface": "wired", "type": 11}, DeviceInterfaceType.LAN),
+        ({"iface": "lan", "type": 11}, DeviceInterfaceType.LAN),
+        ({"iface": "mesh-mlo-backhaul", "type": 1}, DeviceInterfaceType.MLO),
+        ({"iface": "eth6 guest", "type": 2}, DeviceInterfaceType.LAN),
+        ({"iface": "unknown", "type": "12"}, DeviceInterfaceType.WIFI_6_GUEST),
+        ({"iface": "unknown", "type": "invalid"}, DeviceInterfaceType.UNKNOWN),
+        ({"iface": "unknown", "type": True}, DeviceInterfaceType.UNKNOWN),
+    ],
+)
+def test_device_interface_type_from_client(
+    dev_info: dict, expected: DeviceInterfaceType
+) -> None:
+    """Test iface resolution and safe numeric fallbacks directly."""
+    assert device_interface_type_from_client(dev_info) is expected
+
+
+async def test_unhandled_interface_type_warning_is_deduplicated(
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test an unknown type with an unmatched iface warns only once."""
+    router: GLinetRouter = init_integration.runtime_data
+    mock_api.connected_clients.side_effect = None
+    mock_api.connected_clients.return_value = {
+        "00:bb:cc:dd:ee:99": {
+            "name": "unknown-interface-device",
+            "iface": "future-radio",
+            "type": 99,
+        },
+        "00:bb:cc:dd:ee:98": {
+            "name": "known-interface-device",
+            "iface": "6G",
+            "type": 98,
+        },
+        "00:bb:cc:dd:ee:05": {"name": "unknown-5", "type": 5},
+        "00:bb:cc:dd:ee:08": {"name": "unknown-8", "type": 8},
+        "00:bb:cc:dd:ee:00": {"name": "unknown-none", "type": None},
+    }
+    caplog.clear()
+
+    await router.update_device_trackers()
+
+    assert router._warned_interface_types == {99}
+    assert caplog.text.count("reported an unhandled client interface") == 1
+    assert "model: mt6000" in caplog.text
+    assert "firmware: 4.8.2" in caplog.text
+    assert "type=99, iface=future-radio, mac=00:bb:cc:dd:ee:99" in caplog.text
+
+    caplog.clear()
+    await router.update_device_trackers()
+    assert "reported an unhandled client interface" not in caplog.text
 
 
 def test_client_dev_info_consider_home(freezer: FrozenDateTimeFactory) -> None:
