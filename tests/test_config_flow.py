@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import ssl
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
+from gli4py.error_handling import NonZeroResponse
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.glinet.const import (
@@ -20,6 +22,7 @@ from homeassistant.config_entries import SOURCE_DHCP, SOURCE_USER
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .const import MOCK_HOST, MOCK_LAN_MAC, MOCK_MAC, MOCK_ROUTER_INFO
@@ -486,3 +489,277 @@ async def test_connect_ssl_error(
     )
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_connect_non_ssl_client_error(
+    hass: HomeAssistant,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test non-SSL connection error logs exception and produces cannot_connect."""
+    mock_api = mock_glinet.return_value
+    mock_api.router_reachable.side_effect = aiohttp.ClientConnectionError(
+        "Connection refused"
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_connect_type_error(
+    hass: HomeAssistant,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test TypeError on router_reachable produces cannot_connect."""
+    mock_api = mock_glinet.return_value
+    mock_api.router_reachable.side_effect = TypeError("Unexpected response format")
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_authenticate_non_zero_response(
+    hass: HomeAssistant,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test API returning NonZeroResponse during authentication produces invalid_auth."""
+    mock_api = mock_glinet.return_value
+    mock_api.logged_in = False
+    mock_api.login.side_effect = NonZeroResponse("Authentication error")
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_authenticate_router_info_failure(
+    hass: HomeAssistant,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test API returning NonZeroResponse during router_info produces invalid_auth."""
+    mock_api = mock_glinet.return_value
+    mock_api.logged_in = True
+    mock_api.router_info.side_effect = NonZeroResponse("Router info failed")
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+
+
+async def test_testing_hub_authenticate_router_info_failure(
+    hass: HomeAssistant,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test TestingHub.authenticate returns False when router_info raises NonZeroResponse."""
+    from custom_components.glinet.config_flow import TestingHub  # noqa: PLC0415
+
+    mock_api = mock_glinet.return_value
+    mock_api.logged_in = True
+    mock_api.router_info.side_effect = NonZeroResponse("Router info failed")
+
+    hub = TestingHub("root", "http://192.168.8.1", hass)
+    assert await hub.authenticate("goodlife") is False
+
+
+async def test_dhcp_flow_already_configured_via_lan_mac(
+    hass: HomeAssistant,
+) -> None:
+    """Test DHCP aborts when an existing entry is configured with the LAN MAC."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="GL-iNet Router",
+        data={
+            CONF_USERNAME: "root",
+            CONF_HOST: "http://192.168.8.99",
+            CONF_PASSWORD: "goodlife",
+        },
+        unique_id=format_mac(DHCP_SERVICE_INFO.macaddress),
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_DHCP},
+        data=DHCP_SERVICE_INFO,
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_reauth_flow_cannot_connect(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test reauth flow shows cannot_connect when router is unreachable."""
+    mock_config_entry.add_to_hass(hass)
+    mock_api = mock_glinet.return_value
+    mock_api.router_reachable.return_value = False
+
+    result = await mock_config_entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_PASSWORD: "new_password"},
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_reauth_flow_unknown_error(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test reauth flow handles unexpected exceptions during validation."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await mock_config_entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    with patch(
+        "custom_components.glinet.config_flow.validate_input",
+        side_effect=RuntimeError("Unexpected validation failure"),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_PASSWORD: "new_password"},
+        )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "unknown"}
+
+
+async def test_reconfigure_flow_cannot_connect(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test reconfigure shows cannot_connect when host is unreachable."""
+    mock_config_entry.add_to_hass(hass)
+    mock_api = mock_glinet.return_value
+    mock_api.router_reachable.return_value = False
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_USERNAME: "root",
+            CONF_HOST: "http://192.168.8.1",
+            CONF_PASSWORD: "goodlife",
+            CONF_VERIFY_SSL: True,
+        },
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_reconfigure_flow_invalid_auth(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test reconfigure shows invalid_auth on bad credentials."""
+    mock_config_entry.add_to_hass(hass)
+    mock_api = mock_glinet.return_value
+    mock_api.logged_in = False
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_USERNAME: "root",
+            CONF_HOST: "http://192.168.8.1",
+            CONF_PASSWORD: "wrong_password",
+            CONF_VERIFY_SSL: True,
+        },
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+
+
+async def test_reconfigure_flow_unknown_error(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test reconfigure handles unexpected exception gracefully."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    with patch(
+        "custom_components.glinet.config_flow.validate_input",
+        side_effect=RuntimeError("Unexpected error"),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_USERNAME: "root",
+                CONF_HOST: "http://192.168.8.1",
+                CONF_PASSWORD: "goodlife",
+                CONF_VERIFY_SSL: True,
+            },
+        )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "unknown"}
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_reconfigure_flow_migrates_data_verify_ssl(
+    hass: HomeAssistant,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test reconfiguring legacy entry with verify_ssl in data updates both data and options."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="GL-iNet MT6000",
+        data={
+            CONF_USERNAME: "root",
+            CONF_HOST: MOCK_HOST,
+            CONF_PASSWORD: "goodlife",
+            CONF_VERIFY_SSL: True,
+        },
+        options={},
+        unique_id=MOCK_MAC,
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_USERNAME: "root",
+            CONF_HOST: "https://192.168.0.1",
+            CONF_PASSWORD: "goodlife",
+            CONF_VERIFY_SSL: False,
+        },
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_VERIFY_SSL] is False
+    assert entry.options[CONF_VERIFY_SSL] is False

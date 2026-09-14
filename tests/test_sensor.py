@@ -15,7 +15,13 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.glinet.const import DOMAIN
-from custom_components.glinet.sensor import _boot_time_changed, _derive_boot_time
+from custom_components.glinet.sensor import (
+    WanStatusSensor,
+    _boot_time_changed,
+    _derive_boot_time,
+)
+from custom_components.glinet.wan import STATE_DISCONNECTED
+from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -212,3 +218,54 @@ async def test_sensor_unavailable_on_connect_error(
     state = hass.states.get(entity_id)
     assert state is not None
     assert float(state.state) == pytest.approx(42.5)
+
+
+async def test_wan_sensor_setup_from_registry_and_initial_up(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test WAN sensors setup restores persisted entries and discovers initially up interfaces."""
+    mock_config_entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        SENSOR_DOMAIN,
+        DOMAIN,
+        f"glinet_sensor/{MOCK_MAC}/wan_secondwan",
+        config_entry=mock_config_entry,
+    )
+
+    mock_status = deepcopy(MOCK_STATUS)
+    mock_status["network"] = [{"interface": "wan", "up": True, "online": True}]
+    mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(mock_status)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert (
+        registry.async_get_entity_id(
+            "sensor", DOMAIN, f"glinet_sensor/{MOCK_MAC}/wan_wan"
+        )
+        is not None
+    )
+    assert (
+        registry.async_get_entity_id(
+            "sensor", DOMAIN, f"glinet_sensor/{MOCK_MAC}/wan_secondwan"
+        )
+        is not None
+    )
+
+
+async def test_wan_sensor_disconnected_state(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Test WanStatusSensor reports disconnected when interface is removed from router."""
+    router = init_integration.runtime_data
+    sensor = WanStatusSensor(router, "unplugged_modem")
+    assert sensor.native_value == STATE_DISCONNECTED
+    assert sensor.extra_state_attributes == {
+        "interface": "unplugged_modem",
+        "up": False,
+    }
