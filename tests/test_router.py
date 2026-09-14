@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import aiohttp
 from freezegun.api import FrozenDateTimeFactory
-from gli4py.error_handling import AuthenticationError, TokenError
+from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -23,10 +23,12 @@ from custom_components.glinet.router import (
     DeviceInterfaceType,
     GLinetRouter,
 )
+from homeassistant.components.device_tracker import DOMAIN as TRACKER_DOMAIN
 from homeassistant.config_entries import SOURCE_REAUTH
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import entity_registry as er
 
 from .const import MOCK_STATUS, POLLED_METHODS
 
@@ -363,3 +365,293 @@ def test_client_dev_info_fallback_name_when_no_initial_name() -> None:
 
     device.update({"name": "*", "ip": "192.168.8.2", "online": True})
     assert device.name == mac.replace(":", "_")
+
+
+async def test_router_async_init_device_info_failure(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test async_init raises ConfigEntryNotReady when router_info fails."""
+    router = GLinetRouter(hass, mock_config_entry)
+    mock_api.router_info.side_effect = aiohttp.ClientError("Failed to fetch info")
+
+    with pytest.raises(ConfigEntryNotReady):
+        await router.async_init()
+
+    assert "Error getting basic device info from GL-iNet router" in caplog.text
+
+
+async def test_router_create_api_missing_password_raises_auth_failed(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test _create_api raises ConfigEntryAuthFailed when password is missing."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="GL-iNet MT6000",
+        data={
+            CONF_USERNAME: "root",
+            CONF_HOST: "http://192.168.8.1",
+        },
+        unique_id="94:83:c4:aa:bb:cc",
+    )
+    router = GLinetRouter(hass, entry)
+    with pytest.raises(ConfigEntryAuthFailed):
+        router._create_api()
+
+    assert "no auth details found in configuration" in caplog.text
+
+
+async def test_update_platform_non_zero_response(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test NonZeroResponse marks router unavailable and logs error."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.available
+
+    mock_api.router_get_status.side_effect = NonZeroResponse("Error code 1")
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert not router.available
+    assert "responded, but with an error code" in caplog.text
+
+
+async def test_update_platform_broad_exception(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test unexpected exception during polling marks router unavailable."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.available
+
+    mock_api.router_get_status.side_effect = RuntimeError("Unexpected internal crash")
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert not router.available
+    assert "responded with an unexpected error" in caplog.text
+
+
+async def test_malformed_wan_interface_warning_deduplicated(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test malformed WAN interface warns once and deduplicates subsequent warnings."""
+    router: GLinetRouter = init_integration.runtime_data
+    status = {
+        "system": {"uptime": 1000},
+        "network": [{"interface": "bad_wan"}],
+    }
+    mock_api.router_get_status.side_effect = None
+    mock_api.router_get_status.return_value = status
+
+    await router.update_system_status()
+    assert "returned a malformed entry for WAN interface bad_wan" in caplog.text
+    assert "bad_wan" in router._warned_wan_interfaces
+
+    caplog.clear()
+    await router.update_system_status()
+    assert "returned a malformed entry for WAN interface bad_wan" not in caplog.text
+
+
+async def test_update_device_trackers_unexpected_payload_type(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test non-dict payload from connected_clients logs warning and exits cleanly."""
+    router: GLinetRouter = init_integration.runtime_data
+    mock_api.connected_clients.side_effect = None
+    mock_api.connected_clients.return_value = ["unexpected", "list"]
+
+    await router.update_device_trackers()
+    assert "Router returned unexpected connected devices payload" in caplog.text
+
+
+async def test_tailscale_unconfigured_and_connection_state_none(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test Tailscale state updates when unconfigured and when connection query fails."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.tailscale_configured is True
+    assert router.tailscale_connection is True
+    assert router.tailscale_config != {}
+
+    # Query fails for connection state -> retains previous state
+    mock_api.tailscale_connection_state.side_effect = None
+    mock_api.tailscale_connection_state.return_value = None
+    await router.update_tailscale_state()
+    assert router.tailscale_connection is True
+
+    # Tailscale becomes unconfigured
+    mock_api.tailscale_configured.side_effect = None
+    mock_api.tailscale_configured.return_value = False
+    await router.update_tailscale_state()
+    assert router.tailscale_configured is False
+    assert router.tailscale_config == {}
+    assert router.tailscale_connection is None
+
+
+async def test_wireguard_state_empty_response(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test empty wireguard_client_state response returns early without changes."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.wireguard_clients
+    mock_api.wireguard_client_state.side_effect = None
+    mock_api.wireguard_client_state.return_value = []
+
+    await router.update_wireguard_client_state()
+    # Clients are still present
+    assert router.wireguard_clients
+
+
+async def test_wireguard_state_skips_openvpn_and_unknown_peer(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test wireguard state skips non-wireguard entries and unknown peer ids."""
+    router: GLinetRouter = init_integration.runtime_data
+    mock_api.wireguard_client_state.side_effect = None
+    mock_api.wireguard_client_state.return_value = [
+        {"type": "openvpn", "peer_id": 1, "status": 1},
+        {"type": "wireguard", "peer_id": 9999, "status": 1},
+    ]
+
+    await router.update_wireguard_client_state()
+    # Neither openvpn nor unknown peer 9999 were added to connected clients
+    assert router.connected_wireguard_clients == []
+
+
+async def test_router_properties(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Test router properties return expected configuration values."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.host == "http://192.168.8.1"
+    assert router.unique_id == "94:83:c4:aa:bb:cc"
+    assert router.api is not None
+    assert router.sw_version == "4.8.2"
+
+    device = ClientDevInfo("aa:bb:cc:dd:ee:ff")
+    assert device.last_activity is not None
+
+
+async def test_router_async_init_renew_token_auth_failed(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test async_init raises ConfigEntryAuthFailed when renew_token fails auth."""
+    router = GLinetRouter(hass, mock_config_entry)
+    mock_api.login.side_effect = AuthenticationError("Wrong password")
+
+    with pytest.raises(ConfigEntryAuthFailed):
+        await router.async_init()
+
+
+async def test_router_async_init_renew_token_generic_exception(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test async_init raises ConfigEntryNotReady when renew_token encounters generic error."""
+    router = GLinetRouter(hass, mock_config_entry)
+    mock_api.login.side_effect = aiohttp.ClientConnectionError("Network dropped")
+
+    with pytest.raises(ConfigEntryNotReady):
+        await router.async_init()
+
+    assert "Error connecting to GL-iNet router" in caplog.text
+
+
+async def test_renew_token_non_ssl_warning(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test renew_token logs warning for non-SSL connection error."""
+    router: GLinetRouter = init_integration.runtime_data
+    mock_api.login.side_effect = aiohttp.ClientConnectionError("Connection timeout")
+
+    with pytest.raises(aiohttp.ClientConnectionError):
+        await router.renew_token()
+
+    assert "Could not connect to GL-iNet router to renew token" in caplog.text
+
+
+async def test_setup_restores_persisted_devices(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test router setup restores previously persisted tracker entries from registry."""
+    mock_config_entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        TRACKER_DOMAIN,
+        DOMAIN,
+        "aa:bb:cc:11:22:33",
+        config_entry=mock_config_entry,
+        original_name="Saved Device",
+    )
+
+    router = GLinetRouter(hass, mock_config_entry)
+    await router.setup()
+    assert "aa:bb:cc:11:22:33" in router.devices
+    assert router.devices["aa:bb:cc:11:22:33"].name == "Saved Device"
+    router.unload()
+
+
+async def test_update_device_trackers_skips_unassigned_client(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test update_device_trackers skips unassigned new client with asterisk name."""
+    router: GLinetRouter = init_integration.runtime_data
+    mock_api.connected_clients.side_effect = None
+    mock_api.connected_clients.return_value = {
+        "aa:bb:cc:dd:ee:99": {"name": "*", "ip": "192.168.8.199"}
+    }
+
+    await router.update_device_trackers()
+    assert "aa:bb:cc:dd:ee:99" not in router.devices
+
+
+async def test_update_system_status_registers_new_wan_interface(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test update_system_status registers newly discovered up WAN interface."""
+    router: GLinetRouter = init_integration.runtime_data
+    status = {
+        "system": {"uptime": 1000},
+        "network": [{"interface": "new_wan_iface", "up": True, "online": True}],
+    }
+    mock_api.router_get_status.side_effect = None
+    mock_api.router_get_status.return_value = status
+
+    await router.update_system_status()
+    assert "new_wan_iface" in router._known_wan_interfaces

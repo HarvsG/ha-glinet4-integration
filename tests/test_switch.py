@@ -8,12 +8,14 @@ from unittest.mock import MagicMock, call
 
 from freezegun.api import FrozenDateTimeFactory
 from gli4py.enums import TailscaleConnection
+import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
 
 from custom_components.glinet.const import DOMAIN
+from custom_components.glinet.switch import TailscaleSwitch
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -216,3 +218,89 @@ async def test_switch_unavailable_on_connect_error(
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.state == STATE_UNAVAILABLE
+
+
+async def test_wifi_switch_oserror_handling(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test WiFi switches handle OSError when turning on or off."""
+    entity_id = _entity_id(hass, "iface_wlan0")
+
+    mock_api.wifi_iface_set_enabled.side_effect = OSError("Connection error")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to disable WiFi interface wlan0" in caplog.text
+
+    caplog.clear()
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to enable WiFi interface wlan0" in caplog.text
+
+
+async def test_tailscale_switch_oserror_handling(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test Tailscale switch handles OSError when turning on or off."""
+    entity_id = _entity_id(hass, "tailscale")
+
+    mock_api.tailscale_stop.side_effect = OSError("Socket error")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to stop tailscale connection" in caplog.text
+
+    caplog.clear()
+    mock_api.tailscale_start.side_effect = OSError("Socket error")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to enable tailscale connection" in caplog.text
+
+
+async def test_tailscale_switch_lan_access(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Test Tailscale switch lan_access property evaluates router config."""
+    router = init_integration.runtime_data
+    switch = TailscaleSwitch(router)
+
+    router._tailscale_config = {"lan_enabled": 1}
+    assert switch.lan_access is True
+
+    router._tailscale_config = {"lan_enabled": 0}
+    assert switch.lan_access is False
+
+    router._tailscale_config = {}
+    assert switch.lan_access is None
+
+
+async def test_wireguard_switch_oserror_handling(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test WireGuard switches handle OSError when turning on or off."""
+    entity_id = _entity_id(hass, "wg_home/wireguard_client")
+
+    mock_api.wireguard_client_stop.side_effect = OSError("Network unreachable")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to stop WG client" in caplog.text
+
+    caplog.clear()
+    mock_api.wireguard_client_start.side_effect = OSError("Network unreachable")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to enable WG client" in caplog.text
