@@ -8,3 +8,10 @@ updates:
       - "dependencies"
     ignore:
       - dependency-name: "homeassistant"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"
