@@ -24,7 +24,7 @@ jobs:
       - name: Prepare and install deps
         uses: ./.github/actions/install-deps
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         name: Cache pre-commit hooks
         with:
           path: ~/.cache/pre-commit/
