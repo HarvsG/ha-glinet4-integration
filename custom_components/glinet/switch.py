@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from gli4py.error_handling import APIClientError
+
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 
@@ -109,7 +111,7 @@ class WifiApSwitch(GliSwitchBase):
         try:
             _LOGGER.debug("Enabling WiFi interface %s", self._iface_name)
             await self._router.api.wifi_iface_set_enabled(self._iface_name, True)
-        except OSError:
+        except (OSError, APIClientError):
             _LOGGER.exception(
                 "Unable to enable WiFi interface %s",
                 self._iface_name,
@@ -128,7 +130,7 @@ class WifiApSwitch(GliSwitchBase):
         try:
             _LOGGER.debug("Disabling WiFi interface %s", self._iface_name)
             await self._router.api.wifi_iface_set_enabled(self._iface_name, False)
-        except OSError:
+        except (OSError, APIClientError):
             _LOGGER.exception(
                 "Unable to disable WiFi interface %s",
                 self._iface_name,
@@ -169,7 +171,7 @@ class TailscaleSwitch(GliSwitchBase):
             _LOGGER.debug("Enabling tailscale")
             await self._router.api.tailscale_start()
             # TODO since the state takes a while to change we may
-        except OSError:
+        except (OSError, APIClientError):
             _LOGGER.exception("Unable to enable tailscale connection")
         else:
             self._attr_is_on = True
@@ -178,13 +180,21 @@ class TailscaleSwitch(GliSwitchBase):
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
         try:
-            _LOGGER.debug("Enabling tailscale")
+            _LOGGER.debug("Disabling tailscale")
             await self._router.api.tailscale_stop()
-        except OSError:
+        except (OSError, APIClientError):
             _LOGGER.exception("Unable to stop tailscale connection")
         else:
             self._attr_is_on = False
             self.async_write_ha_state()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the switch attributes."""
+        attrs: dict[str, Any] = {}
+        if self.lan_access is not None:
+            attrs["lan_access"] = self.lan_access
+        return attrs
 
     @property
     def lan_access(self) -> bool | None:
@@ -250,7 +260,7 @@ class WireGuardSwitch(GliSwitchBase):
             await self._router.api.wireguard_client_start(
                 self._client.group_id, self._client.tunnel_id or self._client.peer_id
             )
-        except OSError:
+        except (OSError, APIClientError):
             _LOGGER.exception("Unable to enable WG client")
         else:
             self._attr_is_on = True
@@ -265,7 +275,7 @@ class WireGuardSwitch(GliSwitchBase):
                 self._client.tunnel_id or self._client.peer_id
             )
             # TODO may need to introduce a delay here, or await confirmation of the stop
-        except OSError:
+        except (OSError, APIClientError):
             _LOGGER.exception("Unable to stop WG client")
         else:
             # be optimistic

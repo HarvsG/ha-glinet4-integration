@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, call
 
 from freezegun.api import FrozenDateTimeFactory
 from gli4py.enums import TailscaleConnection
+from gli4py.error_handling import NonZeroResponse
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -98,13 +99,17 @@ async def test_wifi_switch_turn_off_and_on(
 
 
 async def test_tailscale_switch(
-    hass: HomeAssistant, init_integration: MockConfigEntry, mock_api: MagicMock
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test the Tailscale switch reflects and controls the connection."""
     entity_id = _entity_id(hass, "tailscale")
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.state == STATE_ON
+    assert state.attributes.get("lan_access") is True
 
     # Polled entities are force-refreshed after a service call, so the
     # mocked router must report the new connection state
@@ -113,15 +118,18 @@ async def test_tailscale_switch(
         SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
     mock_api.tailscale_stop.assert_awaited_once()
+    assert "Disabling tailscale" in caplog.text
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.state == STATE_OFF
 
+    caplog.clear()
     mock_api.tailscale_connection_state.return_value = TailscaleConnection.CONNECTED
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
     mock_api.tailscale_start.assert_awaited_once()
+    assert "Enabling tailscale" in caplog.text
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.state == STATE_ON
@@ -275,12 +283,15 @@ async def test_tailscale_switch_lan_access(
 
     router._tailscale_config = {"lan_enabled": 1}
     assert switch.lan_access is True
+    assert switch.extra_state_attributes == {"lan_access": True}
 
     router._tailscale_config = {"lan_enabled": 0}
     assert switch.lan_access is False
+    assert switch.extra_state_attributes == {"lan_access": False}
 
     router._tailscale_config = {}
     assert switch.lan_access is None
+    assert switch.extra_state_attributes == {}
 
 
 async def test_wireguard_switch_oserror_handling(
@@ -300,6 +311,74 @@ async def test_wireguard_switch_oserror_handling(
 
     caplog.clear()
     mock_api.wireguard_client_start.side_effect = OSError("Network unreachable")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to enable WG client" in caplog.text
+
+
+async def test_wifi_switch_api_client_error_handling(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test WiFi switches handle APIClientError when turning on or off."""
+    entity_id = _entity_id(hass, "iface_wlan0")
+
+    mock_api.wifi_iface_set_enabled.side_effect = NonZeroResponse("API error")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to disable WiFi interface wlan0" in caplog.text
+
+    caplog.clear()
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to enable WiFi interface wlan0" in caplog.text
+
+
+async def test_tailscale_switch_api_client_error_handling(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test Tailscale switch handles APIClientError when turning on or off."""
+    entity_id = _entity_id(hass, "tailscale")
+
+    mock_api.tailscale_stop.side_effect = NonZeroResponse("API error")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to stop tailscale connection" in caplog.text
+
+    caplog.clear()
+    mock_api.tailscale_start.side_effect = NonZeroResponse("API error")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to enable tailscale connection" in caplog.text
+
+
+async def test_wireguard_switch_api_client_error_handling(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test WireGuard switches handle APIClientError when turning on or off."""
+    entity_id = _entity_id(hass, "wg_home/wireguard_client")
+
+    mock_api.wireguard_client_stop.side_effect = NonZeroResponse("API error")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to stop WG client" in caplog.text
+
+    caplog.clear()
+    mock_api.wireguard_client_start.side_effect = NonZeroResponse("API error")
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )

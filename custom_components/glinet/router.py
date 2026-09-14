@@ -28,7 +28,11 @@ from homeassistant.const import (
     CONF_VERIFY_SSL,
 )
 from homeassistant.core import callback
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format_mac
@@ -241,7 +245,7 @@ class GLinetRouter:
         _LOGGER.error(
             "Error setting up GL-iNet router, no auth details found in configuration"
         )
-        raise ConfigEntryAuthFailed
+        raise ConfigEntryError("No auth details found in configuration")
 
     async def renew_token(self) -> None:
         """Attempt to get a new token."""

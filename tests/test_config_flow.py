@@ -520,6 +520,41 @@ async def test_authenticate_non_zero_response(
     assert result["errors"] == {"base": "invalid_auth"}
 
 
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_authenticate_router_info_failure(
+    hass: HomeAssistant,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test API returning NonZeroResponse during router_info produces invalid_auth."""
+    mock_api = mock_glinet.return_value
+    mock_api.logged_in = True
+    mock_api.router_info.side_effect = NonZeroResponse("Router info failed")
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+
+
+async def test_testing_hub_authenticate_router_info_failure(
+    hass: HomeAssistant,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test TestingHub.authenticate returns False when router_info raises NonZeroResponse."""
+    from custom_components.glinet.config_flow import TestingHub  # noqa: PLC0415
+
+    mock_api = mock_glinet.return_value
+    mock_api.logged_in = True
+    mock_api.router_info.side_effect = NonZeroResponse("Router info failed")
+
+    hub = TestingHub("root", "http://192.168.8.1", hass)
+    assert await hub.authenticate("goodlife") is False
+
+
 async def test_dhcp_flow_already_configured_via_lan_mac(
     hass: HomeAssistant,
 ) -> None:
