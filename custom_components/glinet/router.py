@@ -8,6 +8,7 @@ from enum import StrEnum
 import logging
 from typing import TYPE_CHECKING, Any, TypeVar
 
+import aiohttp
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
 from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
@@ -18,7 +19,7 @@ from homeassistant.components.device_tracker import (
     DEFAULT_CONSIDER_HOME,
     DOMAIN as TRACKER_DOMAIN,
 )
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntry
 from homeassistant.const import (
     CONF_HOST,
     CONF_MAC,
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
 REBOOT_GRACE_PERIOD: int = 90
+MAX_CONSECUTIVE_AUTH_FAILURES: int = 3
 T = TypeVar("T")
 
 # PEP 695 type aliases are evaluated lazily, so the forward
@@ -155,7 +157,7 @@ class GLinetRouter:
         # Flow control
         self._late_init_complete: bool = False
         self._connect_error: bool = False
-        self._token_error: bool = False
+        self._consecutive_auth_errors: int = 0
         self._unsub_update: CALLBACK_TYPE | None = None
 
     async def async_init(self) -> None:
@@ -236,6 +238,12 @@ class GLinetRouter:
             self._unsub_update()
             self._unsub_update = None
 
+    @callback
+    def _async_dismiss_reauth_flow(self) -> None:
+        """Dismiss any active reauth flow for this entry if communication recovered."""
+        for flow in self._entry.async_get_active_flows(self.hass, {SOURCE_REAUTH}):
+            self.hass.config_entries.flow.async_abort(flow["flow_id"])
+
     def _create_api(self) -> GLinet:
         """Optimistically return a GLinet object for connection to the API, no test included."""
         conf = self._entry.data
@@ -264,9 +272,19 @@ class GLinetRouter:
                 "GL-iNet router %s token was renewed",
                 self._host,
             )
-        except (AuthenticationError, TokenError) as exc:
+            self._consecutive_auth_errors = 0
+            self._async_dismiss_reauth_flow()
+        except TokenError as exc:
+            _LOGGER.warning(
+                "GL-iNet %s session token was refused or expired: %s; will retry",
+                self._host,
+                exc,
+            )
+            self._connect_error = True
+            raise
+        except AuthenticationError as exc:
             _LOGGER.exception(
-                "GL-iNet %s failed to renew the token, have you changed your router password?",
+                "GL-iNet %s failed to renew the token with an authentication error, have you changed your router password?",
                 self._host,
             )
             raise ConfigEntryAuthFailed from exc
@@ -300,9 +318,24 @@ class GLinetRouter:
             await self.update_wifi_ifaces_state()
             await self.update_wireguard_client_state()
         except ConfigEntryAuthFailed:
-            # ConfigEntryAuthFailed is only handled by HA when raised from
-            # entry setup or entity updates, not from a timer callback
+            self._consecutive_auth_errors += 1
+            if self._consecutive_auth_errors < MAX_CONSECUTIVE_AUTH_FAILURES:
+                _LOGGER.warning(
+                    "GL-iNet router %s auth failed (attempt %d/%d); will retry before prompting re-authentication",
+                    self._host,
+                    self._consecutive_auth_errors,
+                    MAX_CONSECUTIVE_AUTH_FAILURES,
+                )
+                return
+            _LOGGER.exception(
+                "GL-iNet router %s failed authentication %d consecutive times; requesting re-authentication",
+                self._host,
+                self._consecutive_auth_errors,
+            )
             self._entry.async_start_reauth(self.hass)
+        else:
+            self._consecutive_auth_errors = 0
+            self._async_dismiss_reauth_flow()
 
     async def _update_platform(
         self, api_callable: Callable[[], Coroutine[Any, Any, T]]
@@ -310,14 +343,6 @@ class GLinetRouter:
         """Boilerplate to make update requests to api and handle errors."""
 
         try:
-            if self._token_error:
-                _LOGGER.debug(
-                    "The last requested resulted in a token error - so renewing token"
-                )
-                await self.renew_token()
-            if self._connect_error:
-                _LOGGER.debug("Got pending connect error - attempting to renew token")
-                await self.renew_token()
             _LOGGER.debug(
                 "Making api call %s from _update_platform()", api_callable.__name__
             )
@@ -331,15 +356,29 @@ class GLinetRouter:
                 )
             return None
         except TokenError as exc:
-            self._token_error = True
-            if not self._connect_error:
+            _LOGGER.debug(
+                "GL-iNet router %s session token was refused or expired (%s); renewing token and retrying",
+                self._host,
+                exc,
+            )
+            try:
+                await self.renew_token()
+                response = await api_callable()
+            except (TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse):
                 self._connect_error = True
-                _LOGGER.warning(
-                    "GL-iNet router %s token was refused %s, will try to re-autheticate before next poll",
-                    self._host,
-                    exc,
-                )
-            return None
+                return None
+        except AuthenticationError as exc:
+            self._connect_error = True
+            _LOGGER.warning(
+                "GL-iNet router %s authentication failed (%s); attempting to renew token",
+                self._host,
+                exc,
+            )
+            try:
+                await self.renew_token()
+                response = await api_callable()
+            except (TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse):
+                return None
         except NonZeroResponse:
             if not self._connect_error:
                 self._connect_error = True
@@ -348,11 +387,10 @@ class GLinetRouter:
                 )
             return None
         except ConfigEntryAuthFailed:
-            # Bubble up to Home Assistant to pause polling and trigger the re-auth flow
+            # Let async_setup_entry (startup) or update_states (polling) handle reauth
             raise
         except Exception:  # pylint: disable=broad-except  # noqa: BLE001
-            if not self._connect_error:
-                self._connect_error = True
+            self._connect_error = True
             _LOGGER.exception(
                 "GL-iNet router %s responded with an unexpected error", self._host
             )
@@ -365,13 +403,6 @@ class GLinetRouter:
                 api_callable.__name__,
                 str(type(response)),
                 str(response),
-            )
-
-        if self._token_error:
-            self._token_error = False
-            _LOGGER.info(
-                "Gl-inet %s new token has successfully made an API call, token marked as valid",
-                self._host,
             )
 
         if self._connect_error:

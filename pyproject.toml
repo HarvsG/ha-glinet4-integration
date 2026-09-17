@@ -17,7 +17,7 @@ dependencies = [
 dev = [
     "codespell>=2.4.1",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
-    "gli4py==0.0.17",
+    "gli4py==0.0.18-beta.1",
     "habluetooth>=6.26.11",
     "homeassistant-stubs==2026.9.2",
     "josepy>=2.2.0",
