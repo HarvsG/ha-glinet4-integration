@@ -365,12 +365,10 @@ class GLinetRouter:
                 await self.renew_token()
                 response = await api_callable()
             except (TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse):
-                if not self._connect_error:
-                    self._connect_error = True
+                self._connect_error = True
                 return None
         except AuthenticationError as exc:
-            if not self._connect_error:
-                self._connect_error = True
+            self._connect_error = True
             _LOGGER.warning(
                 "GL-iNet router %s authentication failed (%s); attempting to renew token",
                 self._host,
@@ -392,8 +390,7 @@ class GLinetRouter:
             # Bubble up to Home Assistant to pause polling and trigger the re-auth flow
             raise
         except Exception:  # pylint: disable=broad-except  # noqa: BLE001
-            if not self._connect_error:
-                self._connect_error = True
+            self._connect_error = True
             _LOGGER.exception(
                 "GL-iNet router %s responded with an unexpected error", self._host
             )
