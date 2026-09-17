@@ -7,7 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
-from gli4py.error_handling import NonZeroResponse
+from gli4py.error_handling import LockoutError, NonZeroResponse
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -105,6 +105,30 @@ async def test_user_flow_invalid_auth(
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_auth"}
 
+    mock_api.logged_in = True
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_user_flow_locked_out(
+    hass: HomeAssistant, mock_glinet: MagicMock, mock_setup_entry: AsyncMock
+) -> None:
+    """Test router lockout shows locked_out error and the flow can recover."""
+    mock_api = mock_glinet.return_value
+    mock_api.login.side_effect = LockoutError("Login fail number over limit")
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "locked_out"}
+
+    mock_api.login.side_effect = None
     mock_api.logged_in = True
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], USER_INPUT
@@ -633,6 +657,28 @@ async def test_reauth_flow_cannot_connect(
     assert result["errors"] == {"base": "cannot_connect"}
 
 
+async def test_reauth_flow_locked_out(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test reauth flow shows locked_out when router login is locked out."""
+    mock_config_entry.add_to_hass(hass)
+    mock_api = mock_glinet.return_value
+    mock_api.login.side_effect = LockoutError("Login fail number over limit")
+
+    result = await mock_config_entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_PASSWORD: "new_password"},
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "locked_out"}
+
+
 async def test_reauth_flow_unknown_error(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
@@ -702,6 +748,30 @@ async def test_reconfigure_flow_invalid_auth(
     )
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_auth"}
+
+
+async def test_reconfigure_flow_locked_out(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test reconfigure shows locked_out when router is locked out."""
+    mock_config_entry.add_to_hass(hass)
+    mock_api = mock_glinet.return_value
+    mock_api.login.side_effect = LockoutError("Login fail number over limit")
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_USERNAME: "root",
+            CONF_HOST: "http://192.168.8.1",
+            CONF_PASSWORD: "any_password",
+            CONF_VERIFY_SSL: True,
+        },
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "locked_out"}
 
 
 async def test_reconfigure_flow_unknown_error(

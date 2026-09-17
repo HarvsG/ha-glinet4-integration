@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import timedelta
 import ssl
+import time
 from unittest.mock import MagicMock, patch
 
 import aiohttp
@@ -209,13 +210,14 @@ async def test_api_authentication_error_during_poll_triggers_renew_and_reauth(
     assert any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
 
 
-async def test_api_lockout_error_during_renew_triggers_reauth(
+async def test_lockout_error_delays_retries_and_cooldown(
     hass: HomeAssistant,
     freezer: FrozenDateTimeFactory,
     init_integration: MockConfigEntry,
     mock_api: MagicMock,
 ) -> None:
-    """Test lockout error code -32003 during login is recognized as auth error and triggers reauth."""
+    """Test lockout error code -32003 initiates cooldown backoff and does not trigger reauth."""
+    router: GLinetRouter = init_integration.runtime_data
     mock_api.router_get_status.side_effect = AuthenticationError(
         "Request returned error code -32000 (Access denied)"
     )
@@ -223,19 +225,58 @@ async def test_api_lockout_error_during_renew_triggers_reauth(
         "Request returned error code -32003 (Login fail number over limit)"
     )
 
-    # 1st and 2nd ticks: debounced
+    # 1st tick: status fails with auth error, triggers renew_token, login raises LockoutError
     await _tick(hass, freezer)
+    assert router._lockout_until > 0
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+    login_call_count = mock_api.login.call_count
+
+    # Subsequent ticks within 300s: polling skipped, no login calls made
+    await _tick(hass, freezer)
+    await _tick(hass, freezer)
+    await _tick(hass, freezer)
+    assert mock_api.login.call_count == login_call_count
     flows = hass.config_entries.flow.async_progress()
     assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
 
-    await _tick(hass, freezer)
-    flows = hass.config_entries.flow.async_progress()
-    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+    # Advance beyond the 300s lockout cooldown
+    await _tick(hass, freezer, seconds=250)
+    # Next tick after cooldown should resume polling and attempt renew
+    assert mock_api.login.call_count > login_call_count
 
-    # 3rd tick: triggers reauth flow
-    await _tick(hass, freezer)
-    flows = hass.config_entries.flow.async_progress()
-    assert any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+async def test_lockout_error_in_update_platform_skips_immediate_retry(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test that LockoutError during an API call does not attempt immediate retry."""
+    router: GLinetRouter = init_integration.runtime_data
+    mock_api.router_get_status.side_effect = LockoutError(
+        "Request returned error code -32003 (Login fail number over limit)"
+    )
+    mock_api.login.reset_mock()
+
+    res = await router._update_platform(mock_api.router_get_status)
+    assert res is None
+    mock_api.login.assert_not_called()
+
+
+async def test_renew_token_skips_call_during_cooldown(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test renew_token raises LockoutError immediately during active cooldown."""
+    router: GLinetRouter = init_integration.runtime_data
+    router._lockout_until = time.monotonic() + 300
+    mock_api.login.reset_mock()
+
+    with pytest.raises(LockoutError):
+        await router.renew_token()
+
+    mock_api.login.assert_not_called()
 
 
 async def test_token_error_during_renew_does_not_start_reauth(
@@ -778,6 +819,23 @@ async def test_router_async_init_renew_token_auth_failed(
 
     with pytest.raises(ConfigEntryAuthFailed):
         await router.async_init()
+
+
+async def test_router_async_init_renew_token_lockout_error(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test async_init raises ConfigEntryNotReady when renew_token fails due to lockout."""
+    router = GLinetRouter(hass, mock_config_entry)
+    mock_api.login.side_effect = LockoutError("Login fail number over limit")
+
+    with pytest.raises(ConfigEntryNotReady):
+        await router.async_init()
+
+    assert "temporarily locked out" in caplog.text
 
 
 async def test_router_async_init_renew_token_generic_exception(
