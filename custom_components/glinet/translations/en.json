@@ -47,6 +47,7 @@
     "error": {
       "cannot_connect": "Failed to connect",
       "invalid_auth": "Invalid authentication",
+      "locked_out": "Too many failed login attempts. Router login is temporarily locked out; please wait a few minutes before trying again.",
       "unknown": "Unexpected error"
     },
     "abort": {

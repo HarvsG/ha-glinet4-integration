@@ -6,12 +6,18 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
+import time
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import aiohttp
 from gli4py import GLinet
 from gli4py.enums import TailscaleConnection
-from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
+from gli4py.error_handling import (
+    AuthenticationError,
+    LockoutError,
+    NonZeroResponse,
+    TokenError,
+)
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -63,6 +69,7 @@ _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
 REBOOT_GRACE_PERIOD: int = 90
 MAX_CONSECUTIVE_AUTH_FAILURES: int = 3
+LOCKOUT_BACKOFF_SECONDS: int = 300
 T = TypeVar("T")
 
 # PEP 695 type aliases are evaluated lazily, so the forward
@@ -158,6 +165,7 @@ class GLinetRouter:
         self._late_init_complete: bool = False
         self._connect_error: bool = False
         self._consecutive_auth_errors: int = 0
+        self._lockout_until: float = 0
         self._unsub_update: CALLBACK_TYPE | None = None
 
     async def async_init(self) -> None:
@@ -169,6 +177,15 @@ class GLinetRouter:
         self._api = self._create_api()
         try:
             await self.renew_token()
+        except LockoutError as exc:
+            _LOGGER.warning(
+                "GL-iNet router %s is temporarily locked out due to too many failed login attempts; "
+                "setup will retry once the cooldown period expires",
+                self._host,
+            )
+            raise ConfigEntryNotReady(
+                f"GL-iNet router {self._host} is locked out due to too many failed login attempts"
+            ) from exc
         except ConfigEntryAuthFailed:
             raise
         except Exception as exc:
@@ -264,6 +281,12 @@ class GLinetRouter:
 
     async def renew_token(self) -> None:
         """Attempt to get a new token."""
+        if time.monotonic() < self._lockout_until:
+            _LOGGER.debug(
+                "GL-iNet router %s is in lockout cooldown; skipping token renewal",
+                self._host,
+            )
+            raise LockoutError("Router login lockout cooldown active")
         try:
             await self._api.login(
                 self._entry.data[CONF_USERNAME], self._entry.data[CONF_PASSWORD]
@@ -281,6 +304,15 @@ class GLinetRouter:
                 exc,
             )
             self._connect_error = True
+            raise
+        except LockoutError:
+            self._lockout_until = time.monotonic() + LOCKOUT_BACKOFF_SECONDS
+            _LOGGER.warning(
+                "GL-iNet router %s is temporarily locked out due to too many failed login attempts; "
+                "delaying login attempts for %d seconds to allow cooldown",
+                self._host,
+                LOCKOUT_BACKOFF_SECONDS,
+            )
             raise
         except AuthenticationError as exc:
             _LOGGER.exception(
@@ -311,6 +343,12 @@ class GLinetRouter:
 
     async def update_states(self, _: datetime | None = None) -> None:
         """Update platforms and states that aren't handled elsewhere."""
+        if time.monotonic() < self._lockout_until:
+            _LOGGER.debug(
+                "GL-iNet router %s is in lockout cooldown; skipping state update poll",
+                self._host,
+            )
+            return
         try:
             await self.update_system_status()
             await self.update_device_trackers()
@@ -367,6 +405,14 @@ class GLinetRouter:
             except (TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse):
                 self._connect_error = True
                 return None
+        except LockoutError as exc:
+            self._connect_error = True
+            _LOGGER.warning(
+                "GL-iNet router %s is locked out (%s); skipping retry and delaying login attempts",
+                self._host,
+                exc,
+            )
+            return None
         except AuthenticationError as exc:
             self._connect_error = True
             _LOGGER.warning(
