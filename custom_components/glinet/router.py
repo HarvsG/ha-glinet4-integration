@@ -387,7 +387,7 @@ class GLinetRouter:
                 )
             return None
         except ConfigEntryAuthFailed:
-            # Bubble up to Home Assistant to pause polling and trigger the re-auth flow
+            # Let async_setup_entry (startup) or update_states (polling) handle reauth
             raise
         except Exception:  # pylint: disable=broad-except  # noqa: BLE001
             self._connect_error = True
