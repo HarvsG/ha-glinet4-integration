@@ -24,6 +24,27 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 - **Broad Interface Support**: Identifies connections on `2.4GHz`, `5GHz`, `6GHz`, `MLO`, `LAN`, `Dongle`, and `Guest` networks.
 - **Detailed Attributes**: Exposes MAC address, IP address, connection interface type, and last seen timestamp (`last_time_reachable`).
 - **Configurable Presence Timeout**: Customize the "Consider Home" duration in seconds to prevent devices flapping when they enter low-power sleep.
+- **Randomized MAC Handling**: Configure whether devices using randomized MAC addresses are ignored, tracked in a disabled state, or tracked in an enabled state.
+
+> [!NOTE]
+>
+> **Disabled by Default Behavior**:
+> Following Home Assistant's standard network scanner architecture, tracked network clients are created as **disabled entities** by default unless the device's MAC address is already registered in Home Assistant by another integration (e.g. ESPHome, Apple TV, Philips Hue, WLED).
+>
+> To track any client device:
+>
+> 1. Go to **Settings** > **Devices & Services** > **Entities**.
+> 2. Search for the device or filter by disabled entities.
+> 3. Select the entity, click the gear icon (Settings), and toggle **Enable**.
+>
+> **Randomized MAC Setting Inversion**:
+> In the integration options (**Settings** > **Devices & Services** > **GL-iNet** > **Configure**), the **Randomized-MAC devices** setting controls clients using locally-administered MAC addresses:
+>
+> - **Ignore (default)**: Randomized-MAC clients are ignored entirely (no entities created).
+> - **Track (disabled by default)**: Entities are created in a disabled state to avoid clutter from rotating MACs.
+> - **Track (enabled by default)**: Entities are created in an enabled state.
+>
+> _Note on current behavior_: If you select _Track (enabled by default)_, devices using randomized MACs will be created as enabled entities, while standard devices with permanent hardware MACs will still default to disabled (unless known to other integrations or manually enabled).
 
 > [!TIP]
 > Modern smartphones enable MAC address randomisation by default. To ensure reliable presence detection, disable MAC randomisation for your home Wi-Fi network on [Android](https://www.howtogeek.com/722653/how-to-disable-random-wi-fi-mac-address-on-android/) and [iOS](https://www.linksys.com/support-article?articleNum=317709).
@@ -52,7 +73,7 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 - **UI Config Flow**: Simple web-based setup using router host IP/URL and administrator credentials.
 - **Re-authentication**: Automatic notification and re-auth flow when the router's login password changes.
 - **Reconfiguration**: Easily modify host URL or connection parameters without re-creating entities.
-- **Options Flow**: Adjust the "Consider Home" presence threshold anytime without restarting Home Assistant.
+- **Options Flow**: Adjust the "Consider Home" presence threshold and configure "Randomized-MAC devices" handling anytime without restarting Home Assistant.
 - **Diagnostics**: Full diagnostic support with automatic redaction of passwords, MACs, and tokens.
 
 ---
