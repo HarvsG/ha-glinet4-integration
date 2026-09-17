@@ -31,7 +31,7 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 > In line with Home Assistant standards, client tracker entities are **disabled by default** unless their MAC is already known to another integration. You can enable tracking for any client under **Settings** > **Devices & Services** > **Entities**. Clients with randomized MACs follow the "Randomized-MAC devices" option instead.
 
 > [!TIP]
-> Modern smartphones enable MAC address randomisation by default. To ensure reliable presence detection, disable MAC randomisation for your home Wi-Fi network on [Android](https://www.howtogeek.com/722653/how-to-disable-random-wi-fi-mac-address-on-android/) and [iOS](https://www.linksys.com/support-article?articleNum=317709).
+> Modern smartphones enable MAC address randomisation by default. To ensure reliable presence detection, disable MAC randomisation for your home Wi-Fi network on [Android](https://source.android.com/docs/core/connect/wifi-mac-randomization-behavior) and [iOS](https://support.apple.com/en-gb/102509).
 
 ### 🎛️ Switches
 
