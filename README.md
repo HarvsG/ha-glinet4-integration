@@ -24,9 +24,14 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 - **Broad Interface Support**: Identifies connections on `2.4GHz`, `5GHz`, `6GHz`, `MLO`, `LAN`, `Dongle`, and `Guest` networks.
 - **Detailed Attributes**: Exposes MAC address, IP address, connection interface type, and last seen timestamp (`last_time_reachable`).
 - **Configurable Presence Timeout**: Customize the "Consider Home" duration in seconds to prevent devices flapping when they enter low-power sleep.
+- **Randomized MAC Handling**: Choose whether clients using randomized MAC addresses are ignored (default), tracked as disabled, or tracked as enabled.
+
+> [!NOTE]
+>
+> In line with Home Assistant standards, client tracker entities are **disabled by default** unless their MAC is already known to another integration. You can enable tracking for any client under **Settings** > **Devices & Services** > **Entities**. Clients with randomized MACs follow the "Randomized-MAC devices" option instead.
 
 > [!TIP]
-> Modern smartphones enable MAC address randomisation by default. To ensure reliable presence detection, disable MAC randomisation for your home Wi-Fi network on [Android](https://www.howtogeek.com/722653/how-to-disable-random-wi-fi-mac-address-on-android/) and [iOS](https://www.linksys.com/support-article?articleNum=317709).
+> Modern smartphones enable MAC address randomisation by default. To ensure reliable presence detection, disable MAC randomisation for your home Wi-Fi network on [Android](https://source.android.com/docs/core/connect/wifi-mac-randomization-behavior) and [iOS](https://support.apple.com/en-gb/102509).
 
 ### 🎛️ Switches
 
@@ -52,7 +57,7 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 - **UI Config Flow**: Simple web-based setup using router host IP/URL and administrator credentials.
 - **Re-authentication**: Automatic notification and re-auth flow when the router's login password changes.
 - **Reconfiguration**: Easily modify host URL or connection parameters without re-creating entities.
-- **Options Flow**: Adjust the "Consider Home" presence threshold anytime without restarting Home Assistant.
+- **Options Flow**: Adjust the "Consider Home" presence threshold and configure "Randomized-MAC devices" handling anytime without restarting Home Assistant.
 - **Diagnostics**: Full diagnostic support with automatic redaction of passwords, MACs, and tokens.
 
 ---
