@@ -9,7 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import aiohttp
 from freezegun.api import FrozenDateTimeFactory
-from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
+from gli4py.error_handling import (
+    AuthenticationError,
+    LockoutError,
+    NonZeroResponse,
+    TokenError,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -116,14 +121,176 @@ async def test_auth_failed_during_poll_starts_reauth(
     init_integration: MockConfigEntry,
     mock_api: MagicMock,
 ) -> None:
-    """Test a failed token renewal during polling starts a reauth flow."""
+    """Test a failed token renewal during polling starts a reauth flow after consecutive failures."""
     mock_api.router_get_status.side_effect = TokenError("expired")
     mock_api.login.side_effect = AuthenticationError("password changed")
 
+    # 1st and 2nd ticks: debounced, no reauth flow started yet
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+    # 3rd consecutive failure triggers reauth flow
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+
+async def test_api_authentication_error_during_poll_triggers_renew_and_reauth(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test AuthenticationError code -32000 from an API call attempts token renewal and triggers reauth."""
+    mock_api.router_get_status.side_effect = AuthenticationError(
+        "Request returned error code -32000 (Access denied)"
+    )
+    mock_api.login.side_effect = AuthenticationError("Wrong password")
+
+    # 1st and 2nd ticks: debounced
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+    # 3rd tick: triggers reauth flow
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+
+async def test_api_lockout_error_during_renew_triggers_reauth(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test lockout error code -32003 during login is recognized as auth error and triggers reauth."""
+    mock_api.router_get_status.side_effect = AuthenticationError(
+        "Request returned error code -32000 (Access denied)"
+    )
+    mock_api.login.side_effect = LockoutError(
+        "Request returned error code -32003 (Login fail number over limit)"
+    )
+
+    # 1st and 2nd ticks: debounced
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+    # 3rd tick: triggers reauth flow
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+
+async def test_token_error_during_renew_does_not_start_reauth(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test a token error during renewal does not trigger reauth."""
+    mock_api.router_get_status.side_effect = TokenError("expired")
+    mock_api.login.side_effect = TokenError("session invalid")
+
+    await _tick(hass, freezer)
+    await _tick(hass, freezer)
+    await _tick(hass, freezer)
+
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+
+async def test_auth_error_debounced_transient_failure_does_not_prompt(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test transient auth errors do not start a reauth flow."""
+    mock_api.router_get_status.side_effect = TokenError("expired")
+    mock_api.login.side_effect = AuthenticationError("temporary error")
+
+    # 1st and 2nd failures
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+    # Success on next tick resets the failure counter
+    mock_api.router_get_status.side_effect = None
+    mock_api.router_get_status.return_value = deepcopy(MOCK_STATUS)
+    mock_api.login.side_effect = None
+    await _tick(hass, freezer)
+
+    # Another single failure later still does not trigger reauth
+    mock_api.router_get_status.side_effect = TokenError("expired")
+    mock_api.login.side_effect = AuthenticationError("temporary error")
+    await _tick(hass, freezer)
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+
+async def test_reauth_flow_aborted_when_router_recovers(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test that an active reauth flow is dismissed once the router recovers."""
+    mock_api.router_get_status.side_effect = TokenError("expired")
+    mock_api.login.side_effect = AuthenticationError("password changed")
+
+    # Trigger reauth after 3 consecutive failures
+    await _tick(hass, freezer)
+    await _tick(hass, freezer)
     await _tick(hass, freezer)
 
     flows = hass.config_entries.flow.async_progress()
     assert any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+    # Router comes back online and successfully authenticates
+    mock_api.router_get_status.side_effect = None
+    mock_api.router_get_status.return_value = deepcopy(MOCK_STATUS)
+    mock_api.login.side_effect = None
+
+    await _tick(hass, freezer)
+
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+
+async def test_connect_error_does_not_hammer_login(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test that connection timeouts during poll do not hammer the login endpoint."""
+    for name in POLLED_METHODS:
+        getattr(mock_api, name).side_effect = TimeoutError
+
+    initial_login_count = mock_api.login.call_count
+    await _tick(hass, freezer)
+
+    # Login should not have been called during the connection error poll
+    assert mock_api.login.call_count == initial_login_count
 
 
 async def test_wireguard_malformed_config_skipped(
