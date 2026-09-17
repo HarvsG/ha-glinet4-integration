@@ -157,7 +157,6 @@ class GLinetRouter:
         # Flow control
         self._late_init_complete: bool = False
         self._connect_error: bool = False
-        self._token_error: bool = False
         self._consecutive_auth_errors: int = 0
         self._unsub_update: CALLBACK_TYPE | None = None
 
@@ -273,7 +272,6 @@ class GLinetRouter:
                 "GL-iNet router %s token was renewed",
                 self._host,
             )
-            self._token_error = False
             self._consecutive_auth_errors = 0
             self._async_dismiss_reauth_flow()
         except TokenError as exc:
@@ -282,7 +280,6 @@ class GLinetRouter:
                 self._host,
                 exc,
             )
-            self._token_error = True
             self._connect_error = True
             raise
         except AuthenticationError as exc:
@@ -346,11 +343,6 @@ class GLinetRouter:
         """Boilerplate to make update requests to api and handle errors."""
 
         try:
-            if self._token_error:
-                _LOGGER.debug(
-                    "The last request resulted in a token error - so renewing token"
-                )
-                await self.renew_token()
             _LOGGER.debug(
                 "Making api call %s from _update_platform()", api_callable.__name__
             )
@@ -364,17 +356,19 @@ class GLinetRouter:
                 )
             return None
         except TokenError as exc:
-            self._token_error = True
-            if not self._connect_error:
-                self._connect_error = True
-                _LOGGER.warning(
-                    "GL-iNet router %s session token was refused or expired (%s); will renew before next poll",
-                    self._host,
-                    exc,
-                )
-            return None
+            _LOGGER.debug(
+                "GL-iNet router %s session token was refused or expired (%s); renewing token and retrying",
+                self._host,
+                exc,
+            )
+            try:
+                await self.renew_token()
+                response = await api_callable()
+            except (TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse):
+                if not self._connect_error:
+                    self._connect_error = True
+                return None
         except AuthenticationError as exc:
-            self._token_error = True
             if not self._connect_error:
                 self._connect_error = True
             _LOGGER.warning(
@@ -384,8 +378,8 @@ class GLinetRouter:
             )
             try:
                 await self.renew_token()
-                return await api_callable()
-            except (TimeoutError, aiohttp.ClientError):
+                response = await api_callable()
+            except (TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse):
                 return None
         except NonZeroResponse:
             if not self._connect_error:
@@ -414,14 +408,7 @@ class GLinetRouter:
                 str(response),
             )
 
-        if self._token_error:
-            self._token_error = False
-            _LOGGER.info(
-                "Gl-inet %s new token has successfully made an API call, token marked as valid",
-                self._host,
-            )
-
-        if self._connect_error and not self._token_error:
+        if self._connect_error:
             self._connect_error = False
             _LOGGER.info("Reconnected to Gl-inet router %s", self._host)
         _LOGGER.debug(

@@ -93,6 +93,48 @@ async def test_token_error_triggers_renew(
     assert router.system_status["cpu"]["temperature"] == 42.5
 
 
+async def test_token_error_immediate_retry_recovers_state_same_tick(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test a token error immediately renews and retries in the same poll cycle without dropping data."""
+    router: GLinetRouter = init_integration.runtime_data
+    login_count = mock_api.login.await_count
+
+    new_status = deepcopy(MOCK_STATUS)
+    new_status["system"]["cpu"]["temperature"] = 55.0
+
+    mock_api.router_get_status.side_effect = [
+        TokenError("expired"),
+        deepcopy(new_status),
+    ]
+    await _tick(hass, freezer)
+
+    assert mock_api.login.await_count == login_count + 1
+    assert router.system_status["cpu"]["temperature"] == 55.0
+    assert router.available
+
+
+async def test_token_error_retry_failure_does_not_loop(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test that persistent token error does not trigger an infinite retry loop."""
+    login_count = mock_api.login.await_count
+    status_count = mock_api.router_get_status.call_count
+
+    mock_api.router_get_status.side_effect = TokenError("always expired")
+    await _tick(hass, freezer)
+
+    # Initial call + exactly 1 retry = 2 calls
+    assert mock_api.router_get_status.call_count == status_count + 2
+    assert mock_api.login.await_count == login_count + 1
+
+
 async def test_timeout_latches_unavailable_and_recovers(
     hass: HomeAssistant,
     freezer: FrozenDateTimeFactory,
