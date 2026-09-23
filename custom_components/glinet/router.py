@@ -6,12 +6,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import aiohttp
 from gli4py import GLinet
-from gli4py.enums import TailscaleConnection
 from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
+from gli4py.models import TailscaleConnection
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -20,14 +20,7 @@ from homeassistant.components.device_tracker import (
     DOMAIN as TRACKER_DOMAIN,
 )
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntry
-from homeassistant.const import (
-    CONF_HOST,
-    CONF_MAC,
-    CONF_MODEL,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-    CONF_VERIFY_SSL,
-)
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -145,8 +138,8 @@ class GLinetRouter:
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
         self._wifi_ifaces: dict[str, WifiInterface] = {}
-        self._system_status: dict = {}
-        self._wireguard_clients: dict[str, WireGuardClient] = {}
+        self._system_status: dict[str, Any] = {}
+        self._wireguard_clients: dict[int, WireGuardClient] = {}
         self._wireguard_connections: list[WireGuardClient] | None = None
         self._tailscale_config: dict = {}
         self._tailscale_connection: bool | None = None
@@ -195,9 +188,9 @@ class GLinetRouter:
             raise ConfigEntryNotReady from exc
 
         _LOGGER.debug("Router info retrieved: %s", router_info)
-        self._model = router_info[CONF_MODEL]
+        self._model = router_info["model"]
         self._sw_v = router_info["firmware_version"]
-        self._factory_mac = router_info[CONF_MAC]
+        self._factory_mac = router_info["mac"]
 
         self._late_init_complete = True
 
@@ -420,7 +413,7 @@ class GLinetRouter:
         status = await self._update_platform(self._api.router_get_status)
         if not status:
             return
-        self._system_status = status.get("system", {})
+        self._system_status = dict(status["system"])
         result = parse_network_array(status.get("network", []))
         self._wan_status = result.states
 
@@ -452,13 +445,6 @@ class GLinetRouter:
         if wrt_devices is None:
             return
 
-        if not isinstance(wrt_devices, dict):
-            _LOGGER.warning(
-                "Router returned unexpected connected devices payload: %s",
-                type(wrt_devices),
-            )
-            return
-
         uptime = self._system_status.get("uptime")
         if (
             not wrt_devices
@@ -480,7 +466,7 @@ class GLinetRouter:
 
         for device_mac, device in self._devices.items():
             dev_info = wrt_devices.get(device_mac)
-            device.update(dev_info, self._consider_home)
+            device.update(cast("dict[str, Any] | None", dev_info), self._consider_home)
 
         for device_mac, dev_info in wrt_devices.items():
             # Skip if we already have this device
@@ -496,7 +482,7 @@ class GLinetRouter:
 
             new_device = True
             device = ClientDevInfo(device_mac)
-            device.update(dev_info)
+            device.update(cast("dict[str, Any]", dev_info))
             self._devices[device_mac] = device
             _LOGGER.debug(
                 "Discovered new tracked device %s (name=%r alias=%r)",
@@ -537,12 +523,10 @@ class GLinetRouter:
             self._tailscale_config = {}
             return
         # TODO this is a placeholder that needs to be replaced with a pulic method that combines useful info in _tailscale_status and _tailscale_get_config
-        self._tailscale_config = (
-            await self._update_platform(
-                self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
-            )
-            or {}
+        config_response = await self._update_platform(
+            self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
         )
+        self._tailscale_config = dict(config_response) if config_response else {}
         state: TailscaleConnection | None = await self._update_platform(
             self._api.tailscale_connection_state
         )
@@ -575,7 +559,7 @@ class GLinetRouter:
                 connected=False,
                 group_id=group_id,
                 peer_id=peer_id,
-                tunnel_id=config.get("tunnel_id"),
+                tunnel_id=None,
             )
 
         if len(self._wireguard_clients) == 0:
@@ -583,19 +567,16 @@ class GLinetRouter:
             return
 
         # update whether the currently selected WG client is connected
-        response = await self._update_platform(self._api.wireguard_client_state)
-        if not response:
+        status_response = await self._update_platform(self._api.wireguard_client_state)
+        if not status_response:
             return
         # 0 is disconnted, 1 is connected, 2 is connecting
         self._wireguard_connections = []
-        for config in response:
-            # OpenVPN configs are sometimes returned leading to errors.
-            if config.get("type") != "wireguard":
-                continue
+        for config in status_response:
             # if config["enabled"] is false then status does not exist
             connected: bool = config.get("status", 0) != 0
 
-            client = self._wireguard_clients.get(config.get("peer_id"))
+            client = self._wireguard_clients.get(config["peer_id"])
             if client is None:
                 continue
             client.tunnel_id = config.get("tunnel_id")
@@ -708,7 +689,7 @@ class GLinetRouter:
         return self._wifi_ifaces
 
     @property
-    def wireguard_clients(self) -> dict[str, WireGuardClient]:
+    def wireguard_clients(self) -> dict[int, WireGuardClient]:
         """Return router factory_mac."""
         return self._wireguard_clients
 
@@ -736,7 +717,7 @@ class GLinetRouter:
         return self._tailscale_config
 
     @property
-    def system_status(self) -> dict:
+    def system_status(self) -> dict[str, Any]:
         """Property for system status."""
 
         return self._system_status
@@ -786,7 +767,9 @@ class ClientDevInfo:
         self._connected: bool = False
         self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN
 
-    def update(self, dev_info: dict | None = None, consider_home: float = 0) -> None:
+    def update(
+        self, dev_info: dict[str, Any] | None = None, consider_home: float = 0
+    ) -> None:
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
         if dev_info:
