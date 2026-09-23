@@ -17,37 +17,22 @@ permissions:
   contents: read
 
 jobs:
-  pytest-pinned:
-    name: "Pytest (Pinned gli4py release)"
+  detect-gli4py-pr:
+    name: "Detect linked gli4py PR"
     runs-on: ubuntu-latest
+    outputs:
+      has_linked_pr: ${{ steps.detect.outputs.has_linked_pr }}
+      pr_ref: ${{ steps.detect.outputs.pr_ref }}
+      pr_title: ${{ steps.detect.outputs.pr_title }}
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v7
-
-      - name: Prepare and install deps
-        uses: ./.github/actions/install-deps
-
-      - name: Run tests with coverage
-        run: |
-          uv run pytest --cov=custom_components/glinet --cov-report=term-missing
-
-  pytest-upstream:
-    name: "Pytest (Upstream gli4py - Linked PR / Master)"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@v7
-
-      - name: Prepare and install deps
-        uses: ./.github/actions/install-deps
-
-      - name: Resolve and install upstream gli4py
+      - id: detect
         shell: bash
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           HEAD_REF: ${{ github.head_ref }}
         run: |
           TARGET_REF=""
+          LABEL=""
 
           # Check PR body for linked gli4py PR or branch:
           # Matches:
@@ -62,23 +47,74 @@ jobs:
              [[ "$PR_BODY" =~ [Dd]epends-[Oo]n:[[:space:]]*#([0-9]+) ]] || \
              [[ "$PR_BODY" =~ gli4py:[[:space:]]*#?([0-9]+) ]]; then
             PR_NUM="${BASH_REMATCH[1]}"
-            echo "Found linked gli4py PR #${PR_NUM}"
             TARGET_REF="refs/pull/${PR_NUM}/head"
+            LABEL="PR #${PR_NUM}"
+            echo "Found linked gli4py PR #${PR_NUM}"
           elif [[ "$PR_BODY" =~ gli4py:[[:space:]]*([a-zA-Z0-9_./-]+) ]]; then
             TARGET_REF="${BASH_REMATCH[1]}"
+            LABEL="branch ${TARGET_REF}"
             echo "Found linked gli4py branch: ${TARGET_REF}"
           elif [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads https://github.com/HarvsG/gli4py.git "$HEAD_REF" >/dev/null 2>&1; then
             TARGET_REF="$HEAD_REF"
+            LABEL="branch ${TARGET_REF}"
             echo "Found matching upstream branch name in HarvsG/gli4py: ${TARGET_REF}"
-          else
-            TARGET_REF="master"
-            echo "Defaulting to gli4py master branch"
           fi
 
-          echo "Installing gli4py from git ref: ${TARGET_REF}"
-          uv pip install "git+https://github.com/HarvsG/gli4py.git@${TARGET_REF}"
+          if [ -n "$TARGET_REF" ]; then
+            echo "has_linked_pr=true" >> "$GITHUB_OUTPUT"
+            echo "pr_ref=${TARGET_REF}" >> "$GITHUB_OUTPUT"
+            echo "pr_title=${LABEL}" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_linked_pr=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Run tests against upstream gli4py
+  pytest:
+    name: "Pytest (gli4py: ${{ matrix.target }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [pinned, master]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Install master gli4py
+        if: matrix.target == 'master'
+        run: |
+          uv pip install "git+https://github.com/HarvsG/gli4py.git@master"
+
+      - name: Run tests with coverage (pinned)
+        if: matrix.target == 'pinned'
+        run: |
+          uv run pytest --cov=custom_components/glinet --cov-report=term-missing
+
+      - name: Run tests (master)
+        if: matrix.target == 'master'
+        run: |
+          uv run pytest
+
+  pytest-linked-pr:
+    name: "Pytest (gli4py: linked PR)"
+    needs: detect-gli4py-pr
+    if: needs.detect-gli4py-pr.outputs.has_linked_pr == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Install linked gli4py
+        run: |
+          echo "Installing gli4py ref: ${{ needs.detect-gli4py-pr.outputs.pr_ref }}"
+          uv pip install "git+https://github.com/HarvsG/gli4py.git@${{ needs.detect-gli4py-pr.outputs.pr_ref }}"
+
+      - name: Run tests against linked gli4py
         run: |
           uv run pytest
 
