@@ -55,3 +55,17 @@ jobs:
       - name: Run mypy
         run: |
           uv run mypy custom_components/glinet tests
+
+  api-boundary:
+    name: "Check API boundary (no direct HTTP)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Verify no direct API interactions
+        run: |
+          uv run pytest tests/test_api_boundary.py
