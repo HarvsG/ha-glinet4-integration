@@ -61,7 +61,7 @@ def test_manifest_requirements_match_pyproject() -> None:
     with PYPROJECT_PATH.open("rb") as file:
         pyproject: dict[str, object] = tomllib.load(file)
 
-    dependency_groups = pyproject["dependency-groups"]  # type: ignore[index]
+    dependency_groups = pyproject["dependency-groups"]
     dev_deps: list[str] = dependency_groups["dev"]  # type: ignore[index]
 
     manifest_requirements = manifest["requirements"]

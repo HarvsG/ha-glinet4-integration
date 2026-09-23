@@ -5,6 +5,8 @@ on:
     branches:
       - master
   pull_request:
+  schedule:
+    - cron: "0 4 * * 1" # Weekly on Monday at 04:00 UTC
   workflow_dispatch:
 
 concurrency:
@@ -15,8 +17,8 @@ permissions:
   contents: read
 
 jobs:
-  pytest:
-    name: Pytest
+  pytest-pinned:
+    name: "Pytest (Pinned gli4py release)"
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
@@ -28,3 +30,73 @@ jobs:
       - name: Run tests with coverage
         run: |
           uv run pytest --cov=custom_components/glinet --cov-report=term-missing
+
+  pytest-upstream:
+    name: "Pytest (Upstream gli4py - Linked PR / Master)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Resolve and install upstream gli4py
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          TARGET_REF=""
+
+          # Check PR body for linked gli4py PR or branch:
+          # Matches:
+          #   Depends-on: HarvsG/gli4py#123
+          #   Depends-on: #123
+          #   gli4py: #123
+          #   gli4py: 123
+          #   gli4py: branch-name
+          #   https://github.com/HarvsG/gli4py/pull/123
+          if [[ "$PR_BODY" =~ github\.com/HarvsG/gli4py/pull/([0-9]+) ]] || \
+             [[ "$PR_BODY" =~ [Dd]epends-[Oo]n:[[:space:]]*HarvsG/gli4py#([0-9]+) ]] || \
+             [[ "$PR_BODY" =~ [Dd]epends-[Oo]n:[[:space:]]*#([0-9]+) ]] || \
+             [[ "$PR_BODY" =~ gli4py:[[:space:]]*#?([0-9]+) ]]; then
+            PR_NUM="${BASH_REMATCH[1]}"
+            echo "Found linked gli4py PR #${PR_NUM}"
+            TARGET_REF="refs/pull/${PR_NUM}/head"
+          elif [[ "$PR_BODY" =~ gli4py:[[:space:]]*([a-zA-Z0-9_./-]+) ]]; then
+            TARGET_REF="${BASH_REMATCH[1]}"
+            echo "Found linked gli4py branch: ${TARGET_REF}"
+          elif [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads https://github.com/HarvsG/gli4py.git "$HEAD_REF" >/dev/null 2>&1; then
+            TARGET_REF="$HEAD_REF"
+            echo "Found matching upstream branch name in HarvsG/gli4py: ${TARGET_REF}"
+          else
+            TARGET_REF="master"
+            echo "Defaulting to gli4py master branch"
+          fi
+
+          echo "Installing gli4py from git ref: ${TARGET_REF}"
+          uv pip install "git+https://github.com/HarvsG/gli4py.git@${TARGET_REF}"
+
+      - name: Run tests against upstream gli4py
+        run: |
+          uv run pytest
+
+  pytest-ha-upstream:
+    name: "Pytest (Home Assistant Weekly Upstream)"
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Upgrade Home Assistant to latest release
+        run: |
+          uv pip install --upgrade homeassistant pytest-homeassistant-custom-component
+
+      - name: Run tests against latest Home Assistant
+        run: |
+          uv run pytest

@@ -41,3 +41,17 @@ jobs:
       - name: Run pre-commit on all files
         run: |
           uv run pre-commit run --all-files --show-diff-on-failure --color=always
+
+  mypy:
+    name: Type checking (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Run mypy
+        run: |
+          uv run mypy custom_components/glinet tests

@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 MOCK_MAC = "94:83:c4:aa:bb:cc"
 # DHCP discovery reports the LAN MAC (factory MAC + 1) without separators
 MOCK_LAN_MAC = "9483c4aabbcd"
 MOCK_HOST = "http://192.168.8.1"
 
-MOCK_ROUTER_INFO = {
+MOCK_ROUTER_INFO: dict[str, Any] = {
     "model": "mt6000",
     "firmware_version": "4.8.2",
     "mac": MOCK_MAC,
 }
 
-MOCK_STATUS = {
+MOCK_STATUS: dict[str, Any] = {
     "system": {
         "cpu": {"temperature": 42.5},
         "load_average": [0.25, 0.5, 1.0],
@@ -25,7 +27,7 @@ MOCK_STATUS = {
     }
 }
 
-MOCK_CLIENTS = {
+MOCK_CLIENTS: dict[str, Any] = {
     "00:bb:cc:dd:ee:01": {
         "alias": "Phone",
         "name": "phone",
@@ -42,7 +44,7 @@ MOCK_CLIENTS = {
     },
 }
 
-MOCK_WIFI_IFACES = {
+MOCK_WIFI_IFACES: dict[str, Any] = {
     "wlan0": {
         "enabled": True,
         "ssid": "MyWifi",
@@ -59,17 +61,17 @@ MOCK_WIFI_IFACES = {
     },
 }
 
-MOCK_WG_CLIENTS = [
+MOCK_WG_CLIENTS: list[dict[str, Any]] = [
     {"name": "wg_home", "peer_id": 1, "group_id": 10, "tunnel_id": 100},
     {"name": "wg_office", "peer_id": 2, "group_id": 10, "tunnel_id": 200},
 ]
 
-MOCK_WG_STATE = [
+MOCK_WG_STATE: list[dict[str, Any]] = [
     {"type": "wireguard", "peer_id": 1, "status": 1, "tunnel_id": 100},
     {"type": "wireguard", "peer_id": 2, "status": 0, "tunnel_id": 200},
 ]
 
-MOCK_TAILSCALE_CONFIG = {"lan_enabled": True}
+MOCK_TAILSCALE_CONFIG: dict[str, Any] = {"lan_enabled": True}
 
 # Everything polled each cycle: four methods by the router's own interval
 # plus tailscale_configured via the Tailscale switch entity's async_update.
