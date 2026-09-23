@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 import aiohttp
 from gli4py import GLinet
+from gli4py.enums import TailscaleConnection
 from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
-from gli4py.models import TailscaleConnection
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (

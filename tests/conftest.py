@@ -7,7 +7,7 @@ from copy import deepcopy
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from gli4py.models import TailscaleConnection
+from gli4py.enums import TailscaleConnection
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 

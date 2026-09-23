@@ -7,8 +7,8 @@ from datetime import timedelta
 from unittest.mock import MagicMock, call
 
 from freezegun.api import FrozenDateTimeFactory
+from gli4py.enums import TailscaleConnection
 from gli4py.error_handling import NonZeroResponse
-from gli4py.models import TailscaleConnection
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
