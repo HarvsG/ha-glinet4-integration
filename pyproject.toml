@@ -31,7 +31,7 @@ dev = [
     "pytest-cov>=7.0.0",
     # Pins homeassistant==2026.9.2 exactly; bump in lockstep with homeassistant
     # and homeassistant-stubs. NOTE: 0.13.317+ requires Python >= 3.14.
-    "pytest-homeassistant-custom-component==0.13.365",
+    "pytest-homeassistant-custom-component==0.13.366",
     "ruff>=0.12.0",
     "types-requests<2.33.0.20260907",
     "voluptuous-stubs>=0.1.1",
