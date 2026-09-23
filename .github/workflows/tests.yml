@@ -5,6 +5,8 @@ on:
     branches:
       - master
   pull_request:
+  schedule:
+    - cron: "0 4 * * 1" # Weekly on Monday at 04:00 UTC
   workflow_dispatch:
 
 concurrency:
@@ -15,8 +17,90 @@ permissions:
   contents: read
 
 jobs:
+  detect-gli4py-pr:
+    name: "Detect linked gli4py PR"
+    runs-on: ubuntu-latest
+    outputs:
+      has_linked_pr: ${{ steps.detect.outputs.has_linked_pr }}
+      pr_ref: ${{ steps.detect.outputs.pr_ref }}
+      pr_title: ${{ steps.detect.outputs.pr_title }}
+    steps:
+      - id: detect
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          TARGET_REF=""
+          LABEL=""
+
+          # Check PR body for linked gli4py PR or branch:
+          # Matches:
+          #   Depends-on: HarvsG/gli4py#123
+          #   Depends-on: #123
+          #   gli4py: #123
+          #   gli4py: 123
+          #   gli4py: branch-name
+          #   https://github.com/HarvsG/gli4py/pull/123
+          if [[ "$PR_BODY" =~ github\.com/HarvsG/gli4py/pull/([0-9]+) ]] || \
+             [[ "$PR_BODY" =~ [Dd]epends-[Oo]n:[[:space:]]*HarvsG/gli4py#([0-9]+) ]] || \
+             [[ "$PR_BODY" =~ [Dd]epends-[Oo]n:[[:space:]]*#([0-9]+) ]] || \
+             [[ "$PR_BODY" =~ gli4py:[[:space:]]*#?([0-9]+) ]]; then
+            PR_NUM="${BASH_REMATCH[1]}"
+            TARGET_REF="refs/pull/${PR_NUM}/head"
+            LABEL="PR #${PR_NUM}"
+            echo "Found linked gli4py PR #${PR_NUM}"
+          elif [[ "$PR_BODY" =~ gli4py:[[:space:]]*([a-zA-Z0-9_./-]+) ]]; then
+            TARGET_REF="${BASH_REMATCH[1]}"
+            LABEL="branch ${TARGET_REF}"
+            echo "Found linked gli4py branch: ${TARGET_REF}"
+          elif [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads https://github.com/HarvsG/gli4py.git "$HEAD_REF" >/dev/null 2>&1; then
+            TARGET_REF="$HEAD_REF"
+            LABEL="branch ${TARGET_REF}"
+            echo "Found matching upstream branch name in HarvsG/gli4py: ${TARGET_REF}"
+          fi
+
+          if [ -n "$TARGET_REF" ]; then
+            echo "has_linked_pr=true" >> "$GITHUB_OUTPUT"
+            echo "pr_ref=${TARGET_REF}" >> "$GITHUB_OUTPUT"
+            echo "pr_title=${LABEL}" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_linked_pr=false" >> "$GITHUB_OUTPUT"
+          fi
+
   pytest:
-    name: Pytest
+    name: "Pytest (gli4py: ${{ matrix.target }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [pinned, master]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Install master gli4py
+        if: matrix.target == 'master'
+        run: |
+          uv pip install "git+https://github.com/HarvsG/gli4py.git@master"
+
+      - name: Run tests with coverage (pinned)
+        if: matrix.target == 'pinned'
+        run: |
+          uv run pytest --cov=custom_components/glinet --cov-report=term-missing
+
+      - name: Run tests (master)
+        if: matrix.target == 'master'
+        run: |
+          uv run pytest
+
+  pytest-linked-pr:
+    name: "Pytest (gli4py: linked PR)"
+    needs: detect-gli4py-pr
+    if: needs.detect-gli4py-pr.outputs.has_linked_pr == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
@@ -25,6 +109,30 @@ jobs:
       - name: Prepare and install deps
         uses: ./.github/actions/install-deps
 
-      - name: Run tests with coverage
+      - name: Install linked gli4py
         run: |
-          uv run pytest --cov=custom_components/glinet --cov-report=term-missing
+          echo "Installing gli4py ref: ${{ needs.detect-gli4py-pr.outputs.pr_ref }}"
+          uv pip install "git+https://github.com/HarvsG/gli4py.git@${{ needs.detect-gli4py-pr.outputs.pr_ref }}"
+
+      - name: Run tests against linked gli4py
+        run: |
+          uv run pytest
+
+  pytest-ha-upstream:
+    name: "Pytest (Home Assistant Weekly Upstream)"
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Upgrade Home Assistant to latest release
+        run: |
+          uv pip install --upgrade homeassistant pytest-homeassistant-custom-component
+
+      - name: Run tests against latest Home Assistant
+        run: |
+          uv run pytest

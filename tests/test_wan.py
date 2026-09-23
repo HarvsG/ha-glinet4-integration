@@ -87,6 +87,7 @@ def test_parse_network_array_link_up_no_internet() -> None:
 
 def test_parse_network_array_non_list_returns_empty() -> None:
     """Garbage input is dropped, not exceptions."""
+    raw: object
     for raw in (None, {}, "wan", 42):
         result = parse_network_array(raw)
         assert result.states == {}

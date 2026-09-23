@@ -206,6 +206,7 @@ python_version = "3.14"
 platform = "linux"
 show_error_codes = true
 follow_imports = "normal"
+explicit_package_bases = true
 local_partial_types = true
 strict_equality = true
 strict_bytes = true
@@ -226,6 +227,10 @@ disallow_untyped_defs = true
 warn_return_any = true
 warn_unreachable = true
 
+[[tool.mypy.overrides]]
+module = "tests.*"
+warn_unreachable = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
@@ -236,6 +241,10 @@ pythonpath = ["."]
 
 [tool.coverage.run]
 source = ["custom_components/glinet"]
+
+[tool.coverage.report]
+fail_under = 98
+show_missing = true
 
 [tool.codespell]
 quiet-level = 2
