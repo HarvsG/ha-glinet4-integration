@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, TypeVar, cast
 
 import aiohttp
 from gli4py import GLinet
@@ -97,6 +97,35 @@ DEVICE_INTERFACE_TYPE_MAP: dict[int, DeviceInterfaceType] = {
     11: DeviceInterfaceType.WIFI_6,
     12: DeviceInterfaceType.WIFI_6_GUEST,
 }
+
+
+class ConnectedClientInfo(TypedDict, total=False):
+    """Fields consumed from the connected_clients API response.
+
+    gli4py's ClientEntry TypedDict captures the core telemetry fields but
+    does not include 'alias' (user-assigned label) or 'type' (interface
+    type as an int) which the firmware also returns and which this
+    integration uses.
+    """
+
+    alias: str
+    name: str
+    ip: str
+    online: bool
+    type: int
+
+
+class WireguardClientListItemFull(TypedDict):
+    """Wireguard client list item, extended with tunnel_id.
+
+    gli4py's WireguardClientListItem only declares (name, group_id, peer_id)
+    but firmware also returns tunnel_id in this response.
+    """
+
+    name: str
+    group_id: int
+    peer_id: int
+    tunnel_id: NotRequired[int]
 
 
 class GLinetRouter:
@@ -466,7 +495,9 @@ class GLinetRouter:
 
         for device_mac, device in self._devices.items():
             dev_info = wrt_devices.get(device_mac)
-            device.update(cast("dict[str, Any] | None", dev_info), self._consider_home)
+            device.update(
+                cast("ConnectedClientInfo | None", dev_info), self._consider_home
+            )
 
         for device_mac, dev_info in wrt_devices.items():
             # Skip if we already have this device
@@ -482,7 +513,7 @@ class GLinetRouter:
 
             new_device = True
             device = ClientDevInfo(device_mac)
-            device.update(cast("dict[str, Any]", dev_info))
+            device.update(cast("ConnectedClientInfo", dev_info))
             self._devices[device_mac] = device
             _LOGGER.debug(
                 "Discovered new tracked device %s (name=%r alias=%r)",
@@ -543,7 +574,7 @@ class GLinetRouter:
         response = await self._update_platform(self._api.wireguard_client_list)
         if not response:
             return
-        for config in response:
+        for config in cast("list[WireguardClientListItemFull]", response):
             name = config.get("name")
             peer_id = config.get("peer_id")
             group_id = config.get("group_id")
@@ -554,12 +585,19 @@ class GLinetRouter:
                     sorted(config),
                 )
                 continue
+            tunnel_id = config.get("tunnel_id")
+            _LOGGER.debug(
+                "WireGuard client list entry: peer_id=%s group_id=%s tunnel_id=%s",
+                peer_id,
+                group_id,
+                tunnel_id,
+            )
             self._wireguard_clients[peer_id] = WireGuardClient(
                 name=name,
                 connected=False,
                 group_id=group_id,
                 peer_id=peer_id,
-                tunnel_id=None,
+                tunnel_id=tunnel_id,
             )
 
         if len(self._wireguard_clients) == 0:
@@ -768,7 +806,7 @@ class ClientDevInfo:
         self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN
 
     def update(
-        self, dev_info: dict[str, Any] | None = None, consider_home: float = 0
+        self, dev_info: ConnectedClientInfo | None = None, consider_home: float = 0
     ) -> None:
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
