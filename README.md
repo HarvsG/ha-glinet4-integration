@@ -144,8 +144,8 @@ If you want to contribute to this integration:
 - [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
 - [ ] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
 - [ ] **Strict Typing**: Add complete typing to upstream [`gli4py`](https://github.com/HarvsG/gli4py) and enforce strict typing with `mypy` in CI.
-- [ ] **Error Recovery**: Further refine error recovery to handle transient empty client lists immediately following a router reboot.
-- [ ] **HTTPS Support**: Add support for `https://` router communication with optional handling for local self-signed certificates.
+- [x] **Error Recovery**: Further refine error recovery to handle transient empty client lists immediately following a router reboot.
+- [x] **HTTPS Support**: Add support for `https://` router communication with optional handling for local self-signed certificates.
 
 ### 💡 Features Under Consideration
 
