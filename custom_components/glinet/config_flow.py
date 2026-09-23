@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 from gli4py import GLinet
-from gli4py.error_handling import APIClientError
+from gli4py.error_handling import APIClientError, LockoutError
 from uplink import AiohttpClient
 import voluptuous as vol
 
@@ -180,6 +180,12 @@ class TestingHub:
             res = await self.router.router_info()
             self.router_mac = res[CONF_MAC]
             self.router_model = res["model"]
+        except LockoutError:
+            _LOGGER.warning(
+                "Failed to authenticate with GL-iNet router %s: login is locked out due to too many failed attempts",
+                self.host,
+            )
+            raise
         except (
             ConnectionRefusedError,
             APIClientError,
@@ -213,8 +219,11 @@ async def validate_input(
         raise CannotConnect
 
     valid_auth = True
-    if not await hub.authenticate(data.get(CONF_PASSWORD, GLINET_DEFAULT_PW)):
-        valid_auth = False
+    try:
+        if not await hub.authenticate(data.get(CONF_PASSWORD, GLINET_DEFAULT_PW)):
+            valid_auth = False
+    except LockoutError as err:
+        raise LockedOut from err
     if raise_on_invalid_auth and not valid_auth:
         raise InvalidAuth
 
@@ -264,6 +273,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
+            except LockedOut:
+                errors["base"] = "locked_out"
             # Broad excepts are permitted in config flows
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
@@ -347,6 +358,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
+            except LockedOut:
+                errors["base"] = "locked_out"
             # Broad excepts are permitted in config flows
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
@@ -377,6 +390,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
+            except LockedOut:
+                errors["base"] = "locked_out"
             # Broad excepts are permitted in config flows
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
@@ -471,3 +486,7 @@ class CannotConnect(HomeAssistantError):
 
 class InvalidAuth(HomeAssistantError):
     """Error to indicate there is invalid auth."""
+
+
+class LockedOut(HomeAssistantError):
+    """Error to indicate router login is temporarily locked out."""

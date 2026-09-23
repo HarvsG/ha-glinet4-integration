@@ -47,6 +47,7 @@
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "locked_out": "Too many failed login attempts. Router login is temporarily locked out; please wait a few minutes before trying again.",
       "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "abort": {
