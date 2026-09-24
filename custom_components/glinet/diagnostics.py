@@ -33,11 +33,11 @@ async def async_get_config_entry_diagnostics(
             "connected_devices_count": router.connected_devices_count,
             "wifi_ifaces": [
                 {
-                    "name": iface.name,
-                    "enabled": iface.enabled,
-                    "guest": iface.guest,
-                    "hidden": iface.hidden,
-                    "encryption": iface.encryption,
+                    "name": iface.get("name", ""),
+                    "enabled": iface.get("enabled", False),
+                    "guest": iface.get("guest", False),
+                    "hidden": iface.get("hidden", False),
+                    "encryption": iface.get("encryption", ""),
                     "ssid": REDACTED,
                 }
                 for iface in router.wifi_ifaces.values()

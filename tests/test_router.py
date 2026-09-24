@@ -676,19 +676,20 @@ async def test_malformed_wan_interface_warning_deduplicated(
     assert "returned a malformed entry for WAN interface bad_wan" not in caplog.text
 
 
-async def test_update_device_trackers_unexpected_payload_type(
+async def test_update_device_trackers_empty_response_during_startup(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,
     mock_api: MagicMock,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test non-dict payload from connected_clients logs warning and exits cleanly."""
+    """Test empty payload from connected_clients exits cleanly without wiping known devices."""
     router: GLinetRouter = init_integration.runtime_data
+    assert router.devices
     mock_api.connected_clients.side_effect = None
-    mock_api.connected_clients.return_value = ["unexpected", "list"]
+    mock_api.connected_clients.return_value = {}
 
     await router.update_device_trackers()
-    assert "Router returned unexpected connected devices payload" in caplog.text
+    # Devices are retained (no wipe on empty response with non-zero uptime)
+    assert router.devices
 
 
 async def test_tailscale_unconfigured_and_connection_state_none(
@@ -733,21 +734,34 @@ async def test_wireguard_state_empty_response(
     assert router.wireguard_clients
 
 
-async def test_wireguard_state_skips_openvpn_and_unknown_peer(
+async def test_wireguard_state_skips_unknown_peer(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,
     mock_api: MagicMock,
 ) -> None:
-    """Test wireguard state skips non-wireguard entries and unknown peer ids."""
+    """Test wireguard state skips entries with unknown peer ids."""
     router: GLinetRouter = init_integration.runtime_data
     mock_api.wireguard_client_state.side_effect = None
     mock_api.wireguard_client_state.return_value = [
-        {"type": "openvpn", "peer_id": 1, "status": 1},
-        {"type": "wireguard", "peer_id": 9999, "status": 1},
+        {
+            "peer_id": 9999,
+            "status": 1,
+            "enabled": True,
+            "domain": "",
+            "group_id": 0,
+            "ipv4": "",
+            "ipv6": "",
+            "log": "",
+            "name": "",
+            "port": 0,
+            "proxy": False,
+            "rx_bytes": 0,
+            "tx_bytes": 0,
+        },
     ]
 
     await router.update_wireguard_client_state()
-    # Neither openvpn nor unknown peer 9999 were added to connected clients
+    # Unknown peer 9999 was not added to connected clients
     assert router.connected_wireguard_clients == []
 
 
