@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import aiohttp
 from gli4py import GLinet
@@ -551,6 +551,16 @@ class GLinetRouter:
             name = config.get("name")
             peer_id = config.get("peer_id")
             group_id = config.get("group_id")
+            tunnel_id = config.get("tunnel_id")
+            if tunnel_id is not None:
+                _LOGGER.debug(
+                    "WireGuard client %s has tunnel_id %s, tunnel_id is poorly documented so if you see this message please report it to the integration author at https://github.com/HarvsG/ha-glinet4-integration/issues with router model %s and firmware version %s",
+                    name,
+                    tunnel_id,
+                    self.model,
+                    self.sw_version,
+                )
+                tunnel_id = cast("int", tunnel_id)
             if name is None or peer_id is None or group_id is None:
                 # Don't log the config values, they contain private key material
                 _LOGGER.debug(
@@ -563,7 +573,7 @@ class GLinetRouter:
                 connected=False,
                 group_id=group_id,
                 peer_id=peer_id,
-                tunnel_id=None,
+                tunnel_id=tunnel_id,
             )
 
         if len(self._wireguard_clients) == 0:
