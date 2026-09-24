@@ -6,13 +6,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import aiohttp
 from gli4py import GLinet
 from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
 from gli4py.models import TailscaleConnection
-from gli4py.types import WifiInterface
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -50,7 +49,7 @@ from .wan import WanInterfaceState, parse_network_array
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
 
-    from gli4py.types import ClientEntry, SystemStatusMetrics
+    from gli4py.types import ClientEntry, SystemStatusMetrics, WifiInterface
 
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
     from homeassistant.helpers.entity_registry import RegistryEntry
@@ -505,16 +504,7 @@ class GLinetRouter:
         ifaces = await self._update_platform(self._api.wifi_ifaces_get)
         if not ifaces:
             return
-        for name, iface in ifaces.items():
-            self._wifi_ifaces[name] = WifiInterface(
-                name=name,
-                enabled=iface.get("enabled", False),
-                ssid=iface.get("ssid", ""),
-                guest=iface.get("guest", False),
-                hidden=iface.get("hidden", False),
-                encryption=iface.get("encryption", "UNKNOWN"),
-                key=None,
-            )
+        self._wifi_ifaces = ifaces
 
     async def update_tailscale_state(self) -> None:
         """Make a call to the API to get the tailscale state."""
@@ -551,7 +541,8 @@ class GLinetRouter:
             name = config.get("name")
             peer_id = config.get("peer_id")
             group_id = config.get("group_id")
-            tunnel_id = config.get("tunnel_id")
+            raw_tunnel_id = config.get("tunnel_id")
+            tunnel_id = raw_tunnel_id if isinstance(raw_tunnel_id, int) else None
             if tunnel_id is not None:
                 _LOGGER.warning(
                     "WireGuard client %s has tunnel_id %s, tunnel_id is poorly documented and is planned to be deprecated so if you see this message please report it to the integration author at https://github.com/HarvsG/ha-glinet4-integration/issues with router model %s and firmware version %s",
@@ -560,7 +551,6 @@ class GLinetRouter:
                     self.model,
                     self.sw_version,
                 )
-                tunnel_id = cast("int", tunnel_id)
             if name is None or peer_id is None or group_id is None:
                 # Don't log the config values, they contain private key material
                 _LOGGER.debug(
