@@ -553,8 +553,8 @@ class GLinetRouter:
             group_id = config.get("group_id")
             tunnel_id = config.get("tunnel_id")
             if tunnel_id is not None:
-                _LOGGER.debug(
-                    "WireGuard client %s has tunnel_id %s, tunnel_id is poorly documented so if you see this message please report it to the integration author at https://github.com/HarvsG/ha-glinet4-integration/issues with router model %s and firmware version %s",
+                _LOGGER.warning(
+                    "WireGuard client %s has tunnel_id %s, tunnel_id is poorly documented and is planned to be deprecated so if you see this message please report it to the integration author at https://github.com/HarvsG/ha-glinet4-integration/issues with router model %s and firmware version %s",
                     name,
                     tunnel_id,
                     self.model,
