@@ -12,6 +12,7 @@ import aiohttp
 from gli4py import GLinet
 from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
 from gli4py.models import TailscaleConnection
+from gli4py.types import WifiInterface
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -512,6 +513,7 @@ class GLinetRouter:
                 guest=iface.get("guest", False),
                 hidden=iface.get("hidden", False),
                 encryption=iface.get("encryption", "UNKNOWN"),
+                key=None,
             )
 
     async def update_tailscale_state(self) -> None:
@@ -703,6 +705,7 @@ class GLinetRouter:
     @property
     def tailscale_configured(self) -> bool:
         """Is tailscale configured."""
+        # config is {} when not configured which is falsy
         return bool(self._tailscale_config)
 
     @property
@@ -738,23 +741,12 @@ class GLinetRouter:
 class WireGuardClient:
     """Class for keeping track of WireGuard Client Configs."""
 
+    # TODO could we deprecate this class and use WireguardClientListItem or WireguardStatusItem instead?
     name: str
     connected: bool = field(compare=False)
     group_id: int
     peer_id: int
     tunnel_id: int | None = None
-
-
-@dataclass
-class WifiInterface:
-    """Class for keeping track of Wifi Interfaces."""
-
-    name: str
-    enabled: bool
-    ssid: str
-    guest: bool
-    hidden: bool
-    encryption: str
 
 
 class ClientDevInfo:
