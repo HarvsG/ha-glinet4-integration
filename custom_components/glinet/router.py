@@ -703,7 +703,7 @@ class GLinetRouter:
     @property
     def tailscale_configured(self) -> bool:
         """Is tailscale configured."""
-        return self._tailscale_config != {}
+        return bool(self._tailscale_config)
 
     @property
     def tailscale_connection(self) -> bool | None:
