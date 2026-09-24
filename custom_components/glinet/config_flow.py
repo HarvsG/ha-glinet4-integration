@@ -178,7 +178,7 @@ class TestingHub:
         try:
             await self.router.login(self.username, password)
             res = await self.router.router_info()
-            self.router_mac = res[CONF_MAC]
+            self.router_mac = res["mac"]
             self.router_model = res["model"]
         except (
             ConnectionRefusedError,

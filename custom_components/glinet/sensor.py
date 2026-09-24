@@ -30,6 +30,8 @@ from .wan import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from gli4py.types import SystemStatusMetrics
+
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -41,8 +43,8 @@ _LOGGER = logging.getLogger(__name__)
 class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=True):
     """Describes a GL-iNet system status sensor entity."""
 
-    value_fn: Callable[[dict], int | float | None]
-    extra_attributes_fn: Callable[[dict], dict[str, Any]] | None = None
+    value_fn: Callable[[SystemStatusMetrics], int | float | None]
+    extra_attributes_fn: Callable[[SystemStatusMetrics], dict[str, Any]] | None = None
 
 
 SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
@@ -56,7 +58,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda system_status: (
-            (cpu := system_status.get("cpu")) and cpu.get("temperature")
+            cpu.get("temperature") if (cpu := system_status.get("cpu")) else None
         ),
     ),
     SystemStatusEntityDescription(
