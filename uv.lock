@@ -892,15 +892,18 @@ wheels = [
 [[package]]
 name = "gli4py"
 version = "0.1.0b2"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../gli4py" }
 dependencies = [
     { name = "libpass" },
     { name = "semver" },
     { name = "uplink" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/62/1e/805ed2dda2c149d35878ec7fb75150ba86bfa33b454fe83d8ba5cd2a45ce/gli4py-0.1.0b2.tar.gz", hash = "sha256:a8d7c6eaa64969d7d27d7daf1180c8e9ef9ba4c01d845b22ece8a6b5eb0c627d", size = 43378, upload-time = "2026-09-24T19:37:37.127Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8e/b7/c212a06fabc8a60d12b1c2b6b54582889477bb5fe1fd4b4026638d7945f2/gli4py-0.1.0b2-py3-none-any.whl", hash = "sha256:71e6072dcecbcb022f66d1168408daf9e0ef440d01e8e790d646e5bfbe52ea5d", size = 44114, upload-time = "2026-09-24T19:37:35.892Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "libpass", specifier = ">=1.8.0,<2.0.0" },
+    { name = "semver", specifier = ">=3.0.0,<4.0.0" },
+    { name = "uplink", specifier = "==0.10.0" },
 ]
 
 [[package]]
@@ -937,7 +940,7 @@ requires-dist = [{ name = "homeassistant", specifier = ">=2025.9.0" }]
 [package.metadata.requires-dev]
 dev = [
     { name = "codespell", specifier = ">=2.4.1" },
-    { name = "gli4py", specifier = "==0.1.0b2" },
+    { name = "gli4py", editable = "../gli4py" },
     { name = "habluetooth", specifier = ">=6.26.11" },
     { name = "homeassistant-stubs", specifier = "==2026.9.2" },
     { name = "josepy", specifier = ">=2.2.0" },
