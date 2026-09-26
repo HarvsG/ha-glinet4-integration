@@ -48,6 +48,6 @@ async def async_get_config_entry_diagnostics(
             ],
             "tailscale_configured": router.tailscale_configured,
             "tailscale_connected": router.tailscale_connection,
-            "system_status": router.system_status,
+            "system_status": dict(router.system_status),
         },
     }

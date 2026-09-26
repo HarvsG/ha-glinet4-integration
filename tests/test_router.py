@@ -15,6 +15,7 @@ from gli4py.error_handling import (
     NonZeroResponse,
     TokenError,
 )
+from gli4py.models import ClientEntry, WireguardStatusItem
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -375,7 +376,7 @@ def test_device_interface_type_mapping(
 ) -> None:
     """Test the API interface type index maps to the right interface type."""
     device = ClientDevInfo("aa:bb:cc:dd:ee:ff")
-    device.update({"name": "dev", "ip": "192.168.8.2", "type": type_index})
+    device.update(ClientEntry(name="dev", ip="192.168.8.2", type=type_index))
     assert device.interface_type is expected
 
 
@@ -387,7 +388,7 @@ def test_device_interface_type_map_is_complete() -> None:
 def test_client_dev_info_consider_home(freezer: FrozenDateTimeFactory) -> None:
     """Test a disappeared device stays home for the consider_home window."""
     device = ClientDevInfo("aa:bb:cc:dd:ee:ff")
-    device.update({"name": "dev", "ip": "192.168.8.2", "online": True, "type": 1})
+    device.update(ClientEntry(name="dev", ip="192.168.8.2", online=True, type=1))
     assert device.is_connected
     assert device.ip_address == "192.168.8.2"
 
@@ -550,22 +551,22 @@ def test_client_dev_info_preserves_name_on_unassigned_update() -> None:
     assert device.name == "GL-B1300"
 
     # Asterisk name from DHCP/ARP must not overwrite existing name
-    device.update({"name": "*", "ip": "192.168.8.2", "online": True})
+    device.update(ClientEntry(name="*", ip="192.168.8.2", online=True))
     assert device.name == "GL-B1300"
 
     # Empty or whitespace name must not overwrite existing name
-    device.update({"name": "", "ip": "192.168.8.2", "online": True})
+    device.update(ClientEntry(name="", ip="192.168.8.2", online=True))
     assert device.name == "GL-B1300"
-    device.update({"name": "   ", "ip": "192.168.8.2", "online": True})
+    device.update(ClientEntry(name="   ", ip="192.168.8.2", online=True))
     assert device.name == "GL-B1300"
 
     # Valid name updates the device name
-    device.update({"name": "GL-B1300-New", "ip": "192.168.8.2", "online": True})
+    device.update(ClientEntry(name="GL-B1300-New", ip="192.168.8.2", online=True))
     assert device.name == "GL-B1300-New"
 
     # Alias takes precedence
     device.update(
-        {"alias": "Living Room AP", "name": "*", "ip": "192.168.8.2", "online": True}
+        ClientEntry(alias="Living Room AP", name="*", ip="192.168.8.2", online=True)
     )
     assert device.name == "Living Room AP"
 
@@ -576,7 +577,7 @@ def test_client_dev_info_fallback_name_when_no_initial_name() -> None:
     device = ClientDevInfo(mac)
     assert device.name is None
 
-    device.update({"name": "*", "ip": "192.168.8.2", "online": True})
+    device.update(ClientEntry(name="*", ip="192.168.8.2", online=True))
     assert device.name == mac.replace(":", "_")
 
 
@@ -830,21 +831,11 @@ async def test_wireguard_state_skips_unknown_peer(
     router: GLinetRouter = init_integration.runtime_data
     mock_api.wireguard_client_state.side_effect = None
     mock_api.wireguard_client_state.return_value = [
-        {
-            "peer_id": 9999,
-            "status": 1,
-            "enabled": True,
-            "domain": "",
-            "group_id": 0,
-            "ipv4": "",
-            "ipv6": "",
-            "log": "",
-            "name": "",
-            "port": 0,
-            "proxy": False,
-            "rx_bytes": 0,
-            "tx_bytes": 0,
-        },
+        WireguardStatusItem(
+            peer_id=9999,
+            status=1,
+            enabled=True,
+        ),
     ]
 
     await router.update_wireguard_client_state()

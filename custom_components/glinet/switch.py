@@ -11,7 +11,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 
 if TYPE_CHECKING:
-    from gli4py.types import WifiInterface
+    from gli4py.models import WifiInterface
 
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -91,10 +91,10 @@ class WifiApSwitch(GliSwitchBase):
     @property
     def name(self) -> str:
         """Return the name of the switch."""
-        if ssid := self._iface.get("ssid"):
-            return ssid
-        if name := self._iface.get("name"):
-            return name
+        if self._iface.ssid:
+            return self._iface.ssid
+        if self._iface.name:
+            return self._iface.name
         return self._iface_name
 
     @property
@@ -105,13 +105,13 @@ class WifiApSwitch(GliSwitchBase):
     @property
     def extra_state_attributes(self) -> dict[str, str | bool]:
         """Return the attributes."""
-        attrs: dict[str, str | bool] = {}
-        attrs["interface"] = self._iface.get("name") or self._iface_name
-        attrs["guest"] = self._iface.get("guest", False)
-        attrs["ssid"] = self._iface.get("ssid", "")
-        attrs["hidden"] = self._iface.get("hidden", False)
-        attrs["encryption"] = self._iface.get("encryption", "")
-        return attrs
+        return {
+            "interface": self._iface.name or self._iface_name,
+            "guest": self._iface.guest,
+            "ssid": self._iface.ssid,
+            "hidden": self._iface.hidden,
+            "encryption": self._iface.encryption,
+        }
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the AP."""
@@ -158,7 +158,7 @@ class WifiApSwitch(GliSwitchBase):
             self._iface_name,
         )
         self._iface = self._router.wifi_ifaces.get(self._iface_name) or self._iface
-        self._attr_is_on = self._iface.get("enabled", False)
+        self._attr_is_on = self._iface.enabled
 
 
 class TailscaleSwitch(GliSwitchBase):
