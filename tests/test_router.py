@@ -651,6 +651,82 @@ async def test_update_platform_broad_exception(
     assert not router.available
     assert "responded with an unexpected error" in caplog.text
 
+    # Verify subsequent unexpected exception while disconnected is deduplicated
+    caplog.clear()
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert "responded with an unexpected error" not in caplog.text
+
+
+async def test_update_platform_timeout_error(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test TimeoutError marks router unavailable and deduplicates warnings."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.available
+
+    mock_api.router_get_status.side_effect = TimeoutError("Connection timed out")
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert not router.available
+    assert "did not respond in time" in caplog.text
+
+    caplog.clear()
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert "did not respond in time" not in caplog.text
+
+
+async def test_update_platform_client_error(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test aiohttp.ClientError marks router unavailable and deduplicates warnings."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.available
+
+    mock_api.router_get_status.side_effect = aiohttp.ClientOSError(
+        104, "Connection reset by peer"
+    )
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert not router.available
+    assert "communication error" in caplog.text
+
+    caplog.clear()
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert "communication error" not in caplog.text
+
+
+async def test_update_platform_os_error(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test OSError marks router unavailable and deduplicates warnings."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.available
+
+    mock_api.router_get_status.side_effect = ConnectionResetError(
+        104, "Connection reset by peer"
+    )
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert not router.available
+    assert "communication error" in caplog.text
+
+    caplog.clear()
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert "communication error" not in caplog.text
+
 
 async def test_malformed_wan_interface_warning_deduplicated(
     hass: HomeAssistant,
@@ -708,6 +784,17 @@ async def test_tailscale_unconfigured_and_connection_state_none(
     mock_api.tailscale_connection_state.return_value = None
     await router.update_tailscale_state()
     assert router.tailscale_connection is True
+
+    # Tailscale config query fails (network error) -> retains previous config
+    mock_api._tailscale_get_config.side_effect = None
+    mock_api._tailscale_get_config.return_value = None
+    await router.update_tailscale_state()
+    assert router.tailscale_config is not None
+
+    # Tailscale config unsupported / returns False -> clears config
+    mock_api._tailscale_get_config.return_value = False
+    await router.update_tailscale_state()
+    assert router.tailscale_config is None
 
     # Tailscale becomes unconfigured
     mock_api.tailscale_configured.side_effect = None
