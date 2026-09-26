@@ -30,7 +30,7 @@ from .wan import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from gli4py.types import SystemStatusMetrics
+    from gli4py.models import SystemStatusMetrics
 
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -182,7 +182,7 @@ async def async_setup_entry(
     # temperature), but only when we have status data to judge by: if the
     # first poll failed, dropping every sensor would leave them all missing
     # until the entry is reloaded.
-    if router.system_status:
+    if router.system_status.get("uptime") is not None:
         sensors = [sensor for sensor in sensors if sensor.native_value is not None]
 
     async_add_entities(sensors, True)

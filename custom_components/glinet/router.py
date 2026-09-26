@@ -591,13 +591,13 @@ class GLinetRouter:
         # 0 is disconnted, 1 is connected, 2 is connecting
         self._wireguard_connections = []
         for status_item in status_response:
-            # if status_item.enabled is false then status does not exist
-            connected: bool = status_item.status != 0
+            # if status_item["enabled"] is false then status does not exist
+            connected: bool = status_item.get("status", 0) != 0
 
-            client = self._wireguard_clients.get(status_item.peer_id)
+            client = self._wireguard_clients.get(status_item["peer_id"])
             if client is None:
                 continue
-            client.tunnel_id = status_item.tunnel_id
+            client.tunnel_id = status_item.get("tunnel_id")
             client.connected = connected
             if connected:
                 # If more modern firmware supports more than 1 client being connected, we need to change this

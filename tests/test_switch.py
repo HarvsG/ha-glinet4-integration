@@ -9,8 +9,12 @@ from unittest.mock import MagicMock, call
 
 from freezegun.api import FrozenDateTimeFactory
 from gli4py.error_handling import NonZeroResponse
-from gli4py.models import TailscaleConnection
-from gli4py.types import TailscaleConfigResponse
+from gli4py.models import (
+    TailscaleConfigResponse,
+    TailscaleConnection,
+    WireguardClientListItem,
+    WireguardStatusItem,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -34,13 +38,13 @@ from homeassistant.helpers import entity_registry as er
 from .const import MOCK_MAC, POLLED_METHODS
 
 WG_CLIENTS_OLD_FIRMWARE = [
-    {"name": "wg_home", "peer_id": 1, "group_id": 10},
-    {"name": "wg_office", "peer_id": 2, "group_id": 10},
+    WireguardClientListItem(name="wg_home", peer_id=1, group_id=10),
+    WireguardClientListItem(name="wg_office", peer_id=2, group_id=10),
 ]
 
 WG_STATE_OLD_FIRMWARE = [
-    {"type": "wireguard", "peer_id": 1, "status": 1},
-    {"type": "wireguard", "peer_id": 2, "status": 0},
+    WireguardStatusItem(peer_id=1, status=1),
+    WireguardStatusItem(peer_id=2, status=0),
 ]
 
 

@@ -15,7 +15,7 @@ from gli4py.error_handling import (
     NonZeroResponse,
     TokenError,
 )
-from gli4py.models import ClientEntry
+from gli4py.models import ClientEntry, WireguardStatusItem
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -831,21 +831,11 @@ async def test_wireguard_state_skips_unknown_peer(
     router: GLinetRouter = init_integration.runtime_data
     mock_api.wireguard_client_state.side_effect = None
     mock_api.wireguard_client_state.return_value = [
-        {
-            "peer_id": 9999,
-            "status": 1,
-            "enabled": True,
-            "domain": "",
-            "group_id": 0,
-            "ipv4": "",
-            "ipv6": "",
-            "log": "",
-            "name": "",
-            "port": 0,
-            "proxy": False,
-            "rx_bytes": 0,
-            "tx_bytes": 0,
-        },
+        WireguardStatusItem(
+            peer_id=9999,
+            status=1,
+            enabled=True,
+        ),
     ]
 
     await router.update_wireguard_client_state()
