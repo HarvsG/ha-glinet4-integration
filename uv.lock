@@ -891,16 +891,17 @@ wheels = [
 
 [[package]]
 name = "gli4py"
-version = "0.1.0b3"
+version = "0.1.0b4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "libpass" },
+    { name = "mashumaro" },
     { name = "semver" },
     { name = "uplink" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/c7/8e6181e3c512280395daac194a58d856b79204329b5911b685ba0dabc237/gli4py-0.1.0b3.tar.gz", hash = "sha256:535d9765223e03f96eff59f0aec9206f2b7055c27855e86a23c3bbc3b938c02a", size = 48624, upload-time = "2026-09-26T16:19:40.678Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/dc/3d/6753e841ea66e664fc8bcd3f8bac1f3ef82e9ba1327b3313f30d51ebd1e0/gli4py-0.1.0b4.tar.gz", hash = "sha256:3a418def0ca376083006db17cfb6306b3c8fb0e770b85641c3f391ddcd4b1695", size = 50536, upload-time = "2026-09-26T21:01:44.491Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/ca/9bf783c1f703513510ce14df4fa0b8cd0a3ec7ab535b232bd5ebedeaa835/gli4py-0.1.0b3-py3-none-any.whl", hash = "sha256:e7bc42e8d06251f708707cd75f826aaf6e41379a69203bbbeb0994b6f338ef19", size = 57261, upload-time = "2026-09-26T16:19:39.415Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/eb/d3352c6832b5613ea4057add858d2f669d257a3bc73e391f8972cee0b6a1/gli4py-0.1.0b4-py3-none-any.whl", hash = "sha256:f9e137f92dee21d16d597b2fa742f705f191fcc4e50b009b74160634c68dc8ce", size = 59495, upload-time = "2026-09-26T21:01:42.987Z" },
 ]
 
 [package.optional-dependencies]
@@ -942,7 +943,7 @@ requires-dist = [{ name = "homeassistant", specifier = ">=2025.9.0" }]
 [package.metadata.requires-dev]
 dev = [
     { name = "codespell", specifier = ">=2.4.1" },
-    { name = "gli4py", extras = ["mock"], specifier = "==0.1.0b3" },
+    { name = "gli4py", extras = ["mock"], specifier = "==0.1.0b4" },
     { name = "habluetooth", specifier = ">=6.26.11" },
     { name = "homeassistant-stubs", specifier = "==2026.9.2" },
     { name = "josepy", specifier = ">=2.2.0" },
