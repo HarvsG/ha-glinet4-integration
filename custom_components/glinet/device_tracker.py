@@ -14,8 +14,8 @@ from .utils import is_randomized_mac
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+    from homeassistant.helpers.typing import StateType
 
-    from .const import StateAttributeValue
     from .router import ClientDevInfo, GLinetConfigEntry, GLinetRouter
 
 DEFAULT_DEVICE_NAME = "Unknown device"
@@ -108,9 +108,9 @@ class GLinetDevice(ScannerEntity):
         return SourceType.ROUTER
 
     @property
-    def extra_state_attributes(self) -> dict[str, StateAttributeValue]:
+    def extra_state_attributes(self) -> dict[str, StateType | bool]:
         """Return the attributes."""
-        attrs: dict[str, StateAttributeValue] = {
+        attrs: dict[str, StateType | bool] = {
             "interface_type": str(self._device.interface_type),
             "mac_randomized": self._is_randomized,
         }

@@ -34,8 +34,8 @@ if TYPE_CHECKING:
 
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.typing import StateType
 
-    from .const import StateAttributeValue
     from .router import GLinetConfigEntry, GLinetRouter
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=Tr
 
     value_fn: Callable[[SystemStatusMetrics], int | float | None]
     extra_attributes_fn: (
-        Callable[[SystemStatusMetrics], dict[str, StateAttributeValue]] | None
+        Callable[[SystemStatusMetrics], dict[str, StateType | bool]] | None
     ) = None
 
 
@@ -271,7 +271,7 @@ class GliSensorBase(SensorEntity):
         return self.router.available
 
     @property
-    def extra_state_attributes(self) -> dict[str, StateAttributeValue] | None:
+    def extra_state_attributes(self) -> dict[str, StateType | bool] | None:
         """Return the state attributes."""
         if self.entity_description.extra_attributes_fn is None:
             return None
@@ -357,7 +357,7 @@ class WanStatusSensor(SensorEntity):
         return _ICON_FOR_WAN_STATE.get(self.native_value, "mdi:lan-pending")
 
     @property
-    def extra_state_attributes(self) -> dict[str, StateAttributeValue]:
+    def extra_state_attributes(self) -> dict[str, StateType | bool]:
         """Expose raw interface name and link-layer state."""
         state = self._router.wan_status.get(self._interface)
         return {

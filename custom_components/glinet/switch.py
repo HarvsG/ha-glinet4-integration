@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.typing import StateType
 
-    from .const import StateAttributeValue
     from .router import GLinetConfigEntry, GLinetRouter, WireGuardClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -196,9 +196,9 @@ class TailscaleSwitch(GliSwitchBase):
             self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> dict[str, StateAttributeValue]:
+    def extra_state_attributes(self) -> dict[str, StateType | bool]:
         """Return the switch attributes."""
-        attrs: dict[str, StateAttributeValue] = {}
+        attrs: dict[str, StateType | bool] = {}
         if self.lan_access is not None:
             attrs["lan_access"] = self.lan_access
         return attrs

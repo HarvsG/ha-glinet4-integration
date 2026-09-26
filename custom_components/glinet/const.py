@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from homeassistant.helpers.typing import StateType
-
 DOMAIN = "glinet"
 DATA_GLINET = "glinet"
 API_PATH = "/rpc"
@@ -20,5 +18,3 @@ TRACK_RANDOMIZED_MAC_IGNORE = "ignore"
 TRACK_RANDOMIZED_MAC_DISABLED = "disabled"
 TRACK_RANDOMIZED_MAC_ENABLED = "enabled"
 DEFAULT_TRACK_RANDOMIZED_MAC = TRACK_RANDOMIZED_MAC_IGNORE
-
-type StateAttributeValue = StateType | bool
