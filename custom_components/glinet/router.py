@@ -347,22 +347,20 @@ class GLinetRouter:
                 "Making api call %s from _update_platform()", api_callable.__name__
             )
             response = await api_callable()
-        except TimeoutError:
+        except (TimeoutError, aiohttp.ClientError, OSError) as exc:
             if not self._connect_error:
                 self._connect_error = True
-                _LOGGER.warning(
-                    "GL-iNet router %s did not respond in time",
-                    self._host,
-                )
-            return None
-        except (aiohttp.ClientError, OSError) as exc:
-            if not self._connect_error:
-                self._connect_error = True
-                _LOGGER.warning(
-                    "GL-iNet router %s communication error: %s",
-                    self._host,
-                    exc,
-                )
+                if isinstance(exc, TimeoutError):
+                    _LOGGER.warning(
+                        "GL-iNet router %s did not respond in time",
+                        self._host,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "GL-iNet router %s communication error: %s",
+                        self._host,
+                        exc,
+                    )
             return None
         except TokenError as exc:
             _LOGGER.debug(
