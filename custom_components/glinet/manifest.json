@@ -13,5 +13,5 @@
   "loggers": ["gli4py"],
   "requirements": ["gli4py==0.1.0-beta.4"],
   "ssdp": [],
-  "version": "0.1.12-beta.2"
+  "version": "0.1.12-beta.3"
 }
