@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import aiohttp
 from gli4py import GLinet
@@ -16,13 +16,7 @@ from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
     DEFAULT_CONSIDER_HOME,
 )
-from homeassistant.const import (
-    CONF_HOST,
-    CONF_MAC,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-    CONF_VERIFY_SSL,
-)
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.exceptions import HomeAssistantError
@@ -32,7 +26,6 @@ from homeassistant.helpers.device_registry import format_mac
 
 from .const import (
     API_PATH,
-    CONF_TITLE,
     CONF_TRACK_RANDOMIZED_MAC,
     DEFAULT_TRACK_RANDOMIZED_MAC,
     DEFAULT_VERIFY_SSL,
@@ -178,7 +171,7 @@ class TestingHub:
         try:
             await self.router.login(self.username, password)
             res = await self.router.router_info()
-            self.router_mac = res[CONF_MAC]
+            self.router_mac = res["mac"]
             self.router_model = res["model"]
         except (
             ConnectionRefusedError,
@@ -194,9 +187,18 @@ class TestingHub:
         return bool(self.router.logged_in and self.router_mac)
 
 
+class FlowValidationResult(TypedDict):
+    """Result of validating router connection credentials."""
+
+    title: str
+    mac: str
+    data: dict[str, str]
+    options: dict[str, float | bool]
+
+
 async def validate_input(
-    data: dict[str, Any], hass: HomeAssistant, raise_on_invalid_auth: bool = True
-) -> dict[str, Any]:
+    data: Mapping[str, Any], hass: HomeAssistant, raise_on_invalid_auth: bool = True
+) -> FlowValidationResult:
     """Validate the user input allows us to connect.
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
@@ -204,7 +206,7 @@ async def validate_input(
 
     hub = TestingHub(
         data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME),
-        data[CONF_HOST],
+        str(data[CONF_HOST]),
         hass,
         verify_ssl=data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
     )
@@ -220,21 +222,20 @@ async def validate_input(
 
     # Return info that you want to store in the config entry.
     return {
-        # TODO, on success we can/should probably store some immutable device info in the class.
-        CONF_TITLE: GLINET_FRIENDLY_NAME + " " + hub.router_model.upper(),
-        CONF_MAC: hub.router_mac,
+        "title": GLINET_FRIENDLY_NAME + " " + hub.router_model.upper(),
+        "mac": hub.router_mac,
         "data": {
-            CONF_USERNAME: data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME),
-            CONF_HOST: data[CONF_HOST],
+            CONF_USERNAME: str(data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME)),
+            CONF_HOST: str(data[CONF_HOST]),
             CONF_PASSWORD: (
-                data.get(CONF_PASSWORD, GLINET_DEFAULT_PW) if valid_auth else ""
+                str(data.get(CONF_PASSWORD, GLINET_DEFAULT_PW)) if valid_auth else ""
             ),
         },
         "options": {
-            CONF_CONSIDER_HOME: data.get(
-                CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()
+            CONF_CONSIDER_HOME: float(
+                data.get(CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds())
             ),
-            CONF_VERIFY_SSL: data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+            CONF_VERIFY_SSL: bool(data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)),
         },
     }
 
@@ -246,14 +247,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialize the config flow."""
-        self._discovered_data = None
+        self._discovered_data: dict[str, str] | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the initial step."""
 
-        errors = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             try:
@@ -269,11 +270,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                unique_id: str = format_mac(info[CONF_MAC])
+                unique_id: str = format_mac(info["mac"])
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=info[CONF_TITLE],
+                    title=info["title"],
                     data=info["data"],
                     options=info["options"],
                 )
@@ -382,11 +383,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(format_mac(info[CONF_MAC]))
+                await self.async_set_unique_id(format_mac(info["mac"]))
                 self._abort_if_unique_id_mismatch()
-                data_updates = dict(info["data"])
+                data_updates: dict[str, str | bool] = dict(info["data"])
                 if CONF_VERIFY_SSL in reconfigure_entry.data:
-                    data_updates[CONF_VERIFY_SSL] = info["options"][CONF_VERIFY_SSL]
+                    data_updates[CONF_VERIFY_SSL] = bool(
+                        info["options"][CONF_VERIFY_SSL]
+                    )
                 return self.async_update_reload_and_abort(
                     reconfigure_entry,
                     data_updates=data_updates,

@@ -47,8 +47,8 @@ async def _tick(
 ) -> None:
     """Advance frozen time and fire the polling interval."""
     freezer.tick(timedelta(seconds=seconds))
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    async_fire_time_changed(hass, fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 async def test_poll_updates_state(
@@ -59,14 +59,14 @@ async def test_poll_updates_state(
 ) -> None:
     """Test the periodic poll refreshes the router state."""
     router: GLinetRouter = init_integration.runtime_data
-    assert router.system_status["cpu"]["temperature"] == 42.5
+    assert router.system_status["uptime"] == 86400.0
 
     new_status = deepcopy(MOCK_STATUS)
-    new_status["system"]["cpu"]["temperature"] = 50.0
+    new_status["system"]["uptime"] = 90000.0
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(new_status)
 
     await _tick(hass, freezer)
-    assert router.system_status["cpu"]["temperature"] == 50.0
+    assert router.system_status["uptime"] == 90000.0
     assert router.available
 
 
@@ -90,7 +90,7 @@ async def test_token_error_triggers_renew(
 
     mock_api.router_get_status.side_effect = original
     await _tick(hass, freezer)
-    assert router.system_status["cpu"]["temperature"] == 42.5
+    assert router.system_status["uptime"] == 86400.0
 
 
 async def test_token_error_immediate_retry_recovers_state_same_tick(
@@ -104,7 +104,7 @@ async def test_token_error_immediate_retry_recovers_state_same_tick(
     login_count = mock_api.login.await_count
 
     new_status = deepcopy(MOCK_STATUS)
-    new_status["system"]["cpu"]["temperature"] = 55.0
+    new_status["system"]["uptime"] = 95000.0
 
     mock_api.router_get_status.side_effect = [
         TokenError("expired"),
@@ -113,7 +113,7 @@ async def test_token_error_immediate_retry_recovers_state_same_tick(
     await _tick(hass, freezer)
 
     assert mock_api.login.await_count == login_count + 1
-    assert router.system_status["cpu"]["temperature"] == 55.0
+    assert router.system_status["uptime"] == 95000.0
     assert router.available
 
 
@@ -651,6 +651,82 @@ async def test_update_platform_broad_exception(
     assert not router.available
     assert "responded with an unexpected error" in caplog.text
 
+    # Verify subsequent unexpected exception while disconnected is deduplicated
+    caplog.clear()
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert "responded with an unexpected error" not in caplog.text
+
+
+async def test_update_platform_timeout_error(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test TimeoutError marks router unavailable and deduplicates warnings."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.available
+
+    mock_api.router_get_status.side_effect = TimeoutError("Connection timed out")
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert not router.available
+    assert "did not respond in time" in caplog.text
+
+    caplog.clear()
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert "did not respond in time" not in caplog.text
+
+
+async def test_update_platform_client_error(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test aiohttp.ClientError marks router unavailable and deduplicates warnings."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.available
+
+    mock_api.router_get_status.side_effect = aiohttp.ClientOSError(
+        104, "Connection reset by peer"
+    )
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert not router.available
+    assert "communication error" in caplog.text
+
+    caplog.clear()
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert "communication error" not in caplog.text
+
+
+async def test_update_platform_os_error(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test OSError marks router unavailable and deduplicates warnings."""
+    router: GLinetRouter = init_integration.runtime_data
+    assert router.available
+
+    mock_api.router_get_status.side_effect = ConnectionResetError(
+        104, "Connection reset by peer"
+    )
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert not router.available
+    assert "communication error" in caplog.text
+
+    caplog.clear()
+    result = await router._update_platform(mock_api.router_get_status)
+    assert result is None
+    assert "communication error" not in caplog.text
+
 
 async def test_malformed_wan_interface_warning_deduplicated(
     hass: HomeAssistant,
@@ -676,19 +752,20 @@ async def test_malformed_wan_interface_warning_deduplicated(
     assert "returned a malformed entry for WAN interface bad_wan" not in caplog.text
 
 
-async def test_update_device_trackers_unexpected_payload_type(
+async def test_update_device_trackers_empty_response_during_startup(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,
     mock_api: MagicMock,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test non-dict payload from connected_clients logs warning and exits cleanly."""
+    """Test empty payload from connected_clients exits cleanly without wiping known devices."""
     router: GLinetRouter = init_integration.runtime_data
+    assert router.devices
     mock_api.connected_clients.side_effect = None
-    mock_api.connected_clients.return_value = ["unexpected", "list"]
+    mock_api.connected_clients.return_value = {}
 
     await router.update_device_trackers()
-    assert "Router returned unexpected connected devices payload" in caplog.text
+    # Devices are retained (no wipe on empty response with non-zero uptime)
+    assert router.devices
 
 
 async def test_tailscale_unconfigured_and_connection_state_none(
@@ -700,7 +777,7 @@ async def test_tailscale_unconfigured_and_connection_state_none(
     router: GLinetRouter = init_integration.runtime_data
     assert router.tailscale_configured is True
     assert router.tailscale_connection is True
-    assert router.tailscale_config != {}
+    assert router.tailscale_config is not None
 
     # Query fails for connection state -> retains previous state
     mock_api.tailscale_connection_state.side_effect = None
@@ -708,12 +785,23 @@ async def test_tailscale_unconfigured_and_connection_state_none(
     await router.update_tailscale_state()
     assert router.tailscale_connection is True
 
+    # Tailscale config query fails (network error) -> retains previous config
+    mock_api._tailscale_get_config.side_effect = None
+    mock_api._tailscale_get_config.return_value = None
+    await router.update_tailscale_state()
+    assert router.tailscale_config is not None
+
+    # Tailscale config unsupported / returns False -> clears config
+    mock_api._tailscale_get_config.return_value = False
+    await router.update_tailscale_state()
+    assert router.tailscale_config is None
+
     # Tailscale becomes unconfigured
     mock_api.tailscale_configured.side_effect = None
     mock_api.tailscale_configured.return_value = False
     await router.update_tailscale_state()
     assert router.tailscale_configured is False
-    assert router.tailscale_config == {}
+    assert router.tailscale_config is None
     assert router.tailscale_connection is None
 
 
@@ -733,21 +821,34 @@ async def test_wireguard_state_empty_response(
     assert router.wireguard_clients
 
 
-async def test_wireguard_state_skips_openvpn_and_unknown_peer(
+async def test_wireguard_state_skips_unknown_peer(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,
     mock_api: MagicMock,
 ) -> None:
-    """Test wireguard state skips non-wireguard entries and unknown peer ids."""
+    """Test wireguard state skips entries with unknown peer ids."""
     router: GLinetRouter = init_integration.runtime_data
     mock_api.wireguard_client_state.side_effect = None
     mock_api.wireguard_client_state.return_value = [
-        {"type": "openvpn", "peer_id": 1, "status": 1},
-        {"type": "wireguard", "peer_id": 9999, "status": 1},
+        {
+            "peer_id": 9999,
+            "status": 1,
+            "enabled": True,
+            "domain": "",
+            "group_id": 0,
+            "ipv4": "",
+            "ipv6": "",
+            "log": "",
+            "name": "",
+            "port": 0,
+            "proxy": False,
+            "rx_bytes": 0,
+            "tx_bytes": 0,
+        },
     ]
 
     await router.update_wireguard_client_state()
-    # Neither openvpn nor unknown peer 9999 were added to connected clients
+    # Unknown peer 9999 was not added to connected clients
     assert router.connected_wireguard_clients == []
 
 
@@ -757,10 +858,10 @@ async def test_router_properties(
 ) -> None:
     """Test router properties return expected configuration values."""
     router: GLinetRouter = init_integration.runtime_data
-    assert router.host == "http://192.168.8.1"
-    assert router.unique_id == "94:83:c4:aa:bb:cc"
+    assert router.host == init_integration.data[CONF_HOST]
+    assert router.unique_id == init_integration.unique_id
     assert router.api is not None
-    assert router.sw_version == "4.8.2"
+    assert router.sw_version == "4.3.25"
 
     device = ClientDevInfo("aa:bb:cc:dd:ee:ff")
     assert device.last_activity is not None

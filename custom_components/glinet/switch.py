@@ -11,10 +11,13 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 
 if TYPE_CHECKING:
+    from gli4py.types import WifiInterface
+
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.typing import StateType
 
-    from .router import GLinetConfigEntry, GLinetRouter, WifiInterface, WireGuardClient
+    from .router import GLinetConfigEntry, GLinetRouter, WireGuardClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +50,7 @@ class GliSwitchBase(SwitchEntity):
         """Initialize a GLinet device."""
         self._router = router
         self._attr_device_info = router.device_info
-        self._attr_is_on: bool | None
+        self._attr_is_on: bool | None = None
 
     _attr_has_entity_name = True
 
@@ -88,7 +91,11 @@ class WifiApSwitch(GliSwitchBase):
     @property
     def name(self) -> str:
         """Return the name of the switch."""
-        return self._iface.ssid if self._iface.ssid else self._iface.name
+        if ssid := self._iface.get("ssid"):
+            return ssid
+        if name := self._iface.get("name"):
+            return name
+        return self._iface_name
 
     @property
     def unique_id(self) -> str:
@@ -99,11 +106,11 @@ class WifiApSwitch(GliSwitchBase):
     def extra_state_attributes(self) -> dict[str, str | bool]:
         """Return the attributes."""
         attrs: dict[str, str | bool] = {}
-        attrs["interface"] = self._iface.name
-        attrs["guest"] = self._iface.guest
-        attrs["ssid"] = self._iface.ssid
-        attrs["hidden"] = self._iface.hidden
-        attrs["encryption"] = self._iface.encryption
+        attrs["interface"] = self._iface.get("name") or self._iface_name
+        attrs["guest"] = self._iface.get("guest", False)
+        attrs["ssid"] = self._iface.get("ssid", "")
+        attrs["hidden"] = self._iface.get("hidden", False)
+        attrs["encryption"] = self._iface.get("encryption", "")
         return attrs
 
     async def async_turn_on(self, **_: Any) -> None:
@@ -151,7 +158,7 @@ class WifiApSwitch(GliSwitchBase):
             self._iface_name,
         )
         self._iface = self._router.wifi_ifaces.get(self._iface_name) or self._iface
-        self._attr_is_on = self._iface.enabled
+        self._attr_is_on = self._iface.get("enabled", False)
 
 
 class TailscaleSwitch(GliSwitchBase):
@@ -189,9 +196,9 @@ class TailscaleSwitch(GliSwitchBase):
             self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, StateType | bool]:
         """Return the switch attributes."""
-        attrs: dict[str, Any] = {}
+        attrs: dict[str, StateType | bool] = {}
         if self.lan_access is not None:
             attrs["lan_access"] = self.lan_access
         return attrs
@@ -199,6 +206,11 @@ class TailscaleSwitch(GliSwitchBase):
     @property
     def lan_access(self) -> bool | None:
         """Whether the router exposes the LAN as a subnet."""
+        if (
+            not self._router.tailscale_configured
+            or self._router.tailscale_config is None
+        ):
+            return None
         la = self._router.tailscale_config.get("lan_enabled")
         if la is not None:
             return bool(la)

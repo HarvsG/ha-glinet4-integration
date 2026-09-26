@@ -109,7 +109,13 @@ If you want to contribute to this integration:
    mkdir -p /workspaces/core/config/custom_components
    ln -s /workspaces/glinet/custom_components/glinet /workspaces/core/config/custom_components/glinet
    ```
-4. Run tests:
+4. Install development dependencies with mock support:
+   ```bash
+   uv sync
+   # or into an existing environment:
+   pip install "gli4py[mock]"
+   ```
+5. Run tests:
    ```bash
    uv run pytest
    ```
@@ -143,7 +149,7 @@ If you want to contribute to this integration:
 - [ ] **Migrate to `DataUpdateCoordinator`**: Refactor `GLinetRouter` away from custom `async_track_time_interval` polling and manual dispatcher signals to Home Assistant's standard `DataUpdateCoordinator` pattern (including tiered polling rates for high-frequency device trackers vs low-frequency status endpoints).
 - [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
 - [x] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
-- [ ] **Strict Typing**: Add complete typing to upstream [`gli4py`](https://github.com/HarvsG/gli4py) and enforce strict typing with `mypy` in CI.
+- [x] **Strict Typing**: Add complete typing to upstream [`gli4py`](https://github.com/HarvsG/gli4py) and enforce strict typing with `mypy --strict` in CI.
 - [x] **Error Recovery**: Further refine error recovery to handle transient empty client lists immediately following a router reboot.
 - [x] **HTTPS Support**: Add support for `https://` router communication with optional handling for local self-signed certificates.
 
@@ -160,7 +166,9 @@ If you want to contribute to this integration:
 
 ### ✅ Completed
 
-- [x] Comprehensive automated test suite with mocked API responses (`pytest`).
+- [x] Comprehensive automated test suite with real router hardware fixtures and upstream mock router (`pytest`, `gli4py[mock]`).
+- [x] Strict typing (`mypy --strict`) enforced in CI across integration and tests.
+- [x] Multi-WAN interface connection status sensors.
 - [x] DHCP Auto-discovery (`*gl-*` hostnames and MAC prefix).
 - [x] Automatic re-authentication flow when admin credentials change.
 - [x] Reconfiguration and options flows.

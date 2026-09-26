@@ -2,32 +2,37 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from copy import deepcopy
-from typing import Any
+from collections.abc import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from gli4py.enums import TailscaleConnection
+from gli4py import GLinet
+from gli4py.mock import MockRouter
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from semver.version import Version
 
 from custom_components.glinet.const import DOMAIN
 from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
 
-from .const import (
-    MOCK_CLIENTS,
-    MOCK_HOST,
-    MOCK_MAC,
-    MOCK_ROUTER_INFO,
-    MOCK_STATUS,
-    MOCK_TAILSCALE_CONFIG,
-    MOCK_WG_CLIENTS,
-    MOCK_WG_STATE,
-    MOCK_WIFI_IFACES,
-)
+from .const import MOCK_MAC
+
+
+class MockGLinet(GLinet):
+    """GLinet client subclass allowing mutable logged_in for testing."""
+
+    @property
+    def logged_in(self) -> bool:
+        """Return login state."""
+        return self._logged_in
+
+    @logged_in.setter
+    def logged_in(self, value: bool) -> None:
+        """Allow tests to modify login state."""
+        self._logged_in = value
 
 
 @pytest.fixture(autouse=True)
@@ -36,59 +41,60 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     return
 
 
-def _api_method(name: str, return_value: Any = None) -> AsyncMock:
-    """Build an AsyncMock API method with a __name__.
-
-    GLinetRouter._update_platform logs api_callable.__name__; a bare
-    AsyncMock attribute has no __name__ and the resulting AttributeError
-    would be swallowed, silently marking the router unavailable.
-    """
-    method = AsyncMock(return_value=return_value)
-    method.__name__ = name
-    return method
-
-
-def _canned(name: str, data: Any) -> AsyncMock:
-    """Build an AsyncMock API method returning a deep copy of canned data."""
-    method = AsyncMock(side_effect=lambda *_args, **_kwargs: deepcopy(data))
-    method.__name__ = name
-    return method
+@pytest.fixture
+async def mock_router(socket_enabled: None) -> AsyncGenerator[MockRouter]:
+    """Start an in-process MockRouter instance."""
+    router = MockRouter(reboot_duration=0.0)
+    await router.start()
+    try:
+        yield router
+    finally:
+        await router.stop()
 
 
 @pytest.fixture
-def mock_api() -> MagicMock:
-    """Return a mocked gli4py GLinet API client.
-
-    Tests overriding a response should set the method's side_effect or
-    return_value rather than replacing the AsyncMock, so __name__ survives.
-    """
-    api = MagicMock()
-    api.login = _api_method("login")
-    api.router_reachable = _api_method("router_reachable", True)
-    api.router_info = _canned("router_info", MOCK_ROUTER_INFO)
-    api.router_get_status = _canned("router_get_status", MOCK_STATUS)
-    api.connected_clients = _canned("connected_clients", MOCK_CLIENTS)
-    api.wifi_ifaces_get = _canned("wifi_ifaces_get", MOCK_WIFI_IFACES)
-    api.wireguard_client_list = _canned("wireguard_client_list", MOCK_WG_CLIENTS)
-    api.wireguard_client_state = _canned("wireguard_client_state", MOCK_WG_STATE)
-    api.tailscale_configured = _api_method("tailscale_configured", True)
-    api._tailscale_get_config = _canned("_tailscale_get_config", MOCK_TAILSCALE_CONFIG)
-    api.tailscale_connection_state = _api_method(
-        "tailscale_connection_state", TailscaleConnection.CONNECTED
+async def mock_api(hass: HomeAssistant, mock_router: MockRouter) -> MockGLinet:
+    """Return a GLinet client wrapped with AsyncMock spies against MockRouter."""
+    session = async_get_clientsession(hass)
+    api = MockGLinet(
+        session=session,
+        base_url=f"http://127.0.0.1:{mock_router.actual_port}/rpc",
+        sync=False,
     )
-    api.wireguard_client_start = _api_method("wireguard_client_start")
-    api.wireguard_client_stop = _api_method("wireguard_client_stop")
-    api.tailscale_start = _api_method("tailscale_start")
-    api.tailscale_stop = _api_method("tailscale_stop")
-    api.wifi_iface_set_enabled = _api_method("wifi_iface_set_enabled")
-    api.router_reboot = _api_method("router_reboot")
-    api.logged_in = True
     api.sid = "mock-session-id"
+    api._logged_in = True
+    api._firmware_version = Version.parse("4.3.25")
+
+    spied_methods = (
+        "login",
+        "router_reachable",
+        "router_info",
+        "router_get_status",
+        "connected_clients",
+        "wifi_ifaces_get",
+        "wireguard_client_list",
+        "wireguard_client_state",
+        "tailscale_configured",
+        "_tailscale_get_config",
+        "tailscale_connection_state",
+        "wireguard_client_start",
+        "wireguard_client_stop",
+        "tailscale_start",
+        "tailscale_stop",
+        "wifi_iface_set_enabled",
+        "router_reboot",
+    )
+    for name in spied_methods:
+        orig = getattr(api, name)
+        spy = AsyncMock(wraps=orig)
+        spy.__name__ = name
+        setattr(api, name, spy)
+
     return api
 
 
 @pytest.fixture
-def mock_glinet(mock_api: MagicMock) -> Generator[MagicMock]:
+def mock_glinet(mock_api: MockGLinet) -> Generator[MagicMock]:
     """Patch the GLinet class in both modules that construct it."""
     with (
         patch(
@@ -109,14 +115,14 @@ def mock_setup_entry() -> Generator[AsyncMock]:
 
 
 @pytest.fixture
-def mock_config_entry() -> MockConfigEntry:
+def mock_config_entry(mock_router: MockRouter) -> MockConfigEntry:
     """Return a mock config entry for the GL-iNet integration."""
     return MockConfigEntry(
         domain=DOMAIN,
-        title="GL-iNet MT6000",
+        title="GL-iNet B1300",
         data={
             CONF_USERNAME: "root",
-            CONF_HOST: MOCK_HOST,
+            CONF_HOST: f"http://127.0.0.1:{mock_router.actual_port}",
             CONF_PASSWORD: "goodlife",
         },
         options={CONF_CONSIDER_HOME: 180},

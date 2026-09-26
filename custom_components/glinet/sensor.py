@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
     DOMAIN as SENSOR_DOMAIN,
@@ -30,8 +30,11 @@ from .wan import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from gli4py.types import SystemStatusMetrics
+
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.typing import StateType
 
     from .router import GLinetConfigEntry, GLinetRouter
 
@@ -41,8 +44,10 @@ _LOGGER = logging.getLogger(__name__)
 class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=True):
     """Describes a GL-iNet system status sensor entity."""
 
-    value_fn: Callable[[dict], int | float | None]
-    extra_attributes_fn: Callable[[dict], dict[str, Any]] | None = None
+    value_fn: Callable[[SystemStatusMetrics], int | float | None]
+    extra_attributes_fn: (
+        Callable[[SystemStatusMetrics], dict[str, StateType | bool]] | None
+    ) = None
 
 
 SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
@@ -56,7 +61,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda system_status: (
-            (cpu := system_status.get("cpu")) and cpu.get("temperature")
+            cpu.get("temperature") if (cpu := system_status.get("cpu")) else None
         ),
     ),
     SystemStatusEntityDescription(
@@ -266,7 +271,7 @@ class GliSensorBase(SensorEntity):
         return self.router.available
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any] | None:
+    def extra_state_attributes(self) -> dict[str, StateType | bool] | None:
         """Return the state attributes."""
         if self.entity_description.extra_attributes_fn is None:
             return None
@@ -352,7 +357,7 @@ class WanStatusSensor(SensorEntity):
         return _ICON_FOR_WAN_STATE.get(self.native_value, "mdi:lan-pending")
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, StateType | bool]:
         """Expose raw interface name and link-layer state."""
         state = self._router.wan_status.get(self._interface)
         return {

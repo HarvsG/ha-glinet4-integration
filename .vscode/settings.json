@@ -1,5 +1,6 @@
 {
-  "python.defaultInterpreterPath": ".venv/bin/python",
+  "python.defaultInterpreterPath": "/home/vscode/.local/ha-venv/bin/python",
+  "python.analysis.extraPaths": ["/workspaces/gli4py"],
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,

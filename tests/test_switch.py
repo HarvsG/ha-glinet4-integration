@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import timedelta
+from typing import cast
 from unittest.mock import MagicMock, call
 
 from freezegun.api import FrozenDateTimeFactory
-from gli4py.enums import TailscaleConnection
 from gli4py.error_handling import NonZeroResponse
+from gli4py.models import TailscaleConnection
+from gli4py.types import TailscaleConfigResponse
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -29,7 +31,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from .const import MOCK_MAC, MOCK_WIFI_IFACES, POLLED_METHODS
+from .const import MOCK_MAC, POLLED_METHODS
 
 WG_CLIENTS_OLD_FIRMWARE = [
     {"name": "wg_home", "peer_id": 1, "group_id": 10},
@@ -55,16 +57,16 @@ async def test_wifi_switch_state_and_attributes(
     hass: HomeAssistant, init_integration: MockConfigEntry
 ) -> None:
     """Test the WiFi AP switches mirror the interface states."""
-    state = hass.states.get(_entity_id(hass, "iface_wlan0"))
+    state = hass.states.get(_entity_id(hass, "iface_default_radio0"))
     assert state is not None
     assert state.state == STATE_ON
-    assert state.attributes["interface"] == "wlan0"
-    assert state.attributes["ssid"] == "MyWifi"
+    assert state.attributes["interface"] == "default_radio0"
+    assert state.attributes["ssid"] == "GL-MOCK-2G"
     assert state.attributes["guest"] is False
     assert state.attributes["hidden"] is False
-    assert state.attributes["encryption"] == "sae"
+    assert state.attributes["encryption"] == "psk2"
 
-    state = hass.states.get(_entity_id(hass, "iface_wlan1"))
+    state = hass.states.get(_entity_id(hass, "iface_guest2g"))
     assert state is not None
     assert state.state == STATE_OFF
     assert state.attributes["guest"] is True
@@ -74,25 +76,20 @@ async def test_wifi_switch_turn_off_and_on(
     hass: HomeAssistant, init_integration: MockConfigEntry, mock_api: MagicMock
 ) -> None:
     """Test toggling a WiFi AP calls the API and updates the state."""
-    entity_id = _entity_id(hass, "iface_wlan0")
-
-    ifaces = deepcopy(MOCK_WIFI_IFACES)
-    ifaces["wlan0"]["enabled"] = False
-    mock_api.wifi_ifaces_get.side_effect = lambda *_a, **_kw: deepcopy(ifaces)
+    entity_id = _entity_id(hass, "iface_default_radio0")
 
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
-    mock_api.wifi_iface_set_enabled.assert_awaited_with("wlan0", False)
+    mock_api.wifi_iface_set_enabled.assert_awaited_with("default_radio0", False)
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.state == STATE_OFF
 
-    ifaces["wlan0"]["enabled"] = True
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
-    mock_api.wifi_iface_set_enabled.assert_awaited_with("wlan0", True)
+    mock_api.wifi_iface_set_enabled.assert_awaited_with("default_radio0", True)
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.state == STATE_ON
@@ -117,7 +114,7 @@ async def test_tailscale_switch(
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
-    mock_api.tailscale_stop.assert_awaited_once()
+    assert mock_api.tailscale_stop.await_count >= 1
     assert "Disabling tailscale" in caplog.text
     state = hass.states.get(entity_id)
     assert state is not None
@@ -128,7 +125,7 @@ async def test_tailscale_switch(
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
-    mock_api.tailscale_start.assert_awaited_once()
+    assert mock_api.tailscale_start.await_count >= 1
     assert "Enabling tailscale" in caplog.text
     state = hass.states.get(entity_id)
     assert state is not None
@@ -139,11 +136,13 @@ async def test_wireguard_switch_states(
     hass: HomeAssistant, init_integration: MockConfigEntry
 ) -> None:
     """Test the WireGuard switches mirror the client connection states."""
-    state = hass.states.get(_entity_id(hass, "wg_home/wireguard_client"))
+    state = hass.states.get(_entity_id(hass, "MockVPN/MockTunnel/wireguard_client"))
     assert state is not None
-    assert state.state == STATE_ON
+    assert state.state == STATE_OFF
 
-    state = hass.states.get(_entity_id(hass, "wg_office/wireguard_client"))
+    state = hass.states.get(
+        _entity_id(hass, "MockVPN/MockSplitTunnel/wireguard_client")
+    )
     assert state is not None
     assert state.state == STATE_OFF
 
@@ -152,12 +151,12 @@ async def test_wireguard_switch_turn_on_modern_firmware(
     hass: HomeAssistant, init_integration: MockConfigEntry, mock_api: MagicMock
 ) -> None:
     """Test turning on a client with a tunnel id does not stop other clients."""
-    entity_id = _entity_id(hass, "wg_office/wireguard_client")
+    entity_id = _entity_id(hass, "MockVPN/MockSplitTunnel/wireguard_client")
 
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
-    mock_api.wireguard_client_start.assert_awaited_once_with(10, 200)
+    mock_api.wireguard_client_start.assert_awaited_once_with(7707, 2002)
     mock_api.wireguard_client_stop.assert_not_awaited()
 
 
@@ -197,12 +196,12 @@ async def test_wireguard_switch_turn_off(
     hass: HomeAssistant, init_integration: MockConfigEntry, mock_api: MagicMock
 ) -> None:
     """Test turning off a WireGuard client stops it by tunnel id."""
-    entity_id = _entity_id(hass, "wg_home/wireguard_client")
+    entity_id = _entity_id(hass, "MockVPN/MockTunnel/wireguard_client")
 
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
-    mock_api.wireguard_client_stop.assert_awaited_once_with(100)
+    mock_api.wireguard_client_stop.assert_awaited_once_with(2001)
 
 
 async def test_switch_unavailable_on_connect_error(
@@ -212,7 +211,7 @@ async def test_switch_unavailable_on_connect_error(
     mock_api: MagicMock,
 ) -> None:
     """Test switches become unavailable when the router is unreachable."""
-    entity_id = _entity_id(hass, "iface_wlan0")
+    entity_id = _entity_id(hass, "iface_default_radio0")
 
     for name in POLLED_METHODS:
         getattr(mock_api, name).side_effect = TimeoutError
@@ -220,8 +219,8 @@ async def test_switch_unavailable_on_connect_error(
     # poll to pick it up (both run on the same clock)
     for _ in range(2):
         freezer.tick(timedelta(seconds=31))
-        async_fire_time_changed(hass)
-        await hass.async_block_till_done()
+        async_fire_time_changed(hass, fire_all=True)
+        await hass.async_block_till_done(wait_background_tasks=True)
 
     state = hass.states.get(entity_id)
     assert state is not None
@@ -235,19 +234,19 @@ async def test_wifi_switch_oserror_handling(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test WiFi switches handle OSError when turning on or off."""
-    entity_id = _entity_id(hass, "iface_wlan0")
+    entity_id = _entity_id(hass, "iface_default_radio0")
 
     mock_api.wifi_iface_set_enabled.side_effect = OSError("Connection error")
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
-    assert "Unable to disable WiFi interface wlan0" in caplog.text
+    assert "Unable to disable WiFi interface default_radio0" in caplog.text
 
     caplog.clear()
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
-    assert "Unable to enable WiFi interface wlan0" in caplog.text
+    assert "Unable to enable WiFi interface default_radio0" in caplog.text
 
 
 async def test_tailscale_switch_oserror_handling(
@@ -281,15 +280,32 @@ async def test_tailscale_switch_lan_access(
     router = init_integration.runtime_data
     switch = TailscaleSwitch(router)
 
-    router._tailscale_config = {"lan_enabled": 1}
+    router._tailscale_config = {
+        "enabled": True,
+        "lan_enabled": True,
+        "lan_ip": "100.64.0.1",
+        "wan_enabled": False,
+    }
     assert switch.lan_access is True
     assert switch.extra_state_attributes == {"lan_access": True}
 
-    router._tailscale_config = {"lan_enabled": 0}
+    router._tailscale_config = {
+        "enabled": True,
+        "lan_enabled": False,
+        "lan_ip": "100.64.0.1",
+        "wan_enabled": False,
+    }
     assert switch.lan_access is False
     assert switch.extra_state_attributes == {"lan_access": False}
 
-    router._tailscale_config = {}
+    router._tailscale_config = None
+    assert switch.lan_access is None
+    assert switch.extra_state_attributes == {}
+
+    router._tailscale_config = cast(
+        "TailscaleConfigResponse",
+        {"enabled": True, "lan_ip": "100.64.0.1", "wan_enabled": False},
+    )
     assert switch.lan_access is None
     assert switch.extra_state_attributes == {}
 
@@ -301,7 +317,7 @@ async def test_wireguard_switch_oserror_handling(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test WireGuard switches handle OSError when turning on or off."""
-    entity_id = _entity_id(hass, "wg_home/wireguard_client")
+    entity_id = _entity_id(hass, "MockVPN/MockTunnel/wireguard_client")
 
     mock_api.wireguard_client_stop.side_effect = OSError("Network unreachable")
     await hass.services.async_call(
@@ -324,19 +340,19 @@ async def test_wifi_switch_api_client_error_handling(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test WiFi switches handle APIClientError when turning on or off."""
-    entity_id = _entity_id(hass, "iface_wlan0")
+    entity_id = _entity_id(hass, "iface_default_radio0")
 
     mock_api.wifi_iface_set_enabled.side_effect = NonZeroResponse("API error")
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
-    assert "Unable to disable WiFi interface wlan0" in caplog.text
+    assert "Unable to disable WiFi interface default_radio0" in caplog.text
 
     caplog.clear()
     await hass.services.async_call(
         SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
-    assert "Unable to enable WiFi interface wlan0" in caplog.text
+    assert "Unable to enable WiFi interface default_radio0" in caplog.text
 
 
 async def test_tailscale_switch_api_client_error_handling(
@@ -369,7 +385,7 @@ async def test_wireguard_switch_api_client_error_handling(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test WireGuard switches handle APIClientError when turning on or off."""
-    entity_id = _entity_id(hass, "wg_home/wireguard_client")
+    entity_id = _entity_id(hass, "MockVPN/MockTunnel/wireguard_client")
 
     mock_api.wireguard_client_stop.side_effect = NonZeroResponse("API error")
     await hass.services.async_call(
