@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, TypeVar
 import aiohttp
 from gli4py import GLinet
 from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
-from gli4py.models import TailscaleConnection
+from gli4py.models import SystemStatusMetrics, TailscaleConnection
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -49,12 +49,7 @@ from .wan import WanInterfaceState, parse_network_array
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from gli4py.types import (
-        ClientEntry,
-        SystemStatusMetrics,
-        TailscaleConfigResponse,
-        WifiInterface,
-    )
+    from gli4py.models import ClientEntry, TailscaleConfigResponse, WifiInterface
 
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
     from homeassistant.helpers.entity_registry import RegistryEntry
@@ -145,7 +140,7 @@ class GLinetRouter:
         self._devices: dict[str, ClientDevInfo] = {}
         self._connected_devices: int = 0
         self._wifi_ifaces: dict[str, WifiInterface] = {}
-        self._system_status: SystemStatusMetrics = {}
+        self._system_status: SystemStatusMetrics = SystemStatusMetrics()
         self._wireguard_clients: dict[int, WireGuardClient] = {}
         self._wireguard_connections: list[WireGuardClient] | None = None
         self._tailscale_config: TailscaleConfigResponse | None = None
@@ -595,14 +590,14 @@ class GLinetRouter:
             return
         # 0 is disconnted, 1 is connected, 2 is connecting
         self._wireguard_connections = []
-        for config in status_response:
-            # if config["enabled"] is false then status does not exist
-            connected: bool = config.get("status", 0) != 0
+        for status_item in status_response:
+            # if status_item.enabled is false then status does not exist
+            connected: bool = status_item.status != 0
 
-            client = self._wireguard_clients.get(config["peer_id"])
+            client = self._wireguard_clients.get(status_item.peer_id)
             if client is None:
                 continue
-            client.tunnel_id = config.get("tunnel_id")
+            client.tunnel_id = status_item.tunnel_id
             client.connected = connected
             if connected:
                 # If more modern firmware supports more than 1 client being connected, we need to change this
