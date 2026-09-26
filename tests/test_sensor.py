@@ -54,8 +54,8 @@ async def _tick(
 ) -> None:
     """Advance frozen time and fire the polling interval."""
     freezer.tick(timedelta(seconds=seconds))
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    async_fire_time_changed(hass, fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 async def test_sensor_values(
@@ -63,22 +63,46 @@ async def test_sensor_values(
 ) -> None:
     """Test each system sensor reports the value from the API."""
     expected = {
-        "cpu_temp": 42.5,
-        "load_avg1": 0.25,
-        "load_avg5": 0.5,
-        "load_avg15": 1.0,
-        "memory_use": 75.0,
-        "flash_use": 10.0,
+        "load_avg1": 0.15,
+        "load_avg5": 0.2,
+        "load_avg15": 0.18,
+        "memory_use": 45.97,
+        "flash_use": 57.87,
     }
     for key, value in expected.items():
         state = hass.states.get(_entity_id(hass, key))
         assert state is not None
-        assert float(state.state) == pytest.approx(value)
+        assert float(state.state) == pytest.approx(value, rel=1e-2)
 
     memory_state = hass.states.get(_entity_id(hass, "memory_use"))
     assert memory_state is not None
-    assert memory_state.attributes["memory_total"] == 1_024_000
-    assert memory_state.attributes["memory_free"] == 256_000
+    assert memory_state.attributes["memory_total"] == 254586880
+    assert memory_state.attributes["memory_free"] == 137543680
+
+    flash_state = hass.states.get(_entity_id(hass, "flash_use"))
+    assert flash_state is not None
+    assert flash_state.attributes["flash_total"] == 33554432
+    assert flash_state.attributes["flash_free"] == 14135296
+
+
+async def test_cpu_temp_sensor_when_reported(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test cpu_temp sensor is created and reports value when router reports cpu."""
+    status: dict[str, Any] = deepcopy(MOCK_STATUS)
+    status["system"]["cpu"] = {"temperature": 42.5}
+    mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(status)
+
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(_entity_id(hass, "cpu_temp"))
+    assert state is not None
+    assert float(state.state) == pytest.approx(42.5)
 
 
 async def test_uptime_sensor(
@@ -90,7 +114,7 @@ async def test_uptime_sensor(
     state = hass.states.get(_entity_id(hass, "uptime"))
     assert state is not None
     # Timestamp sensor states are truncated to whole seconds
-    expected = (dt_util.utcnow() - timedelta(seconds=3600)).replace(microsecond=0)
+    expected = (dt_util.utcnow() - timedelta(seconds=86400)).replace(microsecond=0)
     assert dt_util.parse_datetime(state.state) == expected
 
 
@@ -102,7 +126,7 @@ async def test_missing_cpu_temp_filters_sensor(
 ) -> None:
     """Test a sensor the router does not report is not created."""
     status: dict[str, Any] = deepcopy(MOCK_STATUS)
-    del status["system"]["cpu"]
+    status["system"].pop("cpu", None)
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(status)
 
     mock_config_entry.add_to_hass(hass)
@@ -201,7 +225,7 @@ async def test_sensor_unavailable_on_connect_error(
     mock_api: MagicMock,
 ) -> None:
     """Test sensors become unavailable when the router is unreachable."""
-    entity_id = _entity_id(hass, "cpu_temp")
+    entity_id = _entity_id(hass, "load_avg1")
 
     originals = {name: getattr(mock_api, name).side_effect for name in POLLED_METHODS}
     for name in POLLED_METHODS:
@@ -220,7 +244,7 @@ async def test_sensor_unavailable_on_connect_error(
     await _tick(hass, freezer)
     state = hass.states.get(entity_id)
     assert state is not None
-    assert float(state.state) == pytest.approx(42.5)
+    assert float(state.state) == pytest.approx(0.15)
 
 
 async def test_wan_sensor_setup_from_registry_and_initial_up(

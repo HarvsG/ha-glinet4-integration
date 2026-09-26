@@ -47,8 +47,8 @@ async def _tick(
 ) -> None:
     """Advance frozen time and fire the polling interval."""
     freezer.tick(timedelta(seconds=seconds))
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    async_fire_time_changed(hass, fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 async def test_poll_updates_state(
@@ -59,14 +59,14 @@ async def test_poll_updates_state(
 ) -> None:
     """Test the periodic poll refreshes the router state."""
     router: GLinetRouter = init_integration.runtime_data
-    assert router.system_status["cpu"]["temperature"] == 42.5
+    assert router.system_status["uptime"] == 86400.0
 
     new_status = deepcopy(MOCK_STATUS)
-    new_status["system"]["cpu"]["temperature"] = 50.0
+    new_status["system"]["uptime"] = 90000.0
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(new_status)
 
     await _tick(hass, freezer)
-    assert router.system_status["cpu"]["temperature"] == 50.0
+    assert router.system_status["uptime"] == 90000.0
     assert router.available
 
 
@@ -90,7 +90,7 @@ async def test_token_error_triggers_renew(
 
     mock_api.router_get_status.side_effect = original
     await _tick(hass, freezer)
-    assert router.system_status["cpu"]["temperature"] == 42.5
+    assert router.system_status["uptime"] == 86400.0
 
 
 async def test_token_error_immediate_retry_recovers_state_same_tick(
@@ -104,7 +104,7 @@ async def test_token_error_immediate_retry_recovers_state_same_tick(
     login_count = mock_api.login.await_count
 
     new_status = deepcopy(MOCK_STATUS)
-    new_status["system"]["cpu"]["temperature"] = 55.0
+    new_status["system"]["uptime"] = 95000.0
 
     mock_api.router_get_status.side_effect = [
         TokenError("expired"),
@@ -113,7 +113,7 @@ async def test_token_error_immediate_retry_recovers_state_same_tick(
     await _tick(hass, freezer)
 
     assert mock_api.login.await_count == login_count + 1
-    assert router.system_status["cpu"]["temperature"] == 55.0
+    assert router.system_status["uptime"] == 95000.0
     assert router.available
 
 
@@ -771,10 +771,10 @@ async def test_router_properties(
 ) -> None:
     """Test router properties return expected configuration values."""
     router: GLinetRouter = init_integration.runtime_data
-    assert router.host == "http://192.168.8.1"
-    assert router.unique_id == "94:83:c4:aa:bb:cc"
+    assert router.host == init_integration.data[CONF_HOST]
+    assert router.unique_id == init_integration.unique_id
     assert router.api is not None
-    assert router.sw_version == "4.8.2"
+    assert router.sw_version == "4.3.25"
 
     device = ClientDevInfo("aa:bb:cc:dd:ee:ff")
     assert device.last_activity is not None

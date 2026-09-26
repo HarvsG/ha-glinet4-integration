@@ -7,7 +7,8 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
-from gli4py.error_handling import NonZeroResponse
+from gli4py.error_handling import AuthenticationError, NonZeroResponse
+from gli4py.mock import MockRouter
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -56,14 +57,14 @@ async def test_user_flow_success(
         result["flow_id"], USER_INPUT
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "GL-iNet MT6000"
+    assert result["title"] == "GL-iNet B1300"
     assert result["data"] == {
         CONF_USERNAME: "root",
         CONF_HOST: MOCK_HOST,
         CONF_PASSWORD: "goodlife",
     }
     assert result["options"] == {CONF_CONSIDER_HOME: 180, CONF_VERIFY_SSL: True}
-    assert result["result"].unique_id == MOCK_MAC
+    assert result["result"].unique_id == format_mac(MOCK_MAC)
 
 
 async def test_user_flow_cannot_connect(
@@ -94,7 +95,7 @@ async def test_user_flow_invalid_auth(
 ) -> None:
     """Test failed authentication shows an error and the flow can recover."""
     mock_api = mock_glinet.return_value
-    mock_api.logged_in = False
+    mock_api.login.side_effect = AuthenticationError("Auth failed")
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
@@ -105,7 +106,7 @@ async def test_user_flow_invalid_auth(
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_auth"}
 
-    mock_api.logged_in = True
+    mock_api.login.side_effect = None
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], USER_INPUT
     )
@@ -163,7 +164,7 @@ async def test_dhcp_flow_success(
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     # The unique id is the factory MAC: the discovered LAN MAC minus one
-    assert result["result"].unique_id == MOCK_MAC
+    assert result["result"].unique_id == format_mac(MOCK_MAC)
 
 
 async def test_dhcp_flow_cannot_connect_aborts(
@@ -201,9 +202,12 @@ async def test_reauth_flow_success(
     mock_glinet: MagicMock,
     mock_setup_entry: AsyncMock,
     mock_config_entry: MockConfigEntry,
+    mock_router: MockRouter,
 ) -> None:
     """Test the reauth flow updates only the password."""
+    mock_router.password = "new-password"
     mock_config_entry.add_to_hass(hass)
+    initial_host = mock_config_entry.data[CONF_HOST]
 
     result = await mock_config_entry.start_reauth_flow(hass)
     assert result["type"] is FlowResultType.FORM
@@ -216,7 +220,7 @@ async def test_reauth_flow_success(
     assert result["reason"] == "reauth_successful"
     assert result.get("translation_domain") is None
     assert mock_config_entry.data[CONF_PASSWORD] == "new-password"
-    assert mock_config_entry.data[CONF_HOST] == MOCK_HOST
+    assert mock_config_entry.data[CONF_HOST] == initial_host
     assert mock_config_entry.data[CONF_USERNAME] == "root"
 
 
@@ -225,11 +229,11 @@ async def test_reauth_flow_wrong_password_then_success(
     mock_glinet: MagicMock,
     mock_setup_entry: AsyncMock,
     mock_config_entry: MockConfigEntry,
+    mock_router: MockRouter,
 ) -> None:
     """Test the reauth flow re-renders on a wrong password, then succeeds."""
+    mock_router.password = "correct-password"
     mock_config_entry.add_to_hass(hass)
-    mock_api = mock_glinet.return_value
-    mock_api.logged_in = False
 
     result = await mock_config_entry.start_reauth_flow(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -239,7 +243,6 @@ async def test_reauth_flow_wrong_password_then_success(
     assert result["step_id"] == "reauth_confirm"
     assert result["errors"] == {"base": "invalid_auth"}
 
-    mock_api.logged_in = True
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_PASSWORD: "correct-password"}
     )
@@ -283,6 +286,7 @@ async def test_reconfigure_flow_unique_id_mismatch_aborts(
 ) -> None:
     """Test reconfiguring against a different router aborts."""
     mock_config_entry.add_to_hass(hass)
+    initial_host = mock_config_entry.data[CONF_HOST]
     mock_api = mock_glinet.return_value
     mock_api.router_info.side_effect = lambda *_args, **_kwargs: {
         **MOCK_ROUTER_INFO,
@@ -300,7 +304,7 @@ async def test_reconfigure_flow_unique_id_mismatch_aborts(
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "unique_id_mismatch"
-    assert mock_config_entry.data[CONF_HOST] == MOCK_HOST
+    assert mock_config_entry.data[CONF_HOST] == initial_host
 
 
 async def test_options_flow(
@@ -737,7 +741,7 @@ async def test_reconfigure_flow_migrates_data_verify_ssl(
     """Test reconfiguring legacy entry with verify_ssl in data updates both data and options."""
     entry = MockConfigEntry(
         domain=DOMAIN,
-        title="GL-iNet MT6000",
+        title="GL-iNet B1300",
         data={
             CONF_USERNAME: "root",
             CONF_HOST: MOCK_HOST,
@@ -745,7 +749,7 @@ async def test_reconfigure_flow_migrates_data_verify_ssl(
             CONF_VERIFY_SSL: True,
         },
         options={},
-        unique_id=MOCK_MAC,
+        unique_id=format_mac(MOCK_MAC),
     )
     entry.add_to_hass(hass)
 

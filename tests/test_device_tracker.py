@@ -39,8 +39,8 @@ async def _tick(
 ) -> None:
     """Advance frozen time and fire the polling interval."""
     freezer.tick(timedelta(seconds=seconds))
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    async_fire_time_changed(hass, fire_all=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 async def _setup_with_known_devices(
@@ -69,14 +69,19 @@ async def test_tracker_entity_created_home(
 ) -> None:
     """Test a connected client becomes a tracker entity that is home."""
     await _setup_with_known_devices(
-        hass, mock_config_entry, ["00:bb:cc:dd:ee:01", "00:bb:cc:dd:ee:02"]
+        hass, mock_config_entry, ["B8:27:EB:44:55:66", "E8:DB:84:77:88:99"]
     )
 
-    state = hass.states.get(_entity_id(hass, "00:bb:cc:dd:ee:01"))
+    state = hass.states.get(_entity_id(hass, "E8:DB:84:77:88:99"))
     assert state is not None
     assert state.state == STATE_HOME
-    assert state.attributes["interface_type"] == "5GHz"
+    assert state.attributes["interface_type"] == "2.4GHz"
     assert "last_time_reachable" in state.attributes
+
+    state_cable = hass.states.get(_entity_id(hass, "B8:27:EB:44:55:66"))
+    assert state_cable is not None
+    assert state_cable.state == STATE_HOME
+    assert state_cable.attributes["interface_type"] == "LAN"
 
 
 async def test_tracker_goes_not_home_after_consider_home(
@@ -88,12 +93,12 @@ async def test_tracker_goes_not_home_after_consider_home(
 ) -> None:
     """Test a vanished device stays home for the consider_home window only."""
     await _setup_with_known_devices(
-        hass, mock_config_entry, ["00:bb:cc:dd:ee:01", "00:bb:cc:dd:ee:02"]
+        hass, mock_config_entry, ["E8:DB:84:77:88:99", "B8:27:EB:44:55:66"]
     )
-    entity_id = _entity_id(hass, "00:bb:cc:dd:ee:01")
+    entity_id = _entity_id(hass, "E8:DB:84:77:88:99")
 
     # The device disappears, but the client list must stay non-empty
-    remaining = {"00:bb:cc:dd:ee:02": deepcopy(MOCK_CLIENTS["00:bb:cc:dd:ee:02"])}
+    remaining = {"B8:27:EB:44:55:66": deepcopy(MOCK_CLIENTS["B8:27:EB:44:55:66"])}
     mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(remaining)
 
     # 31s elapsed: within the 180s consider_home window
@@ -120,7 +125,7 @@ async def test_new_device_mid_poll_creates_entity(
     await _setup_with_known_devices(
         hass,
         mock_config_entry,
-        ["00:bb:cc:dd:ee:01", "00:bb:cc:dd:ee:02", "00:bb:cc:dd:ee:03"],
+        ["B8:27:EB:44:55:66", "00:1E:67:A1:B2:C3", "00:bb:cc:dd:ee:03"],
     )
     registry = er.async_get(hass)
     assert (
@@ -132,7 +137,7 @@ async def test_new_device_mid_poll_creates_entity(
     clients["00:bb:cc:dd:ee:03"] = {
         "alias": "Tablet",
         "name": "tablet",
-        "ip": "192.168.8.102",
+        "ip": "192.168.1.102",
         "online": True,
         "type": 0,
     }
@@ -313,27 +318,17 @@ async def test_device_tracker_live_attributes_update(
     mock_api: MagicMock,
 ) -> None:
     """Test tracker entity reflects updated IP and name on subsequent polls."""
-    mac = "00:bb:cc:dd:ee:01"
-    clients = deepcopy(MOCK_CLIENTS)
-    clients[mac] = {
-        "alias": "Phone",
-        "name": "phone",
-        "ip": "192.168.8.100",
-        "online": True,
-        "type": 1,
-    }
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
-
+    mac = "B8:27:EB:44:55:66"
     await _setup_with_known_devices(hass, mock_config_entry, [mac])
 
     state = hass.states.get(_entity_id(hass, mac))
     assert state is not None
-    assert state.attributes.get("ip") == "192.168.8.100"
+    assert state.attributes.get("ip") == "192.168.1.10"
 
     # Simulate router poll returning an updated IP and alias
-    updated_clients = deepcopy(clients)
-    updated_clients[mac]["ip"] = "192.168.8.200"
-    updated_clients[mac]["alias"] = "New Phone Name"
+    updated_clients = deepcopy(MOCK_CLIENTS)
+    updated_clients[mac]["ip"] = "192.168.1.200"
+    updated_clients[mac]["alias"] = "New HA Name"
     mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(
         updated_clients
     )
@@ -342,8 +337,8 @@ async def test_device_tracker_live_attributes_update(
 
     state = hass.states.get(_entity_id(hass, mac))
     assert state is not None
-    assert state.attributes.get("ip") == "192.168.8.200"
-    assert "New Phone Name" in state.name
+    assert state.attributes.get("ip") == "192.168.1.200"
+    assert "New HA Name" in state.name
 
 
 async def test_restored_device_tracker_name_preserved_on_unassigned_update(
