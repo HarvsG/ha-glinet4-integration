@@ -7,11 +7,9 @@
 <!--
 If this PR depends on a gli4py PR or branch to pass upstream tests, specify it below.
 Examples:
-  Depends-on: HarvsG/gli4py#123
-  gli4py: feature/new-api-endpoint
+  Depends-on: HarvsG/gli4py#<PR_NUMBER>
+  gli4py: <branch-name>
 -->
-
-Depends-on: HarvsG/gli4py#
 
 ---
 
