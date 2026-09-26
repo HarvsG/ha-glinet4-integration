@@ -1,7 +1,5 @@
 """Constants for the GL-iNet integration."""
 
-from __future__ import annotations
-
 DOMAIN = "glinet"
 DATA_GLINET = "glinet"
 API_PATH = "/rpc"
