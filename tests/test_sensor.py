@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from freezegun.api import FrozenDateTimeFactory
+from gli4py.models import RouterStatusResponse
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -155,7 +156,7 @@ async def test_empty_first_status_keeps_all_sensors(
     mock_api: MagicMock,
 ) -> None:
     """Test sensors are still created when the first status poll is empty."""
-    mock_api.router_get_status.side_effect = lambda *_a, **_kw: {}
+    mock_api.router_get_status.side_effect = lambda *_a, **_kw: RouterStatusResponse()
 
     mock_config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
