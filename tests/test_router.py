@@ -701,7 +701,7 @@ async def test_tailscale_unconfigured_and_connection_state_none(
     router: GLinetRouter = init_integration.runtime_data
     assert router.tailscale_configured is True
     assert router.tailscale_connection is True
-    assert router.tailscale_config != {}
+    assert router.tailscale_config is not None
 
     # Query fails for connection state -> retains previous state
     mock_api.tailscale_connection_state.side_effect = None
@@ -714,7 +714,7 @@ async def test_tailscale_unconfigured_and_connection_state_none(
     mock_api.tailscale_configured.return_value = False
     await router.update_tailscale_state()
     assert router.tailscale_configured is False
-    assert router.tailscale_config == {}
+    assert router.tailscale_config is None
     assert router.tailscale_connection is None
 
 

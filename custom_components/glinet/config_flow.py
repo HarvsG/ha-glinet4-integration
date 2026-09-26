@@ -246,7 +246,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialize the config flow."""
-        self._discovered_data: dict[str, Any] | None = None
+        self._discovered_data: dict[str, str] | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None

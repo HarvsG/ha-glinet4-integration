@@ -148,9 +148,7 @@ class GLinetRouter:
         self._system_status: SystemStatusMetrics = {}
         self._wireguard_clients: dict[int, WireGuardClient] = {}
         self._wireguard_connections: list[WireGuardClient] | None = None
-        self._tailscale_config: (
-            TailscaleConfigResponse | dict[str, bool | str | int]
-        ) = {}
+        self._tailscale_config: TailscaleConfigResponse | None = None
         self._tailscale_connection: bool | None = None
         self._wan_status: dict[str, WanInterfaceState] = {}
         self._known_wan_interfaces: set[str] = set()
@@ -521,7 +519,7 @@ class GLinetRouter:
             # The request failed - keep the previous state
             return
         if not configured:
-            self._tailscale_config = {}
+            self._tailscale_config = None
             return
         # TODO this is a placeholder that needs to be replaced with a pulic method that combines useful info in _tailscale_status and _tailscale_get_config
         config_response = await self._update_platform(
@@ -530,7 +528,7 @@ class GLinetRouter:
         if config_response:
             self._tailscale_config = config_response
         else:
-            self._tailscale_config = {}
+            self._tailscale_config = None
         state: TailscaleConnection | None = await self._update_platform(
             self._api.tailscale_connection_state
         )
@@ -715,8 +713,7 @@ class GLinetRouter:
     @property
     def tailscale_configured(self) -> bool:
         """Is tailscale configured."""
-        # config is {} when not configured which is falsy
-        return bool(self._tailscale_config)
+        return self._tailscale_config is not None
 
     @property
     def tailscale_connection(self) -> bool | None:
@@ -726,9 +723,7 @@ class GLinetRouter:
         return self._tailscale_connection
 
     @property
-    def tailscale_config(
-        self,
-    ) -> TailscaleConfigResponse | dict[str, bool | str | int]:
+    def tailscale_config(self) -> TailscaleConfigResponse | None:
         """Property for tailscale connection."""
         # TODO, we need a non private API method that returns some useful config info
         return self._tailscale_config

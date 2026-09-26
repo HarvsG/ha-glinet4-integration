@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+    from .const import StateAttributeValue
     from .router import GLinetConfigEntry, GLinetRouter, WireGuardClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -195,9 +196,9 @@ class TailscaleSwitch(GliSwitchBase):
             self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> dict[str, bool]:
+    def extra_state_attributes(self) -> dict[str, StateAttributeValue]:
         """Return the switch attributes."""
-        attrs: dict[str, bool] = {}
+        attrs: dict[str, StateAttributeValue] = {}
         if self.lan_access is not None:
             attrs["lan_access"] = self.lan_access
         return attrs
@@ -205,6 +206,11 @@ class TailscaleSwitch(GliSwitchBase):
     @property
     def lan_access(self) -> bool | None:
         """Whether the router exposes the LAN as a subnet."""
+        if (
+            not self._router.tailscale_configured
+            or self._router.tailscale_config is None
+        ):
+            return None
         la = self._router.tailscale_config.get("lan_enabled")
         if la is not None:
             return bool(la)
