@@ -203,6 +203,7 @@ min-similarity-lines = 7
 
 [tool.mypy]
 strict = true
+disallow_any_generics = true
 python_version = "3.14"
 platform = "linux"
 show_error_codes = true

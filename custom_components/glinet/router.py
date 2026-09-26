@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 import aiohttp
 from gli4py import GLinet
@@ -47,7 +47,7 @@ from .utils import adjust_mac, is_randomized_mac, is_ssl_error
 from .wan import WanInterfaceState, parse_network_array
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine
+    from collections.abc import Awaitable, Callable
 
     from gli4py.types import (
         ClientEntry,
@@ -148,7 +148,9 @@ class GLinetRouter:
         self._system_status: SystemStatusMetrics = {}
         self._wireguard_clients: dict[int, WireGuardClient] = {}
         self._wireguard_connections: list[WireGuardClient] | None = None
-        self._tailscale_config: TailscaleConfigResponse | dict[str, Any] = {}
+        self._tailscale_config: (
+            TailscaleConfigResponse | dict[str, bool | str | int]
+        ) = {}
         self._tailscale_connection: bool | None = None
         self._wan_status: dict[str, WanInterfaceState] = {}
         self._known_wan_interfaces: set[str] = set()
@@ -338,7 +340,7 @@ class GLinetRouter:
             self._async_dismiss_reauth_flow()
 
     async def _update_platform(
-        self, api_callable: Callable[[], Coroutine[Any, Any, T]]
+        self, api_callable: Callable[[], Awaitable[T]]
     ) -> T | None:
         """Boilerplate to make update requests to api and handle errors."""
 
@@ -525,7 +527,10 @@ class GLinetRouter:
         config_response = await self._update_platform(
             self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
         )
-        self._tailscale_config = dict(config_response) if config_response else {}
+        if config_response:
+            self._tailscale_config = config_response
+        else:
+            self._tailscale_config = {}
         state: TailscaleConnection | None = await self._update_platform(
             self._api.tailscale_connection_state
         )
@@ -721,7 +726,9 @@ class GLinetRouter:
         return self._tailscale_connection
 
     @property
-    def tailscale_config(self) -> TailscaleConfigResponse | dict[str, Any]:
+    def tailscale_config(
+        self,
+    ) -> TailscaleConfigResponse | dict[str, bool | str | int]:
         """Property for tailscale connection."""
         # TODO, we need a non private API method that returns some useful config info
         return self._tailscale_config

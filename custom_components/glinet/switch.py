@@ -195,9 +195,9 @@ class TailscaleSwitch(GliSwitchBase):
             self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, bool]:
         """Return the switch attributes."""
-        attrs: dict[str, Any] = {}
+        attrs: dict[str, bool] = {}
         if self.lan_access is not None:
             attrs["lan_access"] = self.lan_access
         return attrs
