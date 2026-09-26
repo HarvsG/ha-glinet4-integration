@@ -70,6 +70,8 @@ jobs:
 
   pytest:
     name: "Pytest (gli4py: ${{ matrix.target }})"
+    needs: detect-gli4py-pr
+    if: needs.detect-gli4py-pr.outputs.has_linked_pr != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -116,7 +118,7 @@ jobs:
 
       - name: Run tests against linked gli4py
         run: |
-          uv run pytest
+          uv run pytest --cov=custom_components/glinet --cov-report=term-missing
 
   pytest-ha-upstream:
     name: "Pytest (Home Assistant Weekly Upstream)"

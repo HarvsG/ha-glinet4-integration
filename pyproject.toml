@@ -252,6 +252,3 @@ show_missing = true
 quiet-level = 2
 skip = "uv.lock,./.git/*,./.mypy_cache/*,*.json"
 ignore-words-list = "hass"
-
-[tool.uv.sources]
-gli4py = { path = "../gli4py", editable = true }
