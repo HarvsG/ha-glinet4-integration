@@ -112,8 +112,8 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         suggested_display_precision=2,
         native_unit_of_measurement=PERCENTAGE,
         value_fn=lambda system_status: (
-            (memory_total := system_status.get("memory_total", 0)) > 0
-            and (memory_free := system_status.get("memory_free", 0)) >= 0
+            (memory_total := system_status.get("memory_total") or 0) > 0
+            and (memory_free := system_status.get("memory_free") or 0) >= 0
             and (mu := 100 * (1 - memory_free / memory_total))
             and isinstance(mu, float)
             and 0 <= mu <= 100
@@ -134,8 +134,8 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         suggested_display_precision=2,
         native_unit_of_measurement=PERCENTAGE,
         value_fn=lambda system_status: (
-            (flash_total := system_status.get("flash_total", 0)) > 0
-            and (flash_free := system_status.get("flash_free", 0)) >= 0
+            (flash_total := system_status.get("flash_total") or 0) > 0
+            and (flash_free := system_status.get("flash_free") or 0) >= 0
             and (fu := 100 * (1 - flash_free / flash_total))
             and isinstance(fu, float)
             and 0 <= fu <= 100
