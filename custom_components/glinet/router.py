@@ -347,13 +347,20 @@ class GLinetRouter:
                 "Making api call %s from _update_platform()", api_callable.__name__
             )
             response = await api_callable()
-        except TimeoutError:
+        except (TimeoutError, aiohttp.ClientError, OSError) as exc:
             if not self._connect_error:
                 self._connect_error = True
-                _LOGGER.exception(
-                    "GL-iNet router %s did not respond in time",
-                    self._host,
-                )
+                if isinstance(exc, TimeoutError):
+                    _LOGGER.warning(
+                        "GL-iNet router %s did not respond in time",
+                        self._host,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "GL-iNet router %s communication error: %s",
+                        self._host,
+                        exc,
+                    )
             return None
         except TokenError as exc:
             _LOGGER.debug(
@@ -382,7 +389,7 @@ class GLinetRouter:
         except NonZeroResponse:
             if not self._connect_error:
                 self._connect_error = True
-                _LOGGER.exception(
+                _LOGGER.warning(
                     "GL-iNet router %s responded, but with an error code", self._host
                 )
             return None
@@ -390,10 +397,11 @@ class GLinetRouter:
             # Let async_setup_entry (startup) or update_states (polling) handle reauth
             raise
         except Exception:  # pylint: disable=broad-except  # noqa: BLE001
-            self._connect_error = True
-            _LOGGER.exception(
-                "GL-iNet router %s responded with an unexpected error", self._host
-            )
+            if not self._connect_error:
+                self._connect_error = True
+                _LOGGER.exception(
+                    "GL-iNet router %s responded with an unexpected error", self._host
+                )
             return None
 
         if not response:
@@ -525,6 +533,9 @@ class GLinetRouter:
         config_response = await self._update_platform(
             self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
         )
+        if config_response is None:
+            # The request failed - keep the previous state
+            return
         if config_response:
             self._tailscale_config = config_response
         else:
