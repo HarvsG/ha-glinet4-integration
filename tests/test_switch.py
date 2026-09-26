@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import timedelta
+from typing import cast
 from unittest.mock import MagicMock, call
 
 from freezegun.api import FrozenDateTimeFactory
 from gli4py.error_handling import NonZeroResponse
 from gli4py.models import TailscaleConnection
+from gli4py.types import TailscaleConfigResponse
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -281,15 +283,32 @@ async def test_tailscale_switch_lan_access(
     router = init_integration.runtime_data
     switch = TailscaleSwitch(router)
 
-    router._tailscale_config = {"lan_enabled": 1}
+    router._tailscale_config = {
+        "enabled": True,
+        "lan_enabled": True,
+        "lan_ip": "100.64.0.1",
+        "wan_enabled": False,
+    }
     assert switch.lan_access is True
     assert switch.extra_state_attributes == {"lan_access": True}
 
-    router._tailscale_config = {"lan_enabled": 0}
+    router._tailscale_config = {
+        "enabled": True,
+        "lan_enabled": False,
+        "lan_ip": "100.64.0.1",
+        "wan_enabled": False,
+    }
     assert switch.lan_access is False
     assert switch.extra_state_attributes == {"lan_access": False}
 
-    router._tailscale_config = {}
+    router._tailscale_config = None
+    assert switch.lan_access is None
+    assert switch.extra_state_attributes == {}
+
+    router._tailscale_config = cast(
+        "TailscaleConfigResponse",
+        {"enabled": True, "lan_ip": "100.64.0.1", "wan_enabled": False},
+    )
     assert switch.lan_access is None
     assert switch.extra_state_attributes == {}
 

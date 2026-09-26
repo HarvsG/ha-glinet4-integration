@@ -147,3 +147,66 @@ def test_boundary_checker_detects_violations() -> None:
     for snippet in bad_snippets:
         violations = _check_source_for_direct_api_calls(snippet, "bad_example.py")
         assert len(violations) > 0, f"Expected violation for snippet: {snippet}"
+
+
+def _check_source_for_dict_str_any(
+    source_code: str, filename: str = "module.py"
+) -> list[str]:
+    """Scan Python source code for occurrences of dict[str, Any]."""
+    violations: list[str] = []
+    tree = ast.parse(source_code, filename=filename)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Subscript):
+            value = node.value
+            is_dict = (isinstance(value, ast.Name) and value.id == "dict") or (
+                isinstance(value, ast.Attribute) and value.attr == "dict"
+            )
+            if is_dict:
+                slice_node = node.slice
+                if isinstance(slice_node, ast.Tuple) and len(slice_node.elts) == 2:
+                    k, v = slice_node.elts
+                    is_k_str = isinstance(k, ast.Name) and k.id == "str"
+                    is_v_any = isinstance(v, ast.Name) and v.id == "Any"
+                    if is_k_str and is_v_any:
+                        violations.append(
+                            f"{filename}:{node.lineno} Prohibited 'dict[str, Any]' found. "
+                            "Use specific types or TypedDict models (consider defining API types in gli4py) "
+                            "to ensure strict typing."
+                        )
+    return violations
+
+
+def test_avoid_dict_str_any_in_integration() -> None:
+    """Ensure integration modules avoid dict[str, Any] where specific types should be used.
+
+    Core router, sensor, switch, device_tracker, and wan logic must use concrete types
+    or TypedDicts from gli4py / integration models. Only config_flow and diagnostics
+    retain dict[str, Any] where required by Home Assistant core base contracts.
+    """
+    violations: list[str] = []
+    allowed_files = {"config_flow.py", "diagnostics.py"}
+
+    py_files = sorted(PACKAGE_ROOT.glob("**/*.py"))
+    assert len(py_files) > 0, "No python source files found to check"
+
+    for py_file in py_files:
+        if py_file.name in allowed_files:
+            continue
+        code = py_file.read_text(encoding="utf-8")
+        violations.extend(_check_source_for_dict_str_any(code, py_file.name))
+
+    assert not violations, (
+        "Prohibited dict[str, Any] found in integration code:\n"
+        + "\n".join(f"  - {v}" for v in violations)
+        + "\n\nPlease avoid dict[str, Any]. Use concrete types, enums, dataclasses, or TypedDicts "
+        + "(defined upstream in gli4py for router payloads, or in custom_components.glinet)."
+    )
+
+
+def test_dict_str_any_checker_detects_violations() -> None:
+    """Verify that the dict[str, Any] checker detects violations."""
+    bad_code = "def get_data() -> dict[str, Any]: return {}"
+    violations = _check_source_for_dict_str_any(bad_code, "test.py")
+    assert len(violations) == 1
+    assert "Prohibited 'dict[str, Any]' found" in violations[0]

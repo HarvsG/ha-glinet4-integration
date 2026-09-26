@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.typing import StateType
 
     from .router import GLinetConfigEntry, GLinetRouter, WireGuardClient
 
@@ -49,7 +50,7 @@ class GliSwitchBase(SwitchEntity):
         """Initialize a GLinet device."""
         self._router = router
         self._attr_device_info = router.device_info
-        self._attr_is_on: bool | None
+        self._attr_is_on: bool | None = None
 
     _attr_has_entity_name = True
 
@@ -195,9 +196,9 @@ class TailscaleSwitch(GliSwitchBase):
             self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, StateType | bool]:
         """Return the switch attributes."""
-        attrs: dict[str, Any] = {}
+        attrs: dict[str, StateType | bool] = {}
         if self.lan_access is not None:
             attrs["lan_access"] = self.lan_access
         return attrs
@@ -205,6 +206,11 @@ class TailscaleSwitch(GliSwitchBase):
     @property
     def lan_access(self) -> bool | None:
         """Whether the router exposes the LAN as a subnet."""
+        if (
+            not self._router.tailscale_configured
+            or self._router.tailscale_config is None
+        ):
+            return None
         la = self._router.tailscale_config.get("lan_enabled")
         if la is not None:
             return bool(la)

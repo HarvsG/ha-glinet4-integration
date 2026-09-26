@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from homeassistant.components.device_tracker import ScannerEntity, SourceType
 from homeassistant.core import HomeAssistant, callback
@@ -14,6 +14,7 @@ from .utils import is_randomized_mac
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+    from homeassistant.helpers.typing import StateType
 
     from .router import ClientDevInfo, GLinetConfigEntry, GLinetRouter
 
@@ -107,9 +108,9 @@ class GLinetDevice(ScannerEntity):
         return SourceType.ROUTER
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, StateType | bool]:
         """Return the attributes."""
-        attrs = {
+        attrs: dict[str, StateType | bool] = {
             "interface_type": str(self._device.interface_type),
             "mac_randomized": self._is_randomized,
         }

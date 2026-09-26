@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 import aiohttp
 from gli4py import GLinet
@@ -47,9 +47,14 @@ from .utils import adjust_mac, is_randomized_mac, is_ssl_error
 from .wan import WanInterfaceState, parse_network_array
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine
+    from collections.abc import Awaitable, Callable
 
-    from gli4py.types import ClientEntry, SystemStatusMetrics, WifiInterface
+    from gli4py.types import (
+        ClientEntry,
+        SystemStatusMetrics,
+        TailscaleConfigResponse,
+        WifiInterface,
+    )
 
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
     from homeassistant.helpers.entity_registry import RegistryEntry
@@ -143,7 +148,7 @@ class GLinetRouter:
         self._system_status: SystemStatusMetrics = {}
         self._wireguard_clients: dict[int, WireGuardClient] = {}
         self._wireguard_connections: list[WireGuardClient] | None = None
-        self._tailscale_config: dict = {}
+        self._tailscale_config: TailscaleConfigResponse | None = None
         self._tailscale_connection: bool | None = None
         self._wan_status: dict[str, WanInterfaceState] = {}
         self._known_wan_interfaces: set[str] = set()
@@ -333,7 +338,7 @@ class GLinetRouter:
             self._async_dismiss_reauth_flow()
 
     async def _update_platform(
-        self, api_callable: Callable[[], Coroutine[Any, Any, T]]
+        self, api_callable: Callable[[], Awaitable[T]]
     ) -> T | None:
         """Boilerplate to make update requests to api and handle errors."""
 
@@ -514,13 +519,16 @@ class GLinetRouter:
             # The request failed - keep the previous state
             return
         if not configured:
-            self._tailscale_config = {}
+            self._tailscale_config = None
             return
         # TODO this is a placeholder that needs to be replaced with a pulic method that combines useful info in _tailscale_status and _tailscale_get_config
         config_response = await self._update_platform(
             self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
         )
-        self._tailscale_config = dict(config_response) if config_response else {}
+        if config_response:
+            self._tailscale_config = config_response
+        else:
+            self._tailscale_config = None
         state: TailscaleConnection | None = await self._update_platform(
             self._api.tailscale_connection_state
         )
@@ -705,8 +713,7 @@ class GLinetRouter:
     @property
     def tailscale_configured(self) -> bool:
         """Is tailscale configured."""
-        # config is {} when not configured which is falsy
-        return bool(self._tailscale_config)
+        return self._tailscale_config is not None
 
     @property
     def tailscale_connection(self) -> bool | None:
@@ -716,7 +723,7 @@ class GLinetRouter:
         return self._tailscale_connection
 
     @property
-    def tailscale_config(self) -> dict:
+    def tailscale_config(self) -> TailscaleConfigResponse | None:
         """Property for tailscale connection."""
         # TODO, we need a non private API method that returns some useful config info
         return self._tailscale_config
