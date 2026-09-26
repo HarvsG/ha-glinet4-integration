@@ -13,6 +13,12 @@ STATE_CONNECTED = "connected"
 STATE_FAILING = "failing"
 STATE_DISCONNECTED = "disconnected"
 
+WAN_STATES: list[str] = [
+    STATE_CONNECTED,
+    STATE_FAILING,
+    STATE_DISCONNECTED,
+]
+
 
 def state_for(*, up: bool, online: bool) -> str:
     """Map link/internet booleans to one of the three WAN states."""
