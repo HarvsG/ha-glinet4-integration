@@ -202,6 +202,7 @@ max-line-length = 100
 min-similarity-lines = 7
 
 [tool.mypy]
+strict = true
 python_version = "3.14"
 platform = "linux"
 show_error_codes = true

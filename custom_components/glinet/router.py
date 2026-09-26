@@ -49,7 +49,12 @@ from .wan import WanInterfaceState, parse_network_array
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
 
-    from gli4py.types import ClientEntry, SystemStatusMetrics, WifiInterface
+    from gli4py.types import (
+        ClientEntry,
+        SystemStatusMetrics,
+        TailscaleConfigResponse,
+        WifiInterface,
+    )
 
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
     from homeassistant.helpers.entity_registry import RegistryEntry
@@ -143,7 +148,7 @@ class GLinetRouter:
         self._system_status: SystemStatusMetrics = {}
         self._wireguard_clients: dict[int, WireGuardClient] = {}
         self._wireguard_connections: list[WireGuardClient] | None = None
-        self._tailscale_config: dict = {}
+        self._tailscale_config: TailscaleConfigResponse | dict[str, Any] = {}
         self._tailscale_connection: bool | None = None
         self._wan_status: dict[str, WanInterfaceState] = {}
         self._known_wan_interfaces: set[str] = set()
@@ -716,7 +721,7 @@ class GLinetRouter:
         return self._tailscale_connection
 
     @property
-    def tailscale_config(self) -> dict:
+    def tailscale_config(self) -> TailscaleConfigResponse | dict[str, Any]:
         """Property for tailscale connection."""
         # TODO, we need a non private API method that returns some useful config info
         return self._tailscale_config
