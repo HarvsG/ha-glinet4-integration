@@ -19,7 +19,7 @@ dev = [
     # Must match the requirement pinned in custom_components/glinet/manifest.json
     "gli4py[mock]==0.1.0-beta.3",
     "habluetooth>=6.26.11",
-    "homeassistant-stubs==2026.9.2",
+    "homeassistant-stubs==2026.9.3",
     "josepy>=2.2.0",
     "mashumaro>=3.17.0",
     "mypy>=1.16.1",
