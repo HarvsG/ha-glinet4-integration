@@ -57,7 +57,7 @@ def add_entities(
         if mac in tracked:
             continue
 
-        new_tracked.append(GLinetDevice(router, device))
+        new_tracked.append(GLinetDevice(router, device, tracked))
         tracked.add(mac)
 
     if new_tracked:
@@ -72,10 +72,16 @@ class GLinetDevice(ScannerEntity):
     _attr_mac_address: str
     _attr_source_type: SourceType = SourceType.ROUTER
 
-    def __init__(self, router: GLinetRouter, device: ClientDevInfo) -> None:
+    def __init__(
+        self,
+        router: GLinetRouter,
+        device: ClientDevInfo,
+        tracked: set[str] | None = None,
+    ) -> None:
         """Initialize a GLinet device."""
         self._router: GLinetRouter = router
         self._device: ClientDevInfo = device
+        self._tracked: set[str] | None = tracked
         self._icon = "mdi:radar"
         self._is_randomized = is_randomized_mac(self._device.mac)
         self._attr_hostname: str = self._device.name or DEFAULT_DEVICE_NAME
@@ -167,3 +173,5 @@ class GLinetDevice(ScannerEntity):
                 self.async_on_demand_update,
             )
         )
+        if (tracked := self._tracked) is not None:
+            self.async_on_remove(lambda: tracked.discard(self._attr_mac_address))
