@@ -54,7 +54,7 @@ jobs:
 
       - name: Run mypy
         run: |
-          uv run mypy custom_components/glinet tests
+          uv run mypy --strict custom_components/glinet tests
 
   api-boundary:
     name: "Check API boundary (no direct HTTP)"

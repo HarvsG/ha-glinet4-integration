@@ -17,7 +17,7 @@ dependencies = [
 dev = [
     "codespell>=2.4.1",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
-    "gli4py==0.1.0-beta.2",
+    "gli4py[mock]==0.1.0-beta.2",
     "habluetooth>=6.26.11",
     "homeassistant-stubs==2026.9.2",
     "josepy>=2.2.0",
@@ -245,10 +245,13 @@ pythonpath = ["."]
 source = ["custom_components/glinet"]
 
 [tool.coverage.report]
-fail_under = 98
+fail_under = 99
 show_missing = true
 
 [tool.codespell]
 quiet-level = 2
 skip = "uv.lock,./.git/*,./.mypy_cache/*,*.json"
 ignore-words-list = "hass"
+
+[tool.poetry.group.dev.dependencies]
+gli4py = { version = "==0.1.0-beta.2", extras = ["mock"] }

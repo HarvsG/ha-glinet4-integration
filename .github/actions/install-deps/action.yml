@@ -27,9 +27,9 @@ runs:
            [[ "$PR_BODY" =~ gli4py:[[:space:]]*#?([0-9]+) ]]; then
           PR_NUM="${BASH_REMATCH[1]}"
           echo "Installing linked gli4py PR #${PR_NUM}"
-          uv pip install "git+https://github.com/HarvsG/gli4py.git@refs/pull/${PR_NUM}/head"
+          uv pip install "gli4py[mock] @ git+https://github.com/HarvsG/gli4py.git@refs/pull/${PR_NUM}/head"
         elif [[ "$PR_BODY" =~ gli4py:[[:space:]]*([a-zA-Z0-9_./-]+) ]]; then
           REF="${BASH_REMATCH[1]}"
           echo "Installing linked gli4py ref ${REF}"
-          uv pip install "git+https://github.com/HarvsG/gli4py.git@${REF}"
+          uv pip install "gli4py[mock] @ git+https://github.com/HarvsG/gli4py.git@${REF}"
         fi

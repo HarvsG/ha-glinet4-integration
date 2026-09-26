@@ -87,7 +87,7 @@ jobs:
       - name: Install master gli4py
         if: matrix.target == 'master'
         run: |
-          uv pip install "git+https://github.com/HarvsG/gli4py.git@master"
+          uv pip install "gli4py[mock] @ git+https://github.com/HarvsG/gli4py.git@master"
 
       - name: Run tests with coverage (pinned)
         if: matrix.target == 'pinned'
@@ -114,7 +114,7 @@ jobs:
       - name: Install linked gli4py
         run: |
           echo "Installing gli4py ref: ${{ needs.detect-gli4py-pr.outputs.pr_ref }}"
-          uv pip install "git+https://github.com/HarvsG/gli4py.git@${{ needs.detect-gli4py-pr.outputs.pr_ref }}"
+          uv pip install "gli4py[mock] @ git+https://github.com/HarvsG/gli4py.git@${{ needs.detect-gli4py-pr.outputs.pr_ref }}"
 
       - name: Run tests against linked gli4py
         run: |

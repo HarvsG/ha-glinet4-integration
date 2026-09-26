@@ -76,7 +76,10 @@ def test_manifest_requirements_match_pyproject() -> None:
         assert matching_dev_deps, (
             f"Requirement {req} from manifest.json not found in pyproject.toml dev group"
         )
-        assert req in matching_dev_deps, (
+        normalized_matching_dev_deps = [
+            re.sub(r"\[.*?\]", "", dep) for dep in matching_dev_deps
+        ]
+        assert req in normalized_matching_dev_deps, (
             f"Requirement '{req}' in manifest.json does not match '{matching_dev_deps[0]}' in pyproject.toml"
         )
 

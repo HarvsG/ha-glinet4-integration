@@ -937,7 +937,7 @@ requires-dist = [{ name = "homeassistant", specifier = ">=2025.9.0" }]
 [package.metadata.requires-dev]
 dev = [
     { name = "codespell", specifier = ">=2.4.1" },
-    { name = "gli4py", specifier = "==0.1.0b2" },
+    { name = "gli4py", extras = ["mock"], specifier = "==0.1.0b2" },
     { name = "habluetooth", specifier = ">=6.26.11" },
     { name = "homeassistant-stubs", specifier = "==2026.9.2" },
     { name = "josepy", specifier = ">=2.2.0" },
