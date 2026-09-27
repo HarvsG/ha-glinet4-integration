@@ -86,6 +86,32 @@ async def test_sensor_values(
     assert flash_state.attributes["flash_free"] == 14135296
 
 
+async def test_connected_clients_sensor(
+    hass: HomeAssistant, init_integration: MockConfigEntry
+) -> None:
+    """Test the connected clients total, its breakdown attributes and sensors."""
+    registry = er.async_get(hass)
+
+    def _state(key: str):
+        unique_id = f"glinet_sensor/{MOCK_MAC}/{key}"
+        entity_id = registry.async_get_entity_id(SENSOR_DOMAIN, DOMAIN, unique_id)
+        assert entity_id is not None
+        state = hass.states.get(entity_id)
+        assert state is not None
+        return state
+
+    # The mock router reports four online clients: two wired, two wireless.
+    total = _state("connected_clients")
+    assert total.state == "4"
+    assert total.attributes["wired"] == 2
+    assert total.attributes["wireless"] == 2
+    assert total.attributes["guest"] == 0
+
+    assert _state("wired_clients").state == "2"
+    assert _state("wireless_clients").state == "2"
+    assert _state("guest_clients").state == "0"
+
+
 async def test_cpu_temp_sensor_when_reported(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,

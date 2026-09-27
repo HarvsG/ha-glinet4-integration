@@ -74,6 +74,10 @@
   },
   "entity": {
     "sensor": {
+      "connected_clients": { "name": "Connected clients" },
+      "wired_clients": { "name": "Wired clients" },
+      "wireless_clients": { "name": "Wireless clients" },
+      "guest_clients": { "name": "Guest clients" },
       "cpu_temp": { "name": "CPU temperature" },
       "load_avg1": { "name": "Load avg (1m)" },
       "load_avg5": { "name": "Load avg (5m)" },
