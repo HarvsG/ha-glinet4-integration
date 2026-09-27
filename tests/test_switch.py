@@ -99,6 +99,33 @@ async def test_wifi_switch_turn_off_and_on(
     assert state.state == STATE_ON
 
 
+async def test_led_switch_turn_off_and_on(
+    hass: HomeAssistant, init_integration: MockConfigEntry, mock_api: MagicMock
+) -> None:
+    """Test the LED switch reflects state and toggles via the API."""
+    entity_id = _entity_id(hass, "led")
+
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_ON
+
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    mock_api.led_set.assert_awaited_with(False)
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_OFF
+
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    mock_api.led_set.assert_awaited_with(True)
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_ON
+
+
 async def test_tailscale_switch(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,

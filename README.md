@@ -38,6 +38,7 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 - **Wi-Fi Access Points**: Enable or disable individual Wi-Fi radios/interfaces (e.g., 2.4GHz, 5GHz, and Guest networks) directly from Home Assistant. Includes attributes for SSID, guest status, hidden SSID, and encryption mode.
 - **WireGuard Clients**: Independent toggle switches for each configured WireGuard VPN client tunnel to connect or disconnect on demand.
 - **Tailscale**: Toggle the router's Tailscale connection on and off, with LAN subnet exposure visibility.
+- **LED Control**: Turn the router's status LEDs on or off (mirrors the LED toggle on the GL.iNet admin panel's System overview page) — handy for darkening the router at night.
 
 ### 📊 Diagnostic Sensors
 
@@ -158,7 +159,6 @@ If you want to contribute to this integration:
 - [ ] **Network & Bandwidth Sensors**: Real-time upload and download rate sensors.
 - [ ] **WAN & Public IP Sensors**: Internet reachability sensor (handling offline API timeouts) and external/public IP sensor.
 - [ ] **VPN Policy Routing**: Automate switching VPN client routing policies per device (e.g. for bypassing geofilters in automations).
-- [ ] **Hardware Controls**: Switch for router LED indicator control (`/api/cloud/PostLedEnable`).
 - [ ] **Cellular & Tethering**: USB tethering and cellular modem control for failover internet automations.
 - [ ] **SMS Notifications**: Expose router cellular modem SMS support via a notify platform.
 - [ ] **Firmware Management**: Firmware update status sensor and upgrade trigger (with safety warnings).
@@ -173,6 +173,7 @@ If you want to contribute to this integration:
 - [x] Automatic re-authentication flow when admin credentials change.
 - [x] Reconfiguration and options flows.
 - [x] Wi-Fi access point switches (2.4GHz, 5GHz, Guest networks).
+- [x] LED indicator control switch.
 - [x] System diagnostic sensors (CPU temp/load, memory, flash, uptime) & reboot button.
 
 ---
@@ -183,6 +184,7 @@ The integration is known to work on the following models:
 
 - **GL-MT3000** (Beryl AX)
 - **GL-B1300** (Convexa-B)
+- **GL-MT6000** (Flint 2)
 
 _Have you tested this on another GL.iNet router model? Please open an issue or pull request to add it to the list!_
 

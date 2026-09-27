@@ -119,13 +119,14 @@ MOCK_TAILSCALE_CONFIG: dict[str, Any] = {
 }
 
 # Everything polled each cycle: four methods by the router's own interval
-# plus tailscale_configured via the Tailscale switch entity's async_update.
-# A single succeeding call clears the connect-error latch, so unavailability
-# tests must fail them all.
+# plus tailscale_configured and led_get_config via the Tailscale and LED switch
+# entities' async_update. A single succeeding call clears the connect-error
+# latch, so unavailability tests must fail them all.
 POLLED_METHODS = (
     "router_get_status",
     "connected_clients",
     "wifi_ifaces_get",
     "wireguard_client_list",
     "tailscale_configured",
+    "led_get_config",
 )
