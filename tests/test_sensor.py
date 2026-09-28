@@ -24,7 +24,7 @@ from custom_components.glinet.sensor import (
 from custom_components.glinet.wan import STATE_DISCONNECTED
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
@@ -84,6 +84,49 @@ async def test_sensor_values(
     assert flash_state is not None
     assert flash_state.attributes["flash_total"] == 33554432
     assert flash_state.attributes["flash_free"] == 14135296
+
+
+async def test_connected_clients_sensor(
+    hass: HomeAssistant, init_integration: MockConfigEntry
+) -> None:
+    """Test the connected clients total, its breakdown attributes and sensors."""
+    registry = er.async_get(hass)
+    keys = ("connected_clients", "wired_clients", "wireless_clients", "guest_clients")
+
+    def _client_entity_id(key: str) -> str:
+        unique_id = f"glinet_sensor/{MOCK_MAC}/{key}"
+        entity_id = registry.async_get_entity_id(SENSOR_DOMAIN, DOMAIN, unique_id)
+        assert entity_id is not None
+        return entity_id
+
+    # All client-count sensors are created disabled by default.
+    for key in keys:
+        entry = registry.async_get(_client_entity_id(key))
+        assert entry is not None
+        assert entry.disabled_by == er.RegistryEntryDisabler.INTEGRATION
+        assert hass.states.get(_client_entity_id(key)) is None
+
+    # Enable them as a user would, then reload so they get added.
+    for key in keys:
+        registry.async_update_entity(_client_entity_id(key), disabled_by=None)
+    await hass.config_entries.async_reload(init_integration.entry_id)
+    await hass.async_block_till_done()
+
+    def _state(key: str) -> State:
+        state: State | None = hass.states.get(_client_entity_id(key))
+        assert state is not None
+        return state
+
+    # The mock router reports four online clients: two wired, two wireless.
+    total = _state("connected_clients")
+    assert total.state == "4"
+    assert total.attributes["wired"] == 2
+    assert total.attributes["wireless"] == 2
+    assert total.attributes["guest"] == 0
+
+    assert _state("wired_clients").state == "2"
+    assert _state("wireless_clients").state == "2"
+    assert _state("guest_clients").state == "0"
 
 
 async def test_cpu_temp_sensor_when_reported(
