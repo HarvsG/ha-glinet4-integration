@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
     from homeassistant.helpers.typing import StateType
 
-    from .router import GLinetConfigEntry, GLinetRouter
+    from .router import ClientCounts, GLinetConfigEntry, GLinetRouter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -186,6 +186,10 @@ async def async_setup_entry(
         sensors = [sensor for sensor in sensors if sensor.native_value is not None]
 
     async_add_entities(sensors, True)
+
+    async_add_entities(
+        ClientCountSensor(router, description) for description in CLIENT_COUNT_SENSORS
+    )
 
     await _setup_wan_sensors(hass, entry, router, async_add_entities)
 
@@ -378,4 +382,105 @@ class WanStatusSensor(SensorEntity):
     @callback
     def _handle_update(self) -> None:
         """Re-render this entity's state."""
+        self.async_write_ha_state()
+
+
+class ClientCountEntityDescription(SensorEntityDescription, frozen_or_thawed=True):
+    """Describes a connected-client count sensor."""
+
+    value_fn: Callable[[ClientCounts], int]
+    with_breakdown: bool = False
+
+
+CLIENT_COUNT_SENSORS: tuple[ClientCountEntityDescription, ...] = (
+    ClientCountEntityDescription(
+        key="connected_clients",
+        translation_key="connected_clients",
+        icon="mdi:devices",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=lambda counts: counts.total,
+        with_breakdown=True,
+    ),
+    ClientCountEntityDescription(
+        key="wired_clients",
+        translation_key="wired_clients",
+        icon="mdi:ethernet",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=lambda counts: counts.wired,
+    ),
+    ClientCountEntityDescription(
+        key="wireless_clients",
+        translation_key="wireless_clients",
+        icon="mdi:wifi",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=lambda counts: counts.wireless,
+    ),
+    ClientCountEntityDescription(
+        key="guest_clients",
+        translation_key="guest_clients",
+        icon="mdi:account-multiple",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+        value_fn=lambda counts: counts.guest,
+    ),
+)
+
+
+class ClientCountSensor(SensorEntity):
+    """A count of connected clients (total, or by connection type)."""
+
+    _attr_has_entity_name = True
+    entity_description: ClientCountEntityDescription
+
+    def __init__(
+        self, router: GLinetRouter, description: ClientCountEntityDescription
+    ) -> None:
+        """Initialise the client-count sensor."""
+        self._router = router
+        self.entity_description = description
+        self._attr_device_info = router.device_info
+        self._attr_unique_id = f"glinet_sensor/{router.factory_mac}/{description.key}"
+
+    @property
+    def available(self) -> bool:
+        """Return True when the router is reachable."""
+        return self._router.available
+
+    @property
+    def native_value(self) -> int:
+        """Return the client count for this sensor."""
+        return self.entity_description.value_fn(self._router.client_counts)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, int] | None:
+        """Expose the wired/wireless/guest split on the total sensor."""
+        if not self.entity_description.with_breakdown:
+            return None
+        counts = self._router.client_counts
+        return {
+            "wired": counts.wired,
+            "wireless": counts.wireless,
+            "guest": counts.guest,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to the router's per-poll device-update signal."""
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                self._router.signal_device_update,
+                self._handle_update,
+            )
+        )
+
+    @callback
+    def _handle_update(self) -> None:
+        """Re-render this entity's state on each poll."""
         self.async_write_ha_state()
