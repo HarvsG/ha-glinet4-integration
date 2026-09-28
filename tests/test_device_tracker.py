@@ -376,3 +376,26 @@ async def test_restored_device_tracker_name_preserved_on_unassigned_update(
     assert state is not None
     assert state.name == "GL-B1300"
     assert state.attributes.get("friendly_name") == "GL-B1300"
+
+
+async def test_device_tracker_device_registry_entry(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+) -> None:
+    """Test tracker entity associates with a device entry."""
+    mac = "B8:27:EB:44:55:66"
+    await _setup_with_known_devices(hass, mock_config_entry, [mac])
+
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+
+    entity_id = _entity_id(hass, mac)
+    entry = entity_registry.async_get(entity_id)
+    assert entry is not None
+    assert entry.device_id is not None
+
+    device = device_registry.async_get(entry.device_id)
+    assert device is not None
+    assert isinstance(device, dr.DeviceEntry)
+    assert (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac)) in device.connections

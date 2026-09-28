@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING
 
 from homeassistant.components.device_tracker import ScannerEntity, SourceType
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format_mac
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import DeviceInfo
 
 from .const import TRACK_RANDOMIZED_MAC_DISABLED, TRACK_RANDOMIZED_MAC_ENABLED
 from .utils import is_randomized_mac
@@ -67,6 +69,7 @@ def add_entities(
 class GLinetDevice(ScannerEntity):
     """Representation of a GLinet tracked device."""
 
+    _attr_device_info: DeviceInfo  # type: ignore[assignment]
     _attr_hostname: str
     _attr_ip_address: str | None
     _attr_mac_address: str
@@ -81,6 +84,10 @@ class GLinetDevice(ScannerEntity):
         self._attr_hostname: str = self._device.name or DEFAULT_DEVICE_NAME
         self._attr_ip_address: str | None = self._device.ip_address
         self._attr_mac_address: str = self._device.mac
+        self._attr_device_info = DeviceInfo(
+            connections={(CONNECTION_NETWORK_MAC, format_mac(self._attr_mac_address))},
+            name=self._attr_hostname,
+        )
 
     @property
     def unique_id(self) -> str:
@@ -156,6 +163,10 @@ class GLinetDevice(ScannerEntity):
         self._device = self._router.devices[self._device.mac]
         self._attr_hostname = self.hostname
         self._attr_ip_address = self.ip_address
+        self._attr_device_info = DeviceInfo(
+            connections={(CONNECTION_NETWORK_MAC, format_mac(self.mac_address))},
+            name=self.hostname,
+        )
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
