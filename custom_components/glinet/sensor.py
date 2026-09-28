@@ -188,8 +188,7 @@ async def async_setup_entry(
     async_add_entities(sensors, True)
 
     async_add_entities(
-        ClientCountSensor(router, description)
-        for description in CLIENT_COUNT_SENSORS
+        ClientCountSensor(router, description) for description in CLIENT_COUNT_SENSORS
     )
 
     await _setup_wan_sensors(hass, entry, router, async_add_entities)
@@ -400,6 +399,7 @@ CLIENT_COUNT_SENSORS: tuple[ClientCountEntityDescription, ...] = (
         icon="mdi:devices",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
         value_fn=lambda counts: counts.total,
         with_breakdown=True,
     ),
@@ -409,6 +409,7 @@ CLIENT_COUNT_SENSORS: tuple[ClientCountEntityDescription, ...] = (
         icon="mdi:ethernet",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
         value_fn=lambda counts: counts.wired,
     ),
     ClientCountEntityDescription(
@@ -417,6 +418,7 @@ CLIENT_COUNT_SENSORS: tuple[ClientCountEntityDescription, ...] = (
         icon="mdi:wifi",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
         value_fn=lambda counts: counts.wireless,
     ),
     ClientCountEntityDescription(
@@ -425,6 +427,7 @@ CLIENT_COUNT_SENSORS: tuple[ClientCountEntityDescription, ...] = (
         icon="mdi:account-multiple",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
         value_fn=lambda counts: counts.guest,
     ),
 )

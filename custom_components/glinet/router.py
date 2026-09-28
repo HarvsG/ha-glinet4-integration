@@ -142,9 +142,7 @@ def _count_clients_by_type(clients: dict[str, ClientEntry]) -> ClientCounts:
             guest += 1
         elif iface_type in _WIRELESS_INTERFACE_TYPES:
             wireless += 1
-    return ClientCounts(
-        total=len(clients), wired=wired, wireless=wireless, guest=guest
-    )
+    return ClientCounts(total=len(clients), wired=wired, wireless=wireless, guest=guest)
 
 
 class GLinetRouter:
