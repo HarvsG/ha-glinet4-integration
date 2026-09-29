@@ -23,12 +23,12 @@ dev = [
     "josepy>=2.2.0",
     "mashumaro>=3.17.0",
     "mypy>=1.16.1",
-    "pre-commit>=4.0.0",
+    "pre-commit>=4.6.2",
     "prek>=0.2.0",
     "PyGithub>=2.6",
     "pylint>=3.3.7",
     "pytest>=8.3.5",
-    "pytest-cov>=7.0.0",
+    "pytest-cov>=7.1.0",
     # Pins homeassistant==2026.9.2 exactly; bump in lockstep with homeassistant
     # and homeassistant-stubs. NOTE: 0.13.317+ requires Python >= 3.14.
     "pytest-homeassistant-custom-component==0.13.365",

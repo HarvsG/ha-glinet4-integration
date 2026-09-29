@@ -47,6 +47,8 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 - **Memory Usage**: Percentage of RAM utilized, with total and free memory attributes.
 - **Flash Storage Usage**: Percentage of flash storage used, with total and free storage attributes.
 - **System Uptime**: Derived boot timestamp sensor (`timestamp` device class) with drift suppression.
+- **Connected Clients**: Total number of client devices currently connected, refreshed every poll, with a `wired`/`wireless`/`guest` breakdown exposed as attributes and as individual diagnostic sensors (LAN, Router Wi-Fi and Guest clients). These sensors are disabled by default; enable them from the router's device page in Home Assistant.
+  - _Note_: Wi-Fi counts only include clients connected directly to the router's own radios. Clients connected through a downstream access point, mesh node or switch reach the router over its LAN ports, so they are counted as LAN clients.
 
 ### 🔘 Buttons
 
@@ -175,6 +177,7 @@ If you want to contribute to this integration:
 - [x] Wi-Fi access point switches (2.4GHz, 5GHz, Guest networks).
 - [x] LED indicator control switch.
 - [x] System diagnostic sensors (CPU temp/load, memory, flash, uptime) & reboot button.
+- [x] Connected clients sensors (total plus wired / wireless / guest breakdown).
 
 ---
 

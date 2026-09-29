@@ -105,6 +105,50 @@ DEVICE_INTERFACE_TYPE_MAP: dict[int, DeviceInterfaceType] = {
     12: DeviceInterfaceType.WIFI_6_GUEST,
 }
 
+# Interface types grouped for the connected-client breakdown counts.
+_GUEST_INTERFACE_TYPES: frozenset[DeviceInterfaceType] = frozenset(
+    {
+        DeviceInterfaceType.WIFI_24_GUEST,
+        DeviceInterfaceType.WIFI_5_GUEST,
+        DeviceInterfaceType.WIFI_6_GUEST,
+        DeviceInterfaceType.MLO_GUEST,
+    }
+)
+_WIRELESS_INTERFACE_TYPES: frozenset[DeviceInterfaceType] = frozenset(
+    {
+        DeviceInterfaceType.WIFI_24,
+        DeviceInterfaceType.WIFI_5,
+        DeviceInterfaceType.WIFI_6,
+        DeviceInterfaceType.MLO,
+    }
+)
+
+
+@dataclass(frozen=True)
+class ClientCounts:
+    """Counts of currently-connected clients grouped by connection type."""
+
+    total: int = 0
+    wired: int = 0
+    wireless: int = 0
+    guest: int = 0
+
+
+def _count_clients_by_type(clients: dict[str, ClientEntry]) -> ClientCounts:
+    """Group connected clients into wired / wireless / guest counts."""
+    wired = wireless = guest = 0
+    for client in clients.values():
+        iface_type = DEVICE_INTERFACE_TYPE_MAP.get(
+            client.get("type", 5), DeviceInterfaceType.UNKNOWN
+        )
+        if iface_type == DeviceInterfaceType.LAN:
+            wired += 1
+        elif iface_type in _GUEST_INTERFACE_TYPES:
+            guest += 1
+        elif iface_type in _WIRELESS_INTERFACE_TYPES:
+            wireless += 1
+    return ClientCounts(total=len(clients), wired=wired, wireless=wireless, guest=guest)
+
 
 class GLinetRouter:
     """representation of a GLinet router.
@@ -143,7 +187,7 @@ class GLinetRouter:
 
         # State
         self._devices: dict[str, ClientDevInfo] = {}
-        self._connected_devices: int = 0
+        self._client_counts: ClientCounts = ClientCounts()
         self._wifi_ifaces: dict[str, WifiInterface] = {}
         self._system_status: SystemStatusMetrics = SystemStatusMetrics()
         self._wireguard_clients: dict[int, WireGuardClient] = {}
@@ -514,7 +558,7 @@ class GLinetRouter:
         if new_device:
             async_dispatcher_send(self.hass, self.signal_device_new)
 
-        self._connected_devices = len(wrt_devices)
+        self._client_counts = _count_clients_by_type(wrt_devices)
 
     async def update_wifi_ifaces_state(self) -> None:
         """Make a call to the API to get the WiFi ifaces config state."""
@@ -731,7 +775,12 @@ class GLinetRouter:
     @property
     def connected_devices_count(self) -> int:
         """Return the number of currently connected client devices."""
-        return self._connected_devices
+        return self._client_counts.total
+
+    @property
+    def client_counts(self) -> ClientCounts:
+        """Return connected-client counts grouped by connection type."""
+        return self._client_counts
 
     @property
     def name(self) -> str:
