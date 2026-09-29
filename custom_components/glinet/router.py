@@ -16,7 +16,7 @@ from gli4py.error_handling import (
     NonZeroResponse,
     TokenError,
 )
-from gli4py.models import SystemStatusMetrics, TailscaleConnection
+from gli4py.models import LedConfigResponse, SystemStatusMetrics, TailscaleConnection
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -525,7 +525,9 @@ class GLinetRouter:
 
     async def update_led_state(self) -> None:
         """Make a call to the API to get the LED indicator state."""
-        config = await self._update_platform(self._api.led_get_config)
+        config: LedConfigResponse | None = await self._update_platform(
+            self._api.led_get_config
+        )
         if config is None:
             return
         self._led_enable = config.led_enable
@@ -533,15 +535,20 @@ class GLinetRouter:
     async def _async_detect_led_support(self) -> None:
         """Probe the LED endpoint once to decide whether to expose the LED switch.
 
-        Not all models support LED control; a failed probe simply omits the
-        switch instead of surfacing an error.
+        An unsupported endpoint (APIClientError) simply omits the switch. A
+        network-level failure is treated as a setup failure so Home Assistant
+        retries, rather than permanently marking the router as unsupported.
         """
         try:
             config = await self._api.led_get_config()
-        except (OSError, aiohttp.ClientError, TimeoutError, APIClientError):
+        except APIClientError:
             _LOGGER.debug("Router %s does not report LED support", self._host)
             self._led_supported = False
             return
+        except (OSError, aiohttp.ClientError, TimeoutError) as exc:
+            raise ConfigEntryNotReady(
+                f"Error probing LED support on {self._host}"
+            ) from exc
         self._led_supported = True
         self._led_enable = config.led_enable
 
