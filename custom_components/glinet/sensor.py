@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
     DOMAIN as SENSOR_DOMAIN,
@@ -28,7 +28,7 @@ from .wan import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable
 
     from gli4py.models import SystemStatusMetrics
 
@@ -51,7 +51,7 @@ class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=Tr
 
 
 def _memory_extra_attributes(
-    system_status: Mapping[str, Any],
+    system_status: SystemStatusMetrics,
 ) -> dict[str, StateType | bool]:
     """Return memory attributes with cache/buffers considered."""
     total = system_status.get("memory_total")
