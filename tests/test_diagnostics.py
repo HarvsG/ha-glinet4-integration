@@ -9,9 +9,8 @@ from pytest_homeassistant_custom_component.components.diagnostics import (
 from pytest_homeassistant_custom_component.typing import ClientSessionGenerator
 
 from homeassistant.components.diagnostics import REDACTED
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-
-from .const import MOCK_HOST
 
 
 async def test_diagnostics_redaction(
@@ -26,19 +25,19 @@ async def test_diagnostics_redaction(
 
     entry = diagnostics["entry"]
     assert entry["data"]["password"] == REDACTED
-    assert entry["data"]["host"] == MOCK_HOST
+    assert entry["data"]["host"] == init_integration.data[CONF_HOST]
     assert entry["options"]["consider_home"] == 180
 
     router = diagnostics["router"]
-    assert router["model"] == "MT6000"
-    assert router["firmware_version"] == "4.8.2"
+    assert router["model"] == "B1300"
+    assert router["firmware_version"] == "4.3.25"
     assert router["available"] is True
-    assert router["connected_devices_count"] == 2
+    assert router["connected_devices_count"] == 4
     assert all(iface["ssid"] == REDACTED for iface in router["wifi_ifaces"])
     assert {client["name"] for client in router["wireguard_clients"]} == {
-        "wg_home",
-        "wg_office",
+        "MockVPN/MockTunnel",
+        "MockVPN/MockSplitTunnel",
     }
     assert router["tailscale_configured"] is True
     assert router["tailscale_connected"] is True
-    assert router["system_status"]["uptime"] == 3600.0
+    assert router["system_status"]["uptime"] == 86400.0

@@ -16,4 +16,20 @@ runs:
 
     - name: Install dependencies with uv
       shell: bash
-      run: uv sync
+      env:
+        PR_BODY: ${{ github.event.pull_request.body }}
+      run: |
+        uv sync
+        echo "UV_NO_SYNC=1" >> "$GITHUB_ENV"
+        if [[ "$PR_BODY" =~ github\.com/HarvsG/gli4py/pull/([0-9]+) ]] || \
+           [[ "$PR_BODY" =~ [Dd]epends-[Oo]n:[[:space:]]*HarvsG/gli4py#([0-9]+) ]] || \
+           [[ "$PR_BODY" =~ [Dd]epends-[Oo]n:[[:space:]]*#([0-9]+) ]] || \
+           [[ "$PR_BODY" =~ gli4py:[[:space:]]*#?([0-9]+) ]]; then
+          PR_NUM="${BASH_REMATCH[1]}"
+          echo "Installing linked gli4py PR #${PR_NUM}"
+          uv pip install "gli4py[mock] @ git+https://github.com/HarvsG/gli4py.git@refs/pull/${PR_NUM}/head"
+        elif [[ "$PR_BODY" =~ gli4py:[[:space:]]*([a-zA-Z0-9_./-]+) ]]; then
+          REF="${BASH_REMATCH[1]}"
+          echo "Installing linked gli4py ref ${REF}"
+          uv pip install "gli4py[mock] @ git+https://github.com/HarvsG/gli4py.git@${REF}"
+        fi

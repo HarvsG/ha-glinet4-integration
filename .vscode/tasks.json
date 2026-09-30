@@ -1,0 +1,60 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Tests",
+      "type": "shell",
+      "command": "uv run pytest",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Tests with Coverage",
+      "type": "shell",
+      "command": "uv run pytest --cov=custom_components/glinet --cov-report=term-missing",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Pre-commit",
+      "type": "shell",
+      "command": "uv run pre-commit run --all-files",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Prek (Fast)",
+      "type": "shell",
+      "command": "uv run prek run --all-files",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Ruff Format & Fix",
+      "type": "shell",
+      "command": "uv run ruff format && uv run ruff check --fix",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Mypy",
+      "type": "shell",
+      "command": "uv run mypy custom_components/glinet",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Pylint",
+      "type": "shell",
+      "command": "uv run pylint custom_components/glinet",
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

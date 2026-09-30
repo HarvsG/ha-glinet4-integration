@@ -1,5 +1,27 @@
 """Utility functions for GL-iNet routers."""
 
+from __future__ import annotations
+
+import ssl
+
+import aiohttp
+
+
+def is_randomized_mac(mac: str | None) -> bool:
+    """Return True if a MAC address is locally administered (randomized).
+
+    Modern phones use MAC randomization, setting the locally-administered bit
+    (0x02 of the first octet). Such addresses change on each (re)connection, so
+    a tracker keyed on them is short-lived clutter. Detection is purely from the
+    address itself - no router support required. Malformed input is treated as
+    not randomized.
+    """
+    try:
+        first_octet = int(str(mac).replace(":", "").replace("-", "")[:2], 16)
+    except ValueError, IndexError:
+        return False
+    return bool(first_octet & 0x02)
+
 
 def adjust_mac(mac: str, delta: int, sep: str = ":") -> str:
     """Increment a MAC address by 1.
@@ -22,3 +44,17 @@ def adjust_mac(mac: str, delta: int, sep: str = ":") -> str:
 
     # Reinsert the separator every two hex digits
     return sep.join(new_hex[i : i + 2] for i in range(0, 12, 2)).lower()
+
+
+def is_ssl_error(exc: BaseException | None) -> bool:
+    """Check if an exception or its causes are SSL certificate verification errors."""
+    curr = exc
+    visited: set[int] = set()
+    while curr is not None and id(curr) not in visited:
+        if isinstance(
+            curr, ssl.SSLCertVerificationError | aiohttp.ClientConnectorCertificateError
+        ):
+            return True
+        visited.add(id(curr))
+        curr = curr.__cause__ or curr.__context__
+    return False

@@ -8,3 +8,17 @@ updates:
       - "dependencies"
     ignore:
       - dependency-name: "homeassistant"
+      - dependency-name: "pytest"
+      - dependency-name: "pytest-cov"
+    groups:
+      testing:
+        patterns:
+          - "pytest-homeassistant-custom-component"
+          - "homeassistant-stubs"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"

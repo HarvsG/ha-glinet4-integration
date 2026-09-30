@@ -15,24 +15,18 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "codespell>=2.4.1",
+    "codespell>=2.4.3",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
-    "gli4py==0.0.17b3",
-    "habluetooth>=6.26.11",
-    "homeassistant-stubs==2026.9.2",
-    "josepy>=2.2.0",
-    "mashumaro>=3.17.0",
-    "mypy>=1.16.1",
-    "PyGithub>=2.6",
-    "pylint>=3.3.7",
-    "pytest>=8.3.5",
-    "pytest-cov>=7.0.0",
-    # Pins homeassistant==2026.9.2 exactly; bump in lockstep with homeassistant
-    # and homeassistant-stubs. NOTE: 0.13.317+ requires Python >= 3.14.
-    "pytest-homeassistant-custom-component==0.13.365",
-    "ruff>=0.12.0",
-    "types-requests<2.33.0.20260907",
-    "voluptuous-stubs>=0.1.1",
+    "gli4py[mock]==0.1.0-beta.5",
+    "homeassistant-stubs==2026.9.4",
+    "mypy>=2.3.1",
+    "pre-commit>=4.6.2",
+    "prek>=0.5.3",
+    "pylint>=4.0.9",
+    # Pins homeassistant==2026.9.4 exactly; bump in lockstep with homeassistant-stubs.
+    # Also provides pytest, pytest-cov, pytest-asyncio, etc. NOTE: 0.13.317+ requires Python >= 3.14.
+    "pytest-homeassistant-custom-component==0.13.367",
+    "ruff>=0.16.9",
 ]
 
 [tool.hatch.version]
@@ -140,7 +134,6 @@ ignore = [
     "Q",
     "COM812",
     "COM819",
-    "ISC001",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -160,6 +153,7 @@ max-complexity = 25
 
 [tool.pylint.main]
 py-version = "3.14"
+jobs = 0
 load-plugins = [
     "pylint.extensions.code_style",
     "pylint.extensions.typing",
@@ -174,16 +168,22 @@ load-plugins = [
 # consider-using-assignment-expr - decision to use := better left to devs
 # consider-using-assignment-expr - too opinionated
 disable = [
+    "abstract-method",
+    "consider-using-assignment-expr",
     "duplicate-code",
+    "fixme",
+    "import-error",
+    "invalid-name",
     "line-too-long",
+    "overridden-final-method",
     "too-few-public-methods",
     "too-many-ancestors",
     "too-many-arguments",
+    "too-many-branches",
     "too-many-instance-attributes",
     "too-many-locals",
     "too-many-positional-arguments",
-    "consider-using-assignment-expr",
-    "consider-using-tuple",
+    "too-many-public-methods",
 ]
 
 [tool.pylint.format]
@@ -192,13 +192,36 @@ max-line-length = 100
 min-similarity-lines = 7
 
 [tool.mypy]
-python_version = "3.14"
-show_error_codes = true
 strict = true
-disallow_any_explicit = true
-disallow_any_unimported = true
-warn_no_return = true
+disallow_any_generics = true
+python_version = "3.14"
+platform = "linux"
+show_error_codes = true
+follow_imports = "normal"
+explicit_package_bases = true
+local_partial_types = true
+strict_equality = true
+strict_bytes = true
+no_implicit_optional = true
+warn_incomplete_stub = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = true
+enable_error_code = ["deprecated", "ignore-without-code", "redundant-self", "truthy-iterable"]
+disable_error_code = ["annotation-unchecked", "import-not-found", "import-untyped"]
+extra_checks = false
+check_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+warn_return_any = true
 warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+warn_unreachable = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -211,7 +234,14 @@ pythonpath = ["."]
 [tool.coverage.run]
 source = ["custom_components/glinet"]
 
+[tool.coverage.report]
+fail_under = 99
+show_missing = true
+
 [tool.codespell]
 quiet-level = 2
 skip = "uv.lock,./.git/*,./.mypy_cache/*,*.json"
 ignore-words-list = "hass"
+
+[tool.poetry.group.dev.dependencies]
+gli4py = { version = "==0.1.0-beta.3", extras = ["mock"] }

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
+import aiohttp
 from gli4py import GLinet
-from gli4py.error_handling import NonZeroResponse
+from gli4py.error_handling import APIClientError
 from uplink import AiohttpClient
 import voluptuous as vol
 
@@ -15,7 +16,7 @@ from homeassistant.components.device_tracker import (
     CONF_CONSIDER_HOME,
     DEFAULT_CONSIDER_HOME,
 )
-from homeassistant.const import CONF_HOST, CONF_MAC, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.exceptions import HomeAssistantError
@@ -25,14 +26,19 @@ from homeassistant.helpers.device_registry import format_mac
 
 from .const import (
     API_PATH,
-    CONF_TITLE,
+    CONF_TRACK_RANDOMIZED_MAC,
+    DEFAULT_TRACK_RANDOMIZED_MAC,
+    DEFAULT_VERIFY_SSL,
     DOMAIN,
     GLINET_DEFAULT_PW,
     GLINET_DEFAULT_URL,
     GLINET_DEFAULT_USERNAME,
     GLINET_FRIENDLY_NAME,
+    TRACK_RANDOMIZED_MAC_DISABLED,
+    TRACK_RANDOMIZED_MAC_ENABLED,
+    TRACK_RANDOMIZED_MAC_IGNORE,
 )
-from .utils import adjust_mac
+from .utils import adjust_mac, is_ssl_error
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -56,6 +62,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()
         ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900)),
+        vol.Optional(
+            CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
+        ): selector.BooleanSelector(),
     }
 )
 
@@ -70,6 +79,9 @@ STEP_RECONFIGURE_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_PASSWORD): selector.TextSelector(
             selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
         ),
+        vol.Optional(
+            CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
+        ): selector.BooleanSelector(),
     }
 )
 
@@ -86,6 +98,22 @@ OPTIONS_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_CONSIDER_HOME, default=DEFAULT_CONSIDER_HOME.total_seconds()
         ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=900)),
+        vol.Optional(
+            CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL
+        ): selector.BooleanSelector(),
+        vol.Optional(
+            CONF_TRACK_RANDOMIZED_MAC, default=DEFAULT_TRACK_RANDOMIZED_MAC
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    TRACK_RANDOMIZED_MAC_IGNORE,
+                    TRACK_RANDOMIZED_MAC_DISABLED,
+                    TRACK_RANDOMIZED_MAC_ENABLED,
+                ],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                translation_key=CONF_TRACK_RANDOMIZED_MAC,
+            )
+        ),
     }
 )
 
@@ -93,13 +121,21 @@ OPTIONS_SCHEMA = vol.Schema(
 class TestingHub:
     """Testing class to test connection and authentication."""
 
-    def __init__(self, username: str, host: str, hass: HomeAssistant) -> None:
+    def __init__(
+        self,
+        username: str,
+        host: str,
+        hass: HomeAssistant,
+        verify_ssl: bool = DEFAULT_VERIFY_SSL,
+    ) -> None:
         """Initialize."""
         self.host: str = host
         self.username: str = username
         self.router: GLinet = GLinet(
             base_url=self.host + API_PATH,
-            client=AiohttpClient(session=async_get_clientsession(hass)),
+            client=AiohttpClient(
+                session=async_get_clientsession(hass, verify_ssl=verify_ssl)
+            ),
             sync=False,
         )
         self.router_mac: str = ""
@@ -109,10 +145,17 @@ class TestingHub:
         """Test if we can communicate with the host."""
         try:
             res: bool = await self.router.router_reachable(self.username)
-        except ConnectionError:
-            _LOGGER.exception(
-                "Failed to connect to %s, is it really a GL-iNet router?", self.host
-            )
+        except (ConnectionError, aiohttp.ClientError, OSError) as err:
+            if is_ssl_error(err):
+                _LOGGER.warning(
+                    "SSL certificate verification failed when connecting to %s. "
+                    "If using a self-signed certificate, disable SSL verification",
+                    self.host,
+                )
+            else:
+                _LOGGER.exception(
+                    "Failed to connect to %s, is it really a GL-iNet router?", self.host
+                )
         except TypeError:
             _LOGGER.exception(
                 "Failed to parse router response to %s, is it the right firmware version?",
@@ -128,27 +171,44 @@ class TestingHub:
         try:
             await self.router.login(self.username, password)
             res = await self.router.router_info()
-        except (ConnectionRefusedError, NonZeroResponse):
+            self.router_mac = res["mac"]
+            self.router_model = res["model"]
+        except (
+            ConnectionRefusedError,
+            APIClientError,
+            KeyError,
+            aiohttp.ClientError,
+        ):
             _LOGGER.info(
                 "Failed to authenticate with Gl-inet router during testing, this may be expected at times"
             )
+            return False
 
-        else:
-            self.router_mac = res[CONF_MAC]
-            self.router_model = res["model"]
-        return bool(self.router.logged_in)
+        return bool(self.router.logged_in and self.router_mac)
+
+
+class FlowValidationResult(TypedDict):
+    """Result of validating router connection credentials."""
+
+    title: str
+    mac: str
+    data: dict[str, str]
+    options: dict[str, float | bool]
 
 
 async def validate_input(
-    data: dict[str, Any], hass: HomeAssistant, raise_on_invalid_auth: bool = True
-) -> dict[str, Any]:
+    data: Mapping[str, Any], hass: HomeAssistant, raise_on_invalid_auth: bool = True
+) -> FlowValidationResult:
     """Validate the user input allows us to connect.
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
 
     hub = TestingHub(
-        data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME), data[CONF_HOST], hass
+        data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME),
+        str(data[CONF_HOST]),
+        hass,
+        verify_ssl=data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
     )
 
     if not await hub.connect():
@@ -162,20 +222,20 @@ async def validate_input(
 
     # Return info that you want to store in the config entry.
     return {
-        # TODO, on success we can/should probably store some immutable device info in the class.
-        CONF_TITLE: GLINET_FRIENDLY_NAME + " " + hub.router_model.upper(),
-        CONF_MAC: hub.router_mac,
+        "title": GLINET_FRIENDLY_NAME + " " + hub.router_model.upper(),
+        "mac": hub.router_mac,
         "data": {
-            CONF_USERNAME: data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME),
-            CONF_HOST: data[CONF_HOST],
+            CONF_USERNAME: str(data.get(CONF_USERNAME, GLINET_DEFAULT_USERNAME)),
+            CONF_HOST: str(data[CONF_HOST]),
             CONF_PASSWORD: (
-                data.get(CONF_PASSWORD, GLINET_DEFAULT_PW) if valid_auth else ""
+                str(data.get(CONF_PASSWORD, GLINET_DEFAULT_PW)) if valid_auth else ""
             ),
         },
         "options": {
-            CONF_CONSIDER_HOME: data.get(
-                CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()
+            CONF_CONSIDER_HOME: float(
+                data.get(CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds())
             ),
+            CONF_VERIFY_SSL: bool(data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)),
         },
     }
 
@@ -187,14 +247,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialize the config flow."""
-        self._discovered_data = None
+        self._discovered_data: dict[str, str] | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the initial step."""
 
-        errors = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             try:
@@ -210,11 +270,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                unique_id: str = format_mac(info[CONF_MAC])
+                unique_id: str = format_mac(info["mac"])
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=info[CONF_TITLE],
+                    title=info["title"],
                     data=info["data"],
                     options=info["options"],
                 )
@@ -296,6 +356,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_update_reload_and_abort(
                     reauth_entry,
                     data_updates={CONF_PASSWORD: user_input[CONF_PASSWORD]},
+                    reason="reauth_successful",
                 )
         return self.async_show_form(
             step_id="reauth_confirm",
@@ -322,16 +383,36 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(format_mac(info[CONF_MAC]))
+                await self.async_set_unique_id(format_mac(info["mac"]))
                 self._abort_if_unique_id_mismatch()
+                data_updates: dict[str, str | bool] = dict(info["data"])
+                if CONF_VERIFY_SSL in reconfigure_entry.data:
+                    data_updates[CONF_VERIFY_SSL] = bool(
+                        info["options"][CONF_VERIFY_SSL]
+                    )
                 return self.async_update_reload_and_abort(
-                    reconfigure_entry, data_updates=info["data"]
+                    reconfigure_entry,
+                    data_updates=data_updates,
+                    options={
+                        **reconfigure_entry.options,
+                        CONF_VERIFY_SSL: info["options"][CONF_VERIFY_SSL],
+                    },
+                    reason="reconfigure_successful",
                 )
+        suggested_values = {
+            CONF_VERIFY_SSL: reconfigure_entry.options.get(
+                CONF_VERIFY_SSL,
+                reconfigure_entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+            ),
+            **reconfigure_entry.data,
+            **reconfigure_entry.options,
+            **(user_input or {}),
+        }
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=self.add_suggested_values_to_schema(
                 STEP_RECONFIGURE_DATA_SCHEMA,
-                {**reconfigure_entry.data, **(user_input or {})},
+                suggested_values,
             ),
             errors=errors,
         )
@@ -367,7 +448,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             CONF_CONSIDER_HOME,
                             DEFAULT_CONSIDER_HOME.total_seconds(),
                         ),
-                    )
+                    ),
+                    CONF_VERIFY_SSL: self.config_entry.options.get(
+                        CONF_VERIFY_SSL,
+                        self.config_entry.data.get(
+                            CONF_VERIFY_SSL,
+                            DEFAULT_VERIFY_SSL,
+                        ),
+                    ),
+                    CONF_TRACK_RANDOMIZED_MAC: self.config_entry.options.get(
+                        CONF_TRACK_RANDOMIZED_MAC,
+                        self.config_entry.data.get(
+                            CONF_TRACK_RANDOMIZED_MAC,
+                            DEFAULT_TRACK_RANDOMIZED_MAC,
+                        ),
+                    ),
                 },
             ),
         )

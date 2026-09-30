@@ -6,7 +6,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock
 
 from freezegun.api import FrozenDateTimeFactory
-from gli4py.error_handling import AuthenticationError
+from gli4py.error_handling import AuthenticationError, TokenError
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -82,6 +82,24 @@ async def test_setup_entry_auth_failed_starts_reauth(
 
     flows = hass.config_entries.flow.async_progress()
     assert any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
+
+
+async def test_setup_entry_token_error_retries(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test a token error during setup puts the entry in retry state, not auth error."""
+    mock_api.login.side_effect = TokenError("session expired or invalid")
+    mock_config_entry.add_to_hass(hass)
+
+    assert not await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+
+    flows = hass.config_entries.flow.async_progress()
+    assert not any(flow["context"]["source"] == SOURCE_REAUTH for flow in flows)
 
 
 async def test_update_listener_reloads_entry(

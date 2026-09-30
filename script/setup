@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "Setting up development environment with uv..."
+uv sync
+
+echo "Installing pre-commit hooks..."
+if command -v prek &>/dev/null || uv run which prek &>/dev/null; then
+    uv run prek install
+elif command -v pre-commit &>/dev/null || uv run which pre-commit &>/dev/null; then
+    uv run pre-commit install
+fi
+
+echo "Development environment setup complete!"

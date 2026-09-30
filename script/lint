@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+
+cd "$(dirname "$0")/.."
+
+if uv run which prek &>/dev/null; then
+    uv run prek run --all-files "$@"
+else
+    uv run pre-commit run --all-files "$@"
+fi

@@ -6,35 +6,66 @@ on:
       - master
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  pre-commit:
-    name: Pre-commit
+  linting:
+    name: Pre-commit & Linting
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Prepare and install deps
         uses: ./.github/actions/install-deps
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         name: Cache pre-commit hooks
         with:
           path: ~/.cache/pre-commit/
           key: >
             ${{ format('pre-commit-{0}-{1}-{2}',
             runner.os,
-            matrix.python-version,
+            env.PYTHON_VERSION,
             hashFiles('.pre-commit-config.yaml')
             ) }}
           restore-keys: |
-            pre-commit-${{ runner.os }}-${{ matrix.python-version }}-
+            pre-commit-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
             pre-commit-${{ runner.os }}-
 
       - name: Run pre-commit on all files
         run: |
-          uvx pre-commit run --all-files --show-diff-on-failure --color=always
+          uv run pre-commit run --all-files --show-diff-on-failure --color=always
 
-      - name: Run python-typing-update
+  mypy:
+    name: Type checking (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Run mypy
         run: |
-          uvx pre-commit run --hook-stage manual python-typing-update --all-files --show-diff-on-failure --color=always
+          uv run mypy --strict custom_components/glinet tests
+
+  api-boundary:
+    name: "Check API boundary (no direct HTTP)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Prepare and install deps
+        uses: ./.github/actions/install-deps
+
+      - name: Verify no direct API interactions
+        run: |
+          uv run pytest tests/test_api_boundary.py

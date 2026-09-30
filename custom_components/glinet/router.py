@@ -6,11 +6,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
+import aiohttp
 from gli4py import GLinet
-from gli4py.enums import TailscaleConnection
-from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
+from gli4py.error_handling import (
+    APIClientError,
+    AuthenticationError,
+    NonZeroResponse,
+    TokenError,
+)
+from gli4py.models import LedConfigResponse, SystemStatusMetrics, TailscaleConnection
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -18,16 +24,14 @@ from homeassistant.components.device_tracker import (
     DEFAULT_CONSIDER_HOME,
     DOMAIN as TRACKER_DOMAIN,
 )
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONF_HOST,
-    CONF_MAC,
-    CONF_MODEL,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-)
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import callback
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format_mac
@@ -36,17 +40,29 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
-from .const import API_PATH, DOMAIN
-from .utils import adjust_mac
+from .const import (
+    API_PATH,
+    CONF_TRACK_RANDOMIZED_MAC,
+    DEFAULT_TRACK_RANDOMIZED_MAC,
+    DEFAULT_VERIFY_SSL,
+    DOMAIN,
+    TRACK_RANDOMIZED_MAC_IGNORE,
+)
+from .utils import adjust_mac, is_randomized_mac, is_ssl_error
+from .wan import WanInterfaceState, parse_network_array
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine
+    from collections.abc import Awaitable, Callable
+
+    from gli4py.models import ClientEntry, TailscaleConfigResponse, WifiInterface
 
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
     from homeassistant.helpers.entity_registry import RegistryEntry
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=30)
+REBOOT_GRACE_PERIOD: int = 90
+MAX_CONSECUTIVE_AUTH_FAILURES: int = 3
 T = TypeVar("T")
 
 # PEP 695 type aliases are evaluated lazily, so the forward
@@ -89,6 +105,92 @@ DEVICE_INTERFACE_TYPE_MAP: dict[int, DeviceInterfaceType] = {
     12: DeviceInterfaceType.WIFI_6_GUEST,
 }
 
+# Interface types grouped for the connected-client breakdown counts.
+_GUEST_INTERFACE_TYPES: frozenset[DeviceInterfaceType] = frozenset(
+    {
+        DeviceInterfaceType.WIFI_24_GUEST,
+        DeviceInterfaceType.WIFI_5_GUEST,
+        DeviceInterfaceType.WIFI_6_GUEST,
+        DeviceInterfaceType.MLO_GUEST,
+    }
+)
+_WIRELESS_INTERFACE_TYPES: frozenset[DeviceInterfaceType] = frozenset(
+    {
+        DeviceInterfaceType.WIFI_24,
+        DeviceInterfaceType.WIFI_5,
+        DeviceInterfaceType.WIFI_6,
+        DeviceInterfaceType.MLO,
+    }
+)
+
+
+@dataclass(frozen=True)
+class ClientCounts:
+    """Counts of currently-connected clients grouped by connection type."""
+
+    total: int = 0
+    wired: int = 0
+    wireless: int = 0
+    guest: int = 0
+
+
+def _count_clients_by_type(clients: dict[str, ClientEntry]) -> ClientCounts:
+    """Group connected clients into wired / wireless / guest counts."""
+    wired = wireless = guest = 0
+    for client in clients.values():
+        iface_type = DEVICE_INTERFACE_TYPE_MAP.get(
+            client.get("type", 5), DeviceInterfaceType.UNKNOWN
+        )
+        if iface_type == DeviceInterfaceType.LAN:
+            wired += 1
+        elif iface_type in _GUEST_INTERFACE_TYPES:
+            guest += 1
+        elif iface_type in _WIRELESS_INTERFACE_TYPES:
+            wireless += 1
+    return ClientCounts(total=len(clients), wired=wired, wireless=wireless, guest=guest)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class GLinetOptions:
+    """Options for GL-iNet router."""
+
+    consider_home: float
+    track_randomized_mac: str
+    verify_ssl: bool
+
+    @classmethod
+    def from_entry(cls, entry: ConfigEntry[Any]) -> Self:
+        """Create options from config entry, falling back to data for backward compatibility."""
+        return cls(
+            consider_home=float(
+                entry.options.get(
+                    CONF_CONSIDER_HOME,
+                    entry.data.get(
+                        CONF_CONSIDER_HOME,
+                        DEFAULT_CONSIDER_HOME.total_seconds(),
+                    ),
+                )
+            ),
+            track_randomized_mac=str(
+                entry.options.get(
+                    CONF_TRACK_RANDOMIZED_MAC,
+                    entry.data.get(
+                        CONF_TRACK_RANDOMIZED_MAC,
+                        DEFAULT_TRACK_RANDOMIZED_MAC,
+                    ),
+                )
+            ),
+            verify_ssl=bool(
+                entry.options.get(
+                    CONF_VERIFY_SSL,
+                    entry.data.get(
+                        CONF_VERIFY_SSL,
+                        DEFAULT_VERIFY_SSL,
+                    ),
+                )
+            ),
+        )
+
 
 class GLinetRouter:
     """representation of a GLinet router.
@@ -109,12 +211,8 @@ class GLinetRouter:
         # Context info
         self.hass: HomeAssistant = hass
         self._entry: GLinetConfigEntry = entry
-        # Options take precedence, but fall back to entry data for entries
-        # created before consider_home moved to options
-        self._consider_home: float = entry.options.get(
-            CONF_CONSIDER_HOME,
-            entry.data.get(CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()),
-        )
+        self._options: GLinetOptions = GLinetOptions.from_entry(entry)
+        self._consider_home: float = self._options.consider_home
 
         # gli4py API
         self._api: GLinet
@@ -127,18 +225,23 @@ class GLinetRouter:
 
         # State
         self._devices: dict[str, ClientDevInfo] = {}
-        self._connected_devices: int = 0
+        self._client_counts: ClientCounts = ClientCounts()
         self._wifi_ifaces: dict[str, WifiInterface] = {}
-        self._system_status: dict = {}
-        self._wireguard_clients: dict[str, WireGuardClient] = {}
+        self._system_status: SystemStatusMetrics = SystemStatusMetrics()
+        self._wireguard_clients: dict[int, WireGuardClient] = {}
         self._wireguard_connections: list[WireGuardClient] | None = None
-        self._tailscale_config: dict = {}
+        self._tailscale_config: TailscaleConfigResponse | None = None
         self._tailscale_connection: bool | None = None
+        self._led_enable: bool | None = None
+        self._led_supported: bool = False
+        self._wan_status: dict[str, WanInterfaceState] = {}
+        self._known_wan_interfaces: set[str] = set()
+        self._warned_wan_interfaces: set[str] = set()
 
         # Flow control
         self._late_init_complete: bool = False
         self._connect_error: bool = False
-        self._token_error: bool = False
+        self._consecutive_auth_errors: int = 0
         self._unsub_update: CALLBACK_TYPE | None = None
 
     async def async_init(self) -> None:
@@ -153,6 +256,11 @@ class GLinetRouter:
         except ConfigEntryAuthFailed:
             raise
         except Exception as exc:
+            if is_ssl_error(exc):
+                raise ConfigEntryNotReady(
+                    f"SSL certificate verification failed for GL-iNet router {self._host}. "
+                    "If using a self-signed certificate, disable SSL verification in integration options or reconfiguration"
+                ) from exc
             _LOGGER.exception(
                 "Error connecting to GL-iNet router %s",
                 self._host,
@@ -171,9 +279,11 @@ class GLinetRouter:
             raise ConfigEntryNotReady from exc
 
         _LOGGER.debug("Router info retrieved: %s", router_info)
-        self._model = router_info[CONF_MODEL]
+        self._model = router_info["model"]
         self._sw_v = router_info["firmware_version"]
-        self._factory_mac = router_info[CONF_MAC]
+        self._factory_mac = router_info["mac"]
+
+        await self._async_detect_led_support()
 
         self._late_init_complete = True
 
@@ -194,7 +304,7 @@ class GLinetRouter:
         for entry in track_entries:
             if entry.domain == TRACKER_DOMAIN:
                 self._devices[entry.unique_id] = ClientDevInfo(
-                    entry.unique_id, entry.original_name
+                    entry.unique_id, entry.name or entry.original_name
                 )
 
         # Update device tracker and switch entities
@@ -214,10 +324,18 @@ class GLinetRouter:
             self._unsub_update()
             self._unsub_update = None
 
+    @callback
+    def _async_dismiss_reauth_flow(self) -> None:
+        """Dismiss any active reauth flow for this entry if communication recovered."""
+        for flow in self._entry.async_get_active_flows(self.hass, {SOURCE_REAUTH}):
+            self.hass.config_entries.flow.async_abort(flow["flow_id"])
+
     def _create_api(self) -> GLinet:
         """Optimistically return a GLinet object for connection to the API, no test included."""
         conf = self._entry.data
-        shared_session = async_get_clientsession(self.hass)
+        shared_session = async_get_clientsession(
+            self.hass, verify_ssl=self._options.verify_ssl
+        )
         ha_client = AiohttpClient(session=shared_session)
 
         if CONF_PASSWORD in conf:
@@ -227,7 +345,7 @@ class GLinetRouter:
         _LOGGER.error(
             "Error setting up GL-iNet router, no auth details found in configuration"
         )
-        raise ConfigEntryAuthFailed
+        raise ConfigEntryError("No auth details found in configuration")
 
     async def renew_token(self) -> None:
         """Attempt to get a new token."""
@@ -239,16 +357,33 @@ class GLinetRouter:
                 "GL-iNet router %s token was renewed",
                 self._host,
             )
-        except (AuthenticationError, TokenError) as exc:
+            self._consecutive_auth_errors = 0
+            self._async_dismiss_reauth_flow()
+        except TokenError as exc:
+            _LOGGER.warning(
+                "GL-iNet %s session token was refused or expired: %s; will retry",
+                self._host,
+                exc,
+            )
+            self._connect_error = True
+            raise
+        except AuthenticationError as exc:
             _LOGGER.exception(
-                "GL-iNet %s failed to renew the token, have you changed your router password?",
+                "GL-iNet %s failed to renew the token with an authentication error, have you changed your router password?",
                 self._host,
             )
             raise ConfigEntryAuthFailed from exc
         except Exception as exc:
-            _LOGGER.warning(
-                "Could not connect to GL-iNet router to renew token: %s", exc
-            )
+            if is_ssl_error(exc):
+                _LOGGER.warning(
+                    "SSL certificate verification failed for GL-iNet router %s. "
+                    "If using a self-signed certificate, disable SSL verification in the integration options or reconfiguration",
+                    self._host,
+                )
+            else:
+                _LOGGER.warning(
+                    "Could not connect to GL-iNet router to renew token: %s", exc
+                )
             raise  # Let generic network/timeout exceptions bubble up normally
 
     async def update_all(self, _: datetime | None = None) -> None:
@@ -268,62 +403,90 @@ class GLinetRouter:
             await self.update_wifi_ifaces_state()
             await self.update_wireguard_client_state()
         except ConfigEntryAuthFailed:
-            # ConfigEntryAuthFailed is only handled by HA when raised from
-            # entry setup or entity updates, not from a timer callback
+            self._consecutive_auth_errors += 1
+            if self._consecutive_auth_errors < MAX_CONSECUTIVE_AUTH_FAILURES:
+                _LOGGER.warning(
+                    "GL-iNet router %s auth failed (attempt %d/%d); will retry before prompting re-authentication",
+                    self._host,
+                    self._consecutive_auth_errors,
+                    MAX_CONSECUTIVE_AUTH_FAILURES,
+                )
+                return
+            _LOGGER.exception(
+                "GL-iNet router %s failed authentication %d consecutive times; requesting re-authentication",
+                self._host,
+                self._consecutive_auth_errors,
+            )
             self._entry.async_start_reauth(self.hass)
+        else:
+            self._consecutive_auth_errors = 0
+            self._async_dismiss_reauth_flow()
 
     async def _update_platform(
-        self, api_callable: Callable[[], Coroutine[Any, Any, T]]
+        self, api_callable: Callable[[], Awaitable[T]]
     ) -> T | None:
         """Boilerplate to make update requests to api and handle errors."""
 
         try:
-            if self._token_error:
-                _LOGGER.debug(
-                    "The last requested resulted in a token error - so renewing token"
-                )
-                await self.renew_token()
-            if self._connect_error:
-                _LOGGER.debug("Got pending connect error - attempting to renew token")
-                await self.renew_token()
             _LOGGER.debug(
                 "Making api call %s from _update_platform()", api_callable.__name__
             )
             response = await api_callable()
-        except TimeoutError:
+        except (TimeoutError, aiohttp.ClientError, OSError) as exc:
             if not self._connect_error:
                 self._connect_error = True
-                _LOGGER.exception(
-                    "GL-iNet router %s did not respond in time",
-                    self._host,
-                )
+                if isinstance(exc, TimeoutError):
+                    _LOGGER.warning(
+                        "GL-iNet router %s did not respond in time",
+                        self._host,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "GL-iNet router %s communication error: %s",
+                        self._host,
+                        exc,
+                    )
             return None
         except TokenError as exc:
-            self._token_error = True
-            if not self._connect_error:
+            _LOGGER.debug(
+                "GL-iNet router %s session token was refused or expired (%s); renewing token and retrying",
+                self._host,
+                exc,
+            )
+            try:
+                await self.renew_token()
+                response = await api_callable()
+            except TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse:
                 self._connect_error = True
-                _LOGGER.warning(
-                    "GL-iNet router %s token was refused %s, will try to re-autheticate before next poll",
-                    self._host,
-                    exc,
-                )
-            return None
+                return None
+        except AuthenticationError as exc:
+            self._connect_error = True
+            _LOGGER.warning(
+                "GL-iNet router %s authentication failed (%s); attempting to renew token",
+                self._host,
+                exc,
+            )
+            try:
+                await self.renew_token()
+                response = await api_callable()
+            except TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse:
+                return None
         except NonZeroResponse:
             if not self._connect_error:
                 self._connect_error = True
-                _LOGGER.exception(
+                _LOGGER.warning(
                     "GL-iNet router %s responded, but with an error code", self._host
                 )
             return None
         except ConfigEntryAuthFailed:
-            # Bubble up to Home Assistant to pause polling and trigger the re-auth flow
+            # Let async_setup_entry (startup) or update_states (polling) handle reauth
             raise
         except Exception:  # pylint: disable=broad-except  # noqa: BLE001
             if not self._connect_error:
                 self._connect_error = True
-            _LOGGER.exception(
-                "GL-iNet router %s responded with an unexpected error", self._host
-            )
+                _LOGGER.exception(
+                    "GL-iNet router %s responded with an unexpected error", self._host
+                )
             return None
 
         if not response:
@@ -333,13 +496,6 @@ class GLinetRouter:
                 api_callable.__name__,
                 str(type(response)),
                 str(response),
-            )
-
-        if self._token_error:
-            self._token_error = False
-            _LOGGER.info(
-                "Gl-inet %s new token has successfully made an API call, token marked as valid",
-                self._host,
             )
 
         if self._connect_error:
@@ -353,68 +509,130 @@ class GLinetRouter:
         return response
 
     async def update_system_status(self) -> None:
-        """Update the system status from the API."""
-
+        """Update the system status and WAN interface states from the API."""
         status = await self._update_platform(self._api.router_get_status)
-        # For now only the content of the `system` field seems of use
-        if status:
-            self._system_status = status.get("system", {})
+        if not status:
+            return
+        self._system_status = status["system"]
+        result = parse_network_array(status.get("network", []))
+        self._wan_status = result.states
+
+        for iface in result.malformed_interfaces:
+            if iface not in self._warned_wan_interfaces:
+                _LOGGER.warning(
+                    "GL-iNet router %s returned a malformed entry for WAN interface %s; "
+                    "missing up/online field defaulted to False",
+                    self._host,
+                    iface,
+                )
+                self._warned_wan_interfaces.add(iface)
+
+        currently_up = {name for name, state in result.states.items() if state.up}
+        new_to_register = currently_up - self._known_wan_interfaces
+        if new_to_register:
+            self._known_wan_interfaces.update(new_to_register)
+            async_dispatcher_send(
+                self.hass, self.signal_wan_new, sorted(new_to_register)
+            )
+
+        async_dispatcher_send(self.hass, self.signal_wan_update)
 
     async def update_device_trackers(self) -> None:
         """Update the device trackers."""
 
         new_device = False
         wrt_devices = await self._update_platform(self._api.connected_clients)
-        if not wrt_devices:
-            _LOGGER.warning(
-                "Router returned no valid connected devices. It returned %s of type %s",
-                str(wrt_devices),
-                type(wrt_devices),
-            )
-            if wrt_devices is None or wrt_devices == {}:
-                self._connected_devices = 0
+        if wrt_devices is None:
             return
-        # TODO - ensure the output of gli4py devices has the correct data structure
+
+        uptime = self._system_status.get("uptime")
+        if (
+            not wrt_devices
+            and uptime is not None
+            and uptime < REBOOT_GRACE_PERIOD
+            and self._devices
+        ):
+            _LOGGER.debug(
+                "Ignoring empty client list during post-reboot startup (uptime %ss)",
+                uptime,
+            )
+            return
+
+        _LOGGER.debug(
+            "connected_clients returned %d online device(s): %s",
+            len(wrt_devices),
+            list(wrt_devices.keys()),
+        )
+
         for device_mac, device in self._devices.items():
             dev_info = wrt_devices.get(device_mac)
             device.update(dev_info, self._consider_home)
 
         for device_mac, dev_info in wrt_devices.items():
-            # Skip if we've already have this device
+            # Skip if we already have this device
             if device_mac in self._devices:
                 continue
 
-            alias = dev_info.get("alias", "").strip()
-            name = dev_info.get("name", "").strip()
-            # Skip if both alias and name are empty
-            if not alias and not name:
+            # Optionally ignore clients using MAC randomization entirely
+            if (
+                self.randomized_mac_mode == TRACK_RANDOMIZED_MAC_IGNORE
+                and is_randomized_mac(device_mac)
+            ):
                 continue
 
             new_device = True
             device = ClientDevInfo(device_mac)
             device.update(dev_info)
             self._devices[device_mac] = device
+            _LOGGER.debug(
+                "Discovered new tracked device %s (name=%r alias=%r)",
+                device_mac,
+                dev_info.get("name"),
+                dev_info.get("alias"),
+            )
 
         async_dispatcher_send(self.hass, self.signal_device_update)
         if new_device:
             async_dispatcher_send(self.hass, self.signal_device_new)
 
-        self._connected_devices = len(wrt_devices)
+        self._client_counts = _count_clients_by_type(wrt_devices)
 
     async def update_wifi_ifaces_state(self) -> None:
         """Make a call to the API to get the WiFi ifaces config state."""
         ifaces = await self._update_platform(self._api.wifi_ifaces_get)
         if not ifaces:
             return
-        for name, iface in ifaces.items():
-            self._wifi_ifaces[name] = WifiInterface(
-                name=name,
-                enabled=iface.get("enabled", False),
-                ssid=iface.get("ssid", ""),
-                guest=iface.get("guest", False),
-                hidden=iface.get("hidden", False),
-                encryption=iface.get("encryption", "UNKNOWN"),
-            )
+        self._wifi_ifaces = ifaces
+
+    async def update_led_state(self) -> None:
+        """Make a call to the API to get the LED indicator state."""
+        config: LedConfigResponse | None = await self._update_platform(
+            self._api.led_get_config
+        )
+        if config is None:
+            return
+        self._led_enable = config.led_enable
+
+    async def _async_detect_led_support(self) -> None:
+        """Probe the LED endpoint once to decide whether to expose the LED switch.
+
+        An unsupported endpoint (APIClientError) simply omits the switch. A
+        network-level failure is treated as a setup failure so Home Assistant
+        retries, rather than permanently marking the router as unsupported.
+        """
+        try:
+            config = await self._api.led_get_config()
+        except APIClientError:
+            # TODO update to MethodNotFound error or similar
+            _LOGGER.debug("Router %s does not report LED support", self._host)
+            self._led_supported = False
+            return
+        except (OSError, aiohttp.ClientError, TimeoutError) as exc:
+            raise ConfigEntryNotReady(
+                f"Error probing LED support on {self._host}"
+            ) from exc
+        self._led_supported = True
+        self._led_enable = config.led_enable
 
     async def update_tailscale_state(self) -> None:
         """Make a call to the API to get the tailscale state."""
@@ -424,15 +642,19 @@ class GLinetRouter:
             # The request failed - keep the previous state
             return
         if not configured:
-            self._tailscale_config = {}
+            self._tailscale_config = None
             return
         # TODO this is a placeholder that needs to be replaced with a pulic method that combines useful info in _tailscale_status and _tailscale_get_config
-        self._tailscale_config = (
-            await self._update_platform(
-                self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
-            )
-            or {}
+        config_response = await self._update_platform(
+            self._api._tailscale_get_config  # pylint: disable=protected-access  # noqa: SLF001
         )
+        if config_response is None:
+            # The request failed - keep the previous state
+            return
+        if config_response:
+            self._tailscale_config = config_response
+        else:
+            self._tailscale_config = None
         state: TailscaleConnection | None = await self._update_platform(
             self._api.tailscale_connection_state
         )
@@ -453,6 +675,16 @@ class GLinetRouter:
             name = config.get("name")
             peer_id = config.get("peer_id")
             group_id = config.get("group_id")
+            raw_tunnel_id = config.get("tunnel_id")
+            tunnel_id = raw_tunnel_id if isinstance(raw_tunnel_id, int) else None
+            if tunnel_id is not None:
+                _LOGGER.warning(
+                    "WireGuard client %s has tunnel_id %s, tunnel_id is poorly documented and is planned to be deprecated so if you see this message please report it to the integration author at https://github.com/HarvsG/ha-glinet4-integration/issues with router model %s and firmware version %s",
+                    name,
+                    tunnel_id,
+                    self.model,
+                    self.sw_version,
+                )
             if name is None or peer_id is None or group_id is None:
                 # Don't log the config values, they contain private key material
                 _LOGGER.debug(
@@ -465,7 +697,7 @@ class GLinetRouter:
                 connected=False,
                 group_id=group_id,
                 peer_id=peer_id,
-                tunnel_id=config.get("tunnel_id"),
+                tunnel_id=tunnel_id,
             )
 
         if len(self._wireguard_clients) == 0:
@@ -473,22 +705,19 @@ class GLinetRouter:
             return
 
         # update whether the currently selected WG client is connected
-        response = await self._update_platform(self._api.wireguard_client_state)
-        if not response:
+        status_response = await self._update_platform(self._api.wireguard_client_state)
+        if not status_response:
             return
         # 0 is disconnted, 1 is connected, 2 is connecting
         self._wireguard_connections = []
-        for config in response:
-            # OpenVPN configs are sometimes returned leading to errors.
-            if config.get("type") != "wireguard":
-                continue
-            # if config["enabled"] is false then status does not exist
-            connected: bool = config.get("status", 0) != 0
+        for status_item in status_response:
+            # if status_item["enabled"] is false then status does not exist
+            connected: bool = status_item.get("status", 0) != 0
 
-            client = self._wireguard_clients.get(config.get("peer_id"))
+            client = self._wireguard_clients.get(status_item["peer_id"])
             if client is None:
                 continue
-            client.tunnel_id = config.get("tunnel_id")
+            client.tunnel_id = status_item.get("tunnel_id")
             client.connected = connected
             if connected:
                 # If more modern firmware supports more than 1 client being connected, we need to change this
@@ -522,6 +751,16 @@ class GLinetRouter:
         return f"{DOMAIN}-device-update-{self._factory_mac}"
 
     @property
+    def signal_wan_new(self) -> str:
+        """Dispatcher signal: a never-before-seen WAN interface is now up."""
+        return f"{DOMAIN}-wan-new-{self._factory_mac}"
+
+    @property
+    def signal_wan_update(self) -> str:
+        """Dispatcher signal: WAN states have been refreshed (fired every poll)."""
+        return f"{DOMAIN}-wan-update-{self._factory_mac}"
+
+    @property
     def host(self) -> str:
         """Return router host."""
         return self._host
@@ -535,6 +774,16 @@ class GLinetRouter:
     def devices(self) -> dict[str, ClientDevInfo]:
         """Return devices."""
         return self._devices
+
+    @property
+    def options(self) -> GLinetOptions:
+        """Return router options."""
+        return self._options
+
+    @property
+    def randomized_mac_mode(self) -> str:
+        """How clients using MAC randomization should be tracked."""
+        return self._options.track_randomized_mac
 
     @property
     def api(self) -> GLinet:
@@ -564,7 +813,12 @@ class GLinetRouter:
     @property
     def connected_devices_count(self) -> int:
         """Return the number of currently connected client devices."""
-        return self._connected_devices
+        return self._client_counts.total
+
+    @property
+    def client_counts(self) -> ClientCounts:
+        """Return connected-client counts grouped by connection type."""
+        return self._client_counts
 
     @property
     def name(self) -> str:
@@ -578,8 +832,18 @@ class GLinetRouter:
         return self._wifi_ifaces
 
     @property
-    def wireguard_clients(self) -> dict[str, WireGuardClient]:
-        """Return router factory_mac."""
+    def led_enabled(self) -> bool | None:
+        """Return whether the router LED indicators are enabled."""
+        return self._led_enable
+
+    @property
+    def led_supported(self) -> bool:
+        """Return whether the router supports LED control."""
+        return self._led_supported
+
+    @property
+    def wireguard_clients(self) -> dict[int, WireGuardClient]:
+        """Return router wireguard clients."""
         return self._wireguard_clients
 
     @property
@@ -590,7 +854,7 @@ class GLinetRouter:
     @property
     def tailscale_configured(self) -> bool:
         """Is tailscale configured."""
-        return self._tailscale_config != {}
+        return self._tailscale_config is not None
 
     @property
     def tailscale_connection(self) -> bool | None:
@@ -600,39 +864,37 @@ class GLinetRouter:
         return self._tailscale_connection
 
     @property
-    def tailscale_config(self) -> dict:
+    def tailscale_config(self) -> TailscaleConfigResponse | None:
         """Property for tailscale connection."""
         # TODO, we need a non private API method that returns some useful config info
         return self._tailscale_config
 
     @property
-    def system_status(self) -> dict:
+    def system_status(self) -> SystemStatusMetrics:
         """Property for system status."""
 
         return self._system_status
+
+    @property
+    def wan_status(self) -> dict[str, WanInterfaceState]:
+        """Return the latest WAN interface states keyed by interface name."""
+        return self._wan_status
+
+    def register_known_wan_interfaces(self, interfaces: set[str]) -> None:
+        """Mark interfaces as already-registered so we don't fire signal_wan_new for them."""
+        self._known_wan_interfaces.update(interfaces)
 
 
 @dataclass
 class WireGuardClient:
     """Class for keeping track of WireGuard Client Configs."""
 
+    # TODO could we deprecate this class and use WireguardClientListItem or WireguardStatusItem instead?
     name: str
     connected: bool = field(compare=False)
     group_id: int
     peer_id: int
-    tunnel_id: int | None
-
-
-@dataclass
-class WifiInterface:
-    """Class for keeping track of Wifi Interfaces."""
-
-    name: str
-    enabled: bool
-    ssid: str
-    guest: bool
-    hidden: bool
-    encryption: str
+    tunnel_id: int | None = None
 
 
 class ClientDevInfo:
@@ -647,7 +909,9 @@ class ClientDevInfo:
         self._connected: bool = False
         self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN
 
-    def update(self, dev_info: dict | None = None, consider_home: float = 0) -> None:
+    def update(
+        self, dev_info: ClientEntry | None = None, consider_home: float = 0
+    ) -> None:
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
         if dev_info:
@@ -658,10 +922,10 @@ class ClientDevInfo:
             else:
                 # If no alias, fallback to auto-assigned name field
                 name = dev_info.get("name", "")
-                if name == "*" or not name.strip():
-                    self._name = self._mac.replace(":", "_")
-                else:
+                if name and name.strip() and name != "*":
                     self._name = name
+                elif not self._name:
+                    self._name = self._mac.replace(":", "_")
             self._ip_address = dev_info.get("ip")
             self._last_activity = now
             self._connected = dev_info.get("online", False)
