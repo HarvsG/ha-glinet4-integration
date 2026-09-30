@@ -18,7 +18,7 @@ def is_randomized_mac(mac: str | None) -> bool:
     """
     try:
         first_octet = int(str(mac).replace(":", "").replace("-", "")[:2], 16)
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return False
     return bool(first_octet & 0x02)
 
