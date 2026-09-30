@@ -586,6 +586,7 @@ class GLinetRouter:
         try:
             config = await self._api.led_get_config()
         except APIClientError:
+        # TODO update to MethodNotFound error or similar
             _LOGGER.debug("Router %s does not report LED support", self._host)
             self._led_supported = False
             return
