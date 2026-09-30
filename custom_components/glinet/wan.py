@@ -7,6 +7,7 @@ WanStatusSensor entity class lives in sensor.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 STATE_CONNECTED = "connected"
@@ -92,7 +93,7 @@ def parse_network_array(raw: object) -> ParseResult:
     malformed: list[str] = []
 
     for entry in raw:
-        if not isinstance(entry, dict):
+        if not isinstance(entry, Mapping):
             continue
         name = entry.get("interface")
         if not isinstance(name, str) or not name:

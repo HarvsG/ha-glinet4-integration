@@ -16,12 +16,7 @@ from gli4py.error_handling import (
     NonZeroResponse,
     TokenError,
 )
-from gli4py.models import (
-    LedConfigResponse,
-    RouterStatusResponse,
-    SystemStatusMetrics,
-    TailscaleConnection,
-)
+from gli4py.models import LedConfigResponse, SystemStatusMetrics, TailscaleConnection
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -515,13 +510,16 @@ class GLinetRouter:
 
     async def update_system_status(self) -> None:
         """Update the system status and WAN interface states from the API."""
-        status: RouterStatusResponse | None = await self._update_platform(
-            self._api.router_get_status
-        )
-        if status is None:
+        status = await self._update_platform(self._api.router_get_status)
+        if not status:
             return
-        self._system_status = status.system
-        result = parse_network_array(status.network)
+        system = status["system"]
+        self._system_status = (
+            system
+            if isinstance(system, SystemStatusMetrics)
+            else SystemStatusMetrics.from_dict(system)
+        )
+        result = parse_network_array(status.get("network", []))
         self._wan_status = result.states
 
         for iface in result.malformed_interfaces:
