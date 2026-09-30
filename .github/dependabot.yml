@@ -8,6 +8,11 @@ updates:
       - "dependencies"
     ignore:
       - dependency-name: "homeassistant"
+    groups:
+      testing:
+        patterns:
+          - "pytest*"
+          - "homeassistant-stubs"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
