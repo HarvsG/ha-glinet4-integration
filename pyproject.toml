@@ -18,7 +18,7 @@ dev = [
     "codespell>=2.4.1",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
     "gli4py[mock]==0.1.0-beta.5",
-    "habluetooth>=6.26.11",
+    "habluetooth>=7.1.2",
     "homeassistant-stubs==2026.9.2",
     "josepy>=2.2.0",
     "mashumaro>=3.17.0",
