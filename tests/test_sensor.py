@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from freezegun.api import FrozenDateTimeFactory
-from gli4py.models import RouterStatusResponse
+from gli4py.models import RouterStatusResponse, SystemStatusMetrics
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -92,16 +92,18 @@ async def test_sensor_values(
 
 def test_memory_extra_attributes_none_handling() -> None:
     """Test memory extra attributes safely handles missing or None fields."""
-    attrs = _memory_extra_attributes({"memory_total": 100, "memory_free": 50})
+    attrs = _memory_extra_attributes(
+        SystemStatusMetrics(memory_total=100, memory_free=50)
+    )
     assert attrs["memory_buff_cache"] is None
     assert attrs["memory_available"] == 50
     assert attrs["memory_used"] == 50
 
-    attrs = _memory_extra_attributes({"memory_total": 100})
+    attrs = _memory_extra_attributes(SystemStatusMetrics(memory_total=100))
     assert attrs["memory_available"] is None
     assert attrs["memory_used"] is None
 
-    attrs = _memory_extra_attributes({"memory_free": 50})
+    attrs = _memory_extra_attributes(SystemStatusMetrics(memory_free=50))
     assert attrs["memory_available"] == 50
     assert attrs["memory_used"] is None
 

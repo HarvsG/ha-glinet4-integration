@@ -54,9 +54,9 @@ def _memory_extra_attributes(
     system_status: SystemStatusMetrics,
 ) -> dict[str, StateType | bool]:
     """Return memory attributes with cache/buffers considered."""
-    total = system_status.get("memory_total")
-    free = system_status.get("memory_free")
-    buff_cache = system_status.get("memory_buff_cache")
+    total = system_status.memory_total
+    free = system_status.memory_free
+    buff_cache = system_status.memory_buff_cache
     available = (free + (buff_cache or 0)) if free is not None else None
     used = (total - available) if total is not None and available is not None else None
     return {
@@ -79,7 +79,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda system_status: (
-            cpu.get("temperature") if (cpu := system_status.get("cpu")) else None
+            cpu.temperature if (cpu := system_status.cpu) else None
         ),
     ),
     SystemStatusEntityDescription(
@@ -90,9 +90,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            la[0]
-            if isinstance(la := system_status.get("load_average"), list) and len(la) > 0
-            else None
+            la[0] if len(la := system_status.load_average) > 0 else None
         ),
     ),
     SystemStatusEntityDescription(
@@ -103,9 +101,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            la[1]
-            if isinstance(la := system_status.get("load_average"), list) and len(la) > 1
-            else None
+            la[1] if len(la := system_status.load_average) > 1 else None
         ),
     ),
     SystemStatusEntityDescription(
@@ -116,9 +112,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            la[2]
-            if isinstance(la := system_status.get("load_average"), list) and len(la) > 2
-            else None
+            la[2] if len(la := system_status.load_average) > 2 else None
         ),
     ),
     SystemStatusEntityDescription(
@@ -131,16 +125,15 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         native_unit_of_measurement=PERCENTAGE,
         value_fn=lambda system_status: (
             (
-                (memory_total := system_status.get("memory_total") or 0) > 0
+                (memory_total := system_status.memory_total or 0) > 0
                 and (
                     (
-                        memory_free := (system_status.get("memory_free") or 0)
-                        + (system_status.get("memory_buff_cache") or 0)
+                        memory_free := (system_status.memory_free or 0)
+                        + (system_status.memory_buff_cache or 0)
                     )
                     >= 0
                 )
                 and (mu := 100 * (1 - memory_free / memory_total))
-                and isinstance(mu, float)
                 and 0 <= mu <= 100
                 and mu
             )
@@ -158,18 +151,17 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         native_unit_of_measurement=PERCENTAGE,
         value_fn=lambda system_status: (
             (
-                (flash_total := system_status.get("flash_total") or 0) > 0
-                and (flash_free := system_status.get("flash_free") or 0) >= 0
+                (flash_total := system_status.flash_total or 0) > 0
+                and (flash_free := system_status.flash_free or 0) >= 0
                 and (fu := 100 * (1 - flash_free / flash_total))
-                and isinstance(fu, float)
                 and 0 <= fu <= 100
                 and fu
             )
             or None
         ),
         extra_attributes_fn=lambda system_status: {
-            "flash_total": system_status.get("flash_total"),
-            "flash_free": system_status.get("flash_free"),
+            "flash_total": system_status.flash_total,
+            "flash_free": system_status.flash_free,
         },
     ),
 ]
@@ -207,7 +199,7 @@ async def async_setup_entry(
     # temperature), but only when we have status data to judge by: if the
     # first poll failed, dropping every sensor would leave them all missing
     # until the entry is reloaded.
-    if router.system_status.get("uptime") is not None:
+    if router.system_status.uptime is not None:
         sensors = [sensor for sensor in sensors if sensor.native_value is not None]
 
     async_add_entities(sensors, True)

@@ -513,7 +513,12 @@ class GLinetRouter:
         status = await self._update_platform(self._api.router_get_status)
         if not status:
             return
-        self._system_status = status["system"]
+        system = status["system"]
+        self._system_status = (
+            system
+            if isinstance(system, SystemStatusMetrics)
+            else SystemStatusMetrics.from_dict(system)
+        )
         result = parse_network_array(status.get("network", []))
         self._wan_status = result.states
 
