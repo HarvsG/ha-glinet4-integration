@@ -23,7 +23,7 @@ dev = [
     "pre-commit>=4.6.2",
     "prek>=0.5.3",
     "pylint>=3.3.7",
-    "pytest>=9.1.1",
+    "pytest>=8.3.5",
     "pytest-cov>=7.1.0",
     # Pins homeassistant==2026.9.2 exactly; bump in lockstep with homeassistant
     # and homeassistant-stubs. NOTE: 0.13.317+ requires Python >= 3.14.
