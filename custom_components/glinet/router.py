@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 import aiohttp
 from gli4py import GLinet
@@ -150,6 +150,48 @@ def _count_clients_by_type(clients: dict[str, ClientEntry]) -> ClientCounts:
     return ClientCounts(total=len(clients), wired=wired, wireless=wireless, guest=guest)
 
 
+@dataclass(frozen=True, kw_only=True, slots=True)
+class GLinetOptions:
+    """Options for GL-iNet router."""
+
+    consider_home: float
+    track_randomized_mac: str
+    verify_ssl: bool
+
+    @classmethod
+    def from_entry(cls, entry: ConfigEntry[Any]) -> Self:
+        """Create options from config entry, falling back to data for backward compatibility."""
+        return cls(
+            consider_home=float(
+                entry.options.get(
+                    CONF_CONSIDER_HOME,
+                    entry.data.get(
+                        CONF_CONSIDER_HOME,
+                        DEFAULT_CONSIDER_HOME.total_seconds(),
+                    ),
+                )
+            ),
+            track_randomized_mac=str(
+                entry.options.get(
+                    CONF_TRACK_RANDOMIZED_MAC,
+                    entry.data.get(
+                        CONF_TRACK_RANDOMIZED_MAC,
+                        DEFAULT_TRACK_RANDOMIZED_MAC,
+                    ),
+                )
+            ),
+            verify_ssl=bool(
+                entry.options.get(
+                    CONF_VERIFY_SSL,
+                    entry.data.get(
+                        CONF_VERIFY_SSL,
+                        DEFAULT_VERIFY_SSL,
+                    ),
+                )
+            ),
+        )
+
+
 class GLinetRouter:
     """representation of a GLinet router.
 
@@ -169,12 +211,8 @@ class GLinetRouter:
         # Context info
         self.hass: HomeAssistant = hass
         self._entry: GLinetConfigEntry = entry
-        # Options take precedence, but fall back to entry data for entries
-        # created before consider_home moved to options
-        self._consider_home: float = entry.options.get(
-            CONF_CONSIDER_HOME,
-            entry.data.get(CONF_CONSIDER_HOME, DEFAULT_CONSIDER_HOME.total_seconds()),
-        )
+        self._options: GLinetOptions = GLinetOptions.from_entry(entry)
+        self._consider_home: float = self._options.consider_home
 
         # gli4py API
         self._api: GLinet
@@ -295,10 +333,9 @@ class GLinetRouter:
     def _create_api(self) -> GLinet:
         """Optimistically return a GLinet object for connection to the API, no test included."""
         conf = self._entry.data
-        verify_ssl = self._entry.options.get(
-            CONF_VERIFY_SSL, conf.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+        shared_session = async_get_clientsession(
+            self.hass, verify_ssl=self._options.verify_ssl
         )
-        shared_session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
         ha_client = AiohttpClient(session=shared_session)
 
         if CONF_PASSWORD in conf:
@@ -739,14 +776,14 @@ class GLinetRouter:
         return self._devices
 
     @property
+    def options(self) -> GLinetOptions:
+        """Return router options."""
+        return self._options
+
+    @property
     def randomized_mac_mode(self) -> str:
         """How clients using MAC randomization should be tracked."""
-        return self._entry.options.get(
-            CONF_TRACK_RANDOMIZED_MAC,
-            self._entry.data.get(
-                CONF_TRACK_RANDOMIZED_MAC, DEFAULT_TRACK_RANDOMIZED_MAC
-            ),
-        )
+        return self._options.track_randomized_mac
 
     @property
     def api(self) -> GLinet:
