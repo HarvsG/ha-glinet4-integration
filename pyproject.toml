@@ -26,7 +26,7 @@ dev = [
     # Pins homeassistant==2026.9.4 exactly; bump in lockstep with homeassistant-stubs.
     # Also provides pytest, pytest-cov, pytest-asyncio, etc. NOTE: 0.13.317+ requires Python >= 3.14.
     "pytest-homeassistant-custom-component==0.13.367",
-    "ruff>=0.12.0",
+    "ruff>=0.16.9",
 ]
 
 [tool.hatch.version]
