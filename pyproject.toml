@@ -15,7 +15,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "codespell>=2.4.1",
+    "codespell>=2.4.3",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
     "gli4py[mock]==0.1.0-beta.5",
     "homeassistant-stubs==2026.9.2",
