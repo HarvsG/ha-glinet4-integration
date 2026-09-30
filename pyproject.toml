@@ -21,7 +21,7 @@ dev = [
     "homeassistant-stubs==2026.9.2",
     "mypy>=1.16.1",
     "pre-commit>=4.6.2",
-    "prek>=0.2.0",
+    "prek>=0.5.3",
     "pylint>=3.3.7",
     "pytest>=8.3.5",
     "pytest-cov>=7.1.0",
