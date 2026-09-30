@@ -120,7 +120,7 @@ class WifiApSwitch(GliSwitchBase):
         try:
             _LOGGER.debug("Enabling WiFi interface %s", self._iface_name)
             await self._router.api.wifi_iface_set_enabled(self._iface_name, True)
-        except (OSError, APIClientError):
+        except OSError, APIClientError:
             _LOGGER.exception(
                 "Unable to enable WiFi interface %s",
                 self._iface_name,
@@ -139,7 +139,7 @@ class WifiApSwitch(GliSwitchBase):
         try:
             _LOGGER.debug("Disabling WiFi interface %s", self._iface_name)
             await self._router.api.wifi_iface_set_enabled(self._iface_name, False)
-        except (OSError, APIClientError):
+        except OSError, APIClientError:
             _LOGGER.exception(
                 "Unable to disable WiFi interface %s",
                 self._iface_name,
@@ -180,7 +180,7 @@ class TailscaleSwitch(GliSwitchBase):
             _LOGGER.debug("Enabling tailscale")
             await self._router.api.tailscale_start()
             # TODO since the state takes a while to change we may
-        except (OSError, APIClientError):
+        except OSError, APIClientError:
             _LOGGER.exception("Unable to enable tailscale connection")
         else:
             self._attr_is_on = True
@@ -191,7 +191,7 @@ class TailscaleSwitch(GliSwitchBase):
         try:
             _LOGGER.debug("Disabling tailscale")
             await self._router.api.tailscale_stop()
-        except (OSError, APIClientError):
+        except OSError, APIClientError:
             _LOGGER.exception("Unable to stop tailscale connection")
         else:
             self._attr_is_on = False
@@ -274,7 +274,7 @@ class WireGuardSwitch(GliSwitchBase):
             await self._router.api.wireguard_client_start(
                 self._client.group_id, self._client.tunnel_id or self._client.peer_id
             )
-        except (OSError, APIClientError):
+        except OSError, APIClientError:
             _LOGGER.exception("Unable to enable WG client")
         else:
             self._attr_is_on = True
@@ -289,7 +289,7 @@ class WireGuardSwitch(GliSwitchBase):
                 self._client.tunnel_id or self._client.peer_id
             )
             # TODO may need to introduce a delay here, or await confirmation of the stop
-        except (OSError, APIClientError):
+        except OSError, APIClientError:
             _LOGGER.exception("Unable to stop WG client")
         else:
             # be optimistic
@@ -326,7 +326,7 @@ class LedSwitch(GliSwitchBase):
         try:
             _LOGGER.debug("Enabling router LEDs")
             await self._router.api.led_set(True)
-        except (OSError, APIClientError):
+        except OSError, APIClientError:
             _LOGGER.exception("Unable to enable router LEDs")
         else:
             # be optimistic
@@ -339,7 +339,7 @@ class LedSwitch(GliSwitchBase):
         try:
             _LOGGER.debug("Disabling router LEDs")
             await self._router.api.led_set(False)
-        except (OSError, APIClientError):
+        except OSError, APIClientError:
             _LOGGER.exception("Unable to disable router LEDs")
         else:
             # be optimistic

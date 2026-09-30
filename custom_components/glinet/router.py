@@ -419,7 +419,7 @@ class GLinetRouter:
             try:
                 await self.renew_token()
                 response = await api_callable()
-            except (TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse):
+            except TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse:
                 self._connect_error = True
                 return None
         except AuthenticationError as exc:
@@ -432,7 +432,7 @@ class GLinetRouter:
             try:
                 await self.renew_token()
                 response = await api_callable()
-            except (TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse):
+            except TimeoutError, aiohttp.ClientError, OSError, NonZeroResponse:
                 return None
         except NonZeroResponse:
             if not self._connect_error:
