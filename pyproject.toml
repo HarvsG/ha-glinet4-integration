@@ -138,7 +138,6 @@ ignore = [
     "Q",
     "COM812",
     "COM819",
-    "ISC001",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -175,7 +174,6 @@ load-plugins = [
 disable = [
     "abstract-method",
     "consider-using-assignment-expr",
-    "consider-using-tuple",
     "duplicate-code",
     "fixme",
     "import-error",
