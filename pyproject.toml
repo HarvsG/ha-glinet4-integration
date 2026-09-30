@@ -18,16 +18,16 @@ dev = [
     "codespell>=2.4.1",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
     "gli4py[mock]==0.1.0-beta.5",
-    "homeassistant-stubs==2026.9.2",
+    "homeassistant-stubs==2026.9.4",
     "mypy>=1.16.1",
     "pre-commit>=4.6.2",
     "prek>=0.5.3",
     "pylint>=3.3.7",
-    "pytest>=8.3.5",
+    "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     # Pins homeassistant==2026.9.2 exactly; bump in lockstep with homeassistant
     # and homeassistant-stubs. NOTE: 0.13.317+ requires Python >= 3.14.
-    "pytest-homeassistant-custom-component==0.13.365",
+    "pytest-homeassistant-custom-component==0.13.367",
     "ruff>=0.12.0",
     "types-requests<2.33.0.20260907",
     "voluptuous-stubs>=0.1.1",
