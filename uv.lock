@@ -943,7 +943,7 @@ dev = [
     { name = "homeassistant-stubs", specifier = "==2026.9.2" },
     { name = "mypy", specifier = ">=1.16.1" },
     { name = "pre-commit", specifier = ">=4.6.2" },
-    { name = "prek", specifier = ">=0.2.0" },
+    { name = "prek", specifier = ">=0.5.3" },
     { name = "pylint", specifier = ">=3.3.7" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
