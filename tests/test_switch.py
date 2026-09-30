@@ -24,6 +24,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.glinet.const import DOMAIN
 from custom_components.glinet.switch import TailscaleSwitch
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_OFF,
@@ -97,6 +98,89 @@ async def test_wifi_switch_turn_off_and_on(
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.state == STATE_ON
+
+
+async def test_led_switch_turn_off_and_on(
+    hass: HomeAssistant, init_integration: MockConfigEntry, mock_api: MagicMock
+) -> None:
+    """Test the LED switch reflects state and toggles via the API."""
+    entity_id = _entity_id(hass, "led")
+
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_ON
+
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    mock_api.led_set.assert_awaited_with(False)
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_OFF
+
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    mock_api.led_set.assert_awaited_with(True)
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_ON
+
+
+async def test_led_switch_not_created_when_unsupported(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test no LED switch is created when the router does not support LEDs."""
+    mock_api.led_get_config.side_effect = NonZeroResponse("API error")
+
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    unique_id = f"glinet_switch/{MOCK_MAC}/led"
+    assert registry.async_get_entity_id("switch", DOMAIN, unique_id) is None
+
+
+async def test_led_probe_network_error_retries_setup(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """A network error probing LED support should retry setup, not disable it."""
+    mock_api.led_get_config.side_effect = TimeoutError
+
+    mock_config_entry.add_to_hass(hass)
+    assert not await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_led_switch_oserror_handling(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test the LED switch handles OSError when turning on or off."""
+    entity_id = _entity_id(hass, "led")
+
+    mock_api.led_set.side_effect = OSError("Connection error")
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to disable router LEDs" in caplog.text
+
+    caplog.clear()
+    await hass.services.async_call(
+        SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert "Unable to enable router LEDs" in caplog.text
 
 
 async def test_tailscale_switch(

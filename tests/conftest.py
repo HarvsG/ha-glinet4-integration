@@ -82,6 +82,8 @@ async def mock_api(hass: HomeAssistant, mock_router: MockRouter) -> MockGLinet:
         "tailscale_start",
         "tailscale_stop",
         "wifi_iface_set_enabled",
+        "led_get_config",
+        "led_set",
         "router_reboot",
     )
     for name in spied_methods:

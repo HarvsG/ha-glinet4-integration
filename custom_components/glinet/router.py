@@ -10,8 +10,13 @@ from typing import TYPE_CHECKING, TypeVar
 
 import aiohttp
 from gli4py import GLinet
-from gli4py.error_handling import AuthenticationError, NonZeroResponse, TokenError
-from gli4py.models import SystemStatusMetrics, TailscaleConnection
+from gli4py.error_handling import (
+    APIClientError,
+    AuthenticationError,
+    NonZeroResponse,
+    TokenError,
+)
+from gli4py.models import LedConfigResponse, SystemStatusMetrics, TailscaleConnection
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -189,6 +194,8 @@ class GLinetRouter:
         self._wireguard_connections: list[WireGuardClient] | None = None
         self._tailscale_config: TailscaleConfigResponse | None = None
         self._tailscale_connection: bool | None = None
+        self._led_enable: bool | None = None
+        self._led_supported: bool = False
         self._wan_status: dict[str, WanInterfaceState] = {}
         self._known_wan_interfaces: set[str] = set()
         self._warned_wan_interfaces: set[str] = set()
@@ -237,6 +244,8 @@ class GLinetRouter:
         self._model = router_info["model"]
         self._sw_v = router_info["firmware_version"]
         self._factory_mac = router_info["mac"]
+
+        await self._async_detect_led_support()
 
         self._late_init_complete = True
 
@@ -558,6 +567,36 @@ class GLinetRouter:
             return
         self._wifi_ifaces = ifaces
 
+    async def update_led_state(self) -> None:
+        """Make a call to the API to get the LED indicator state."""
+        config: LedConfigResponse | None = await self._update_platform(
+            self._api.led_get_config
+        )
+        if config is None:
+            return
+        self._led_enable = config.led_enable
+
+    async def _async_detect_led_support(self) -> None:
+        """Probe the LED endpoint once to decide whether to expose the LED switch.
+
+        An unsupported endpoint (APIClientError) simply omits the switch. A
+        network-level failure is treated as a setup failure so Home Assistant
+        retries, rather than permanently marking the router as unsupported.
+        """
+        try:
+            config = await self._api.led_get_config()
+        except APIClientError:
+            # TODO update to MethodNotFound error or similar
+            _LOGGER.debug("Router %s does not report LED support", self._host)
+            self._led_supported = False
+            return
+        except (OSError, aiohttp.ClientError, TimeoutError) as exc:
+            raise ConfigEntryNotReady(
+                f"Error probing LED support on {self._host}"
+            ) from exc
+        self._led_supported = True
+        self._led_enable = config.led_enable
+
     async def update_tailscale_state(self) -> None:
         """Make a call to the API to get the tailscale state."""
 
@@ -754,6 +793,16 @@ class GLinetRouter:
     def wifi_ifaces(self) -> dict[str, WifiInterface]:
         """Return router wifi interfaces."""
         return self._wifi_ifaces
+
+    @property
+    def led_enabled(self) -> bool | None:
+        """Return whether the router LED indicators are enabled."""
+        return self._led_enable
+
+    @property
+    def led_supported(self) -> bool:
+        """Return whether the router supports LED control."""
+        return self._led_supported
 
     @property
     def wireguard_clients(self) -> dict[int, WireGuardClient]:

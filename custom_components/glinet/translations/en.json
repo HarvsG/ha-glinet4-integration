@@ -95,7 +95,8 @@
     },
     "switch": {
       "tailscale": { "name": "Tailscale" },
-      "wireguard_client": { "name": "WG Client {client_name}" }
+      "wireguard_client": { "name": "WG Client {client_name}" },
+      "led": { "name": "LED" }
     },
     "button": {
       "reboot": { "name": "Reboot" }

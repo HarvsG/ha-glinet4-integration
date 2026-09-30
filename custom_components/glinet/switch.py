@@ -27,7 +27,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up GL-iNet switches."""
     router: GLinetRouter = entry.runtime_data
-    switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch] = []
+    switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch | LedSwitch] = []
     if router.wireguard_clients:
         # TODO detect all configured wireguard, openvpn, shadowsocks and
         # TOR clients & servers with router/vpn/status? and gen a switch for each
@@ -39,6 +39,8 @@ async def async_setup_entry(
         switches.append(TailscaleSwitch(router))
     for iface_name, iface in router.wifi_ifaces.items():
         switches.append(WifiApSwitch(router, iface_name, iface))
+    if router.led_supported:
+        switches.append(LedSwitch(router))
     if switches:
         async_add_entities(switches, True)
 
@@ -302,3 +304,51 @@ class WireGuardSwitch(GliSwitchBase):
         self._attr_is_on = self._client in (
             self._router.connected_wireguard_clients or []
         )
+
+
+class LedSwitch(GliSwitchBase):
+    """A switch to control the router's LED indicators."""
+
+    _attr_translation_key = "led"
+
+    @property
+    def icon(self) -> str:
+        """Return the LED state icon."""
+        return "mdi:led-on" if self.is_on else "mdi:led-off"
+
+    @property
+    def unique_id(self) -> str:
+        """Return the unique id of the switch."""
+        return f"glinet_switch/{self._router.factory_mac}/led"
+
+    async def async_turn_on(self, **_: Any) -> None:
+        """Turn on the router LEDs."""
+        try:
+            _LOGGER.debug("Enabling router LEDs")
+            await self._router.api.led_set(True)
+        except (OSError, APIClientError):
+            _LOGGER.exception("Unable to enable router LEDs")
+        else:
+            # be optimistic
+            self._attr_is_on = True
+            self.async_write_ha_state()
+            await self.async_update()
+
+    async def async_turn_off(self, **_: Any) -> None:
+        """Turn off the router LEDs."""
+        try:
+            _LOGGER.debug("Disabling router LEDs")
+            await self._router.api.led_set(False)
+        except (OSError, APIClientError):
+            _LOGGER.exception("Unable to disable router LEDs")
+        else:
+            # be optimistic
+            self._attr_is_on = False
+            self.async_write_ha_state()
+            await self.async_update()
+
+    async def async_update(self) -> None:
+        """Update the switch state. Only one LED config exists per router."""
+        _LOGGER.debug("Updating LED switch state")
+        await self._router.update_led_state()
+        self._attr_is_on = self._router.led_enabled
