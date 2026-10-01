@@ -167,9 +167,7 @@ If you want to contribute to this integration:
 
 ### 🏗️ Architecture & Core
 
-- [ ] **Switch from `.get()` to attributes**: Build on the new strongly types responses from gli4py and replace `.get()` methods with accessing attributes - this will require using the types in many tests instead of the mock dictionaries - it may be appropriate to switch these tests to use gli4py's mock api instead.
 - [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
-- [ ] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
 
 ### 💡 Features Under Consideration
 
@@ -184,6 +182,8 @@ If you want to contribute to this integration:
 ### ✅ Completed
 
 - [x] **Home Assistant Quality Scale**: Reached **Platinum** quality scale tier with full documentation ([`docs/glinet.markdown`](docs/glinet.markdown)).
+- [x] **Switch from `.get()` to Attributes**: Replaced dictionary `.get()` calls with strongly-typed `gli4py` class attributes across router, sensors, switches, and diagnostics.
+- [x] **Device Registry Pruning**: Implemented `async_remove_config_entry_device` and device cleanup logic to support removing stale device tracker entities in Home Assistant ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
 - [x] Comprehensive automated test suite with real router hardware fixtures and upstream mock router (`pytest`, `gli4py[mock]`).
 - [x] Strict typing (`mypy --strict`) enforced in CI across integration and tests.
 - [x] Multi-WAN interface connection status sensors.
