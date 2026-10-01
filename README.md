@@ -171,13 +171,14 @@ If you want to contribute to this integration:
 
 ### 💡 Features Under Consideration
 
-- [ ] **Network & Bandwidth Sensors**: Real-time upload and download rate sensors.
-- [ ] **WAN & Public IP Sensors**: Internet reachability sensor (handling offline API timeouts) and external/public IP sensor.
+- [ ] **WAN Access control**: Implement a WAN on/off switch for each client device to enable control of IoT and parental controls
+- [ ] **Port Forwarding**: Implement switches to enable/disable port-forwarding rules
+- [ ] **Network & Bandwidth Sensors**: Real-time upload and download rate sensors for devices.
 - [ ] **VPN Policy Routing**: Automate switching VPN client routing policies per device (e.g. for bypassing geofilters in automations).
 - [ ] **Cellular & Tethering**: USB tethering and cellular modem control for failover internet automations.
 - [ ] **SMS Notifications**: Expose router cellular modem SMS support via a notify platform.
 - [ ] **Firmware Management**: Firmware update status sensor and upgrade trigger (with safety warnings).
-- [ ] **Smart Home BLE**: Explore integration with GL.iNet smart home Bluetooth LE endpoints.
+- [ ] **Smart Home Protocols**: Explore integration with GL.iNet smart home Bluetooth LE and OpenThread border router endpoints.
 
 ### ✅ Completed
 
