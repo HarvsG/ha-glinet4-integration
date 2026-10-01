@@ -114,24 +114,34 @@ The GL-iNet integration provides the following platforms and entities:
 Turn off the router's hardware status LEDs at bedtime and turn them back on in the morning:
 
 ```yaml
-automation:
-  - alias: "Router - Turn Off LEDs at Night"
-    trigger:
-      - platform: time
-        at: "23:00:00"
-    action:
-      - action: switch.turn_off
-        target:
-          entity_id: switch.gl_mt6000_led
-
-  - alias: "Router - Turn On LEDs in Morning"
-    trigger:
-      - platform: time
-        at: "07:00:00"
-    action:
+alias: Router - turn off lights overnight
+triggers:
+  - trigger: sun.dawn
+    options:
+      type: civil
+    id: dawn
+  - trigger: sun.dusk
+    options:
+      type: civil
+    id: dusk
+actions:
+  - if:
+      - condition: trigger
+        id:
+          - dawn
+    then:
       - action: switch.turn_on
         target:
-          entity_id: switch.gl_mt6000_led
+          entity_id: switch.study_gl_inet_mt1300_led
+  - if:
+      - condition: trigger
+        id:
+          - dusk
+    then:
+      - action: switch.turn_off
+        target:
+          entity_id: switch.study_gl_inet_mt1300_led
+
 ```
 
 ### 2. Reboot Router on Weekly Schedule
@@ -139,19 +149,20 @@ automation:
 Automatically reboot the router early Sunday morning:
 
 ```yaml
-automation:
-  - alias: "Router - Weekly Reboot"
-    trigger:
-      - platform: time
-        at: "04:00:00"
-    condition:
-      - condition: time
-        weekday:
-          - sun
-    action:
-      - action: button.press
-        target:
-          entity_id: button.gl_mt6000_reboot
+alias: Router - Weekly Reboot
+triggers:
+  - at: '04:00:00'
+    trigger: time
+conditions:
+  - condition: time
+    weekday:
+      - sun
+actions:
+  - action: button.press
+    data: {}
+    target:
+      entity_id: button.gl_inet_mt1300_reboot
+
 ```
 
 ### 3. Presence-Based VPN Client Toggle
@@ -159,29 +170,31 @@ automation:
 Automatically enable a WireGuard VPN tunnel when leaving home:
 
 ```yaml
-automation:
-  - alias: "Router - Enable VPN When Away"
-    trigger:
-      - platform: state
-        entity_id: zone.home
-        to: "0"
-    action:
-      - action: switch.turn_on
-        target:
-          entity_id: switch.gl_mt6000_wg_client_home_vpn
+alias: Router - Enable Tailscale when away
+triggers:
+  - trigger: zone.left
+    target:
+      entity_id: person.george
+    options:
+      zone: zone.home
+conditions: []
+actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.tailscale
 ```
 
 ## Known Limitations
 
 - **Firmware API Version**: This integration targets GL.iNet firmware 4.x (API v4). Older firmware (3.x) is not supported.
-- **Downstream Network Topology**: Clients connected through downstream switches, mesh nodes, or secondary access points reach the router via its LAN ports and are reported under LAN client counts.
+- **Downstream Network Topology**: Clients connected through downstream switches, mesh nodes, or secondary access points reach the router via its LAN ports and are reported under LAN client counts even if connected over WiFi.
 - **Smartphone MAC Address Randomization**: Mobile devices with MAC randomization enabled generate dynamic MAC addresses when re-connecting. It is recommended to disable MAC randomization for your home Wi-Fi network on iOS and Android for reliable presence tracking.
 
 ## Troubleshooting
 
 ### Authentication Errors
 
-If the router admin password changes, Home Assistant will prompt a **Re-authentication** flow. Navigate to **Settings** > **Devices & Services** > **GL-iNet** and enter your updated password.
+If the router admin password changes, Home Assistant will prompt a **Re-authentication** flow after a few minutes. Navigate to **Settings** > **Devices & Services** > **GL-iNet** and enter your updated password.
 
 ### SSL Certificate Failures
 
@@ -189,7 +202,7 @@ If connecting via `https://` with a self-signed certificate, ensure **Verify SSL
 
 ### Diagnostic Logs
 
-To collect detailed troubleshooting logs, enable debug logging in `configuration.yaml`:
+To collect detailed troubleshooting logs, enable debug logging [via the UI](https://www.home-assistant.io/docs/configuration/troubleshooting/#enabling-debug-logging) or in `configuration.yaml`:
 
 ```yaml
 logger:
