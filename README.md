@@ -156,12 +156,10 @@ If you want to contribute to this integration:
 
 ### 🏗️ Architecture & Core
 
-- [x] **Migrate to `DataUpdateCoordinator`**: Refactor `GLinetRouter` away from custom `async_track_time_interval` polling and manual dispatcher signals to Home Assistant's standard `DataUpdateCoordinator` pattern (including tiered polling rates for high-frequency device trackers vs low-frequency status endpoints).
+- [ ] **Home Assistant Code Quality**: Build towards gold and platinum [code-quality](https://developers.home-assistant.io/docs/core/integration-quality-scale/) by comparing against their [checklist](https://developers.home-assistant.io/docs/core/integration-quality-scale/checklist/) and a [similar integration](https://github.com/home-assistant/core/tree/dev/homeassistant/components/fritz)
+- [ ] **Switch from `.get()` to attributes**: Build on the new strongly types responses from gli4py and replace `.get()` methods with accessing attributes - this will require using the types in many tests instead of the mock dictionaries - it may be appropriate to switch these tests to use gli4py's mock api instead.
 - [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
 - [ ] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
-- [x] **Strict Typing**: Add complete typing to upstream [`gli4py`](https://github.com/HarvsG/gli4py) and enforce strict typing with `mypy --strict` in CI.
-- [x] **Error Recovery**: Further refine error recovery to handle transient empty client lists immediately following a router reboot.
-- [x] **HTTPS Support**: Add support for `https://` router communication with optional handling for local self-signed certificates.
 
 ### 💡 Features Under Consideration
 
@@ -185,6 +183,10 @@ If you want to contribute to this integration:
 - [x] LED indicator control switch.
 - [x] System diagnostic sensors (CPU temp/load, memory, flash, uptime) & reboot button.
 - [x] Connected clients sensors (total plus wired / wireless / guest breakdown).
+- [x] **Strict Typing**: Add complete typing to upstream [`gli4py`](https://github.com/HarvsG/gli4py) and enforce strict typing with `mypy --strict` in CI.
+- [x] **Error Recovery**: Further refine error recovery to handle transient empty client lists immediately following a router reboot.
+- [x] **HTTPS Support**: Add support for `https://` router communication with optional handling for local self-signed certificates.
+- [x] **Migrate to `DataUpdateCoordinator`**: Refactor `GLinetRouter` away from custom `async_track_time_interval` polling and manual dispatcher signals to Home Assistant's standard `DataUpdateCoordinator` pattern
 
 ---
 

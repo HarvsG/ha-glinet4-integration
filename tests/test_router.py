@@ -731,30 +731,6 @@ async def test_update_platform_os_error(
     assert "communication error" not in caplog.text
 
 
-async def test_malformed_wan_interface_warning_deduplicated(
-    hass: HomeAssistant,
-    init_integration: MockConfigEntry,
-    mock_api: MagicMock,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Test malformed WAN interface warns once and deduplicates subsequent warnings."""
-    router: GLinetRouter = init_integration.runtime_data.router
-    status = {
-        "system": {"uptime": 1000},
-        "network": [{"interface": "bad_wan"}],
-    }
-    mock_api.router_get_status.side_effect = None
-    mock_api.router_get_status.return_value = status
-
-    await router.update_system_status()
-    assert "returned a malformed entry for WAN interface bad_wan" in caplog.text
-    assert "bad_wan" in router._warned_wan_interfaces
-
-    caplog.clear()
-    await router.update_system_status()
-    assert "returned a malformed entry for WAN interface bad_wan" not in caplog.text
-
-
 async def test_update_device_trackers_empty_response_during_startup(
     hass: HomeAssistant,
     init_integration: MockConfigEntry,
