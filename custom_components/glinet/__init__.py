@@ -6,12 +6,17 @@ from typing import TYPE_CHECKING
 
 from homeassistant.const import Platform
 
+from .coordinator import (
+    GLinetRuntimeData,
+    GLinetStatusCoordinator,
+    GLinetSwitchCoordinator,
+)
 from .router import GLinetRouter
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from .router import GLinetConfigEntry
+    from .coordinator import GLinetConfigEntry
 
 PLATFORMS: list[Platform] = [
     Platform.BUTTON,
@@ -27,14 +32,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: GLinetConfigEntry) -> bo
     Called by home assistant on initial config, restart and
     component reload.
     """
-
-    # Store an API object for platforms to access
     router = GLinetRouter(hass, entry)
     await router.setup()
 
-    entry.runtime_data = router
+    status_coordinator = GLinetStatusCoordinator(hass, entry, router)
+    switch_coordinator = GLinetSwitchCoordinator(hass, entry, router)
 
-    entry.async_on_unload(router.unload)
+    entry.runtime_data = GLinetRuntimeData(
+        router=router,
+        coordinator=status_coordinator,
+        switch_coordinator=switch_coordinator,
+    )
+
+    await status_coordinator.async_config_entry_first_refresh()
+    await switch_coordinator.async_config_entry_first_refresh()
+
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -43,7 +55,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: GLinetConfigEntry) -> bo
 
 async def async_unload_entry(hass: HomeAssistant, entry: GLinetConfigEntry) -> bool:
     """Unload a config entry."""
-
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

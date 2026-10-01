@@ -13,6 +13,11 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.glinet.coordinator import (
+    GLinetRuntimeData,
+    GLinetStatusCoordinator,
+    GLinetSwitchCoordinator,
+)
 from custom_components.glinet.router import GLinetRouter
 from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
@@ -25,7 +30,14 @@ async def test_setup_entry_ok(
 ) -> None:
     """Test a successful setup creates entities on all platforms."""
     assert init_integration.state is ConfigEntryState.LOADED
-    assert isinstance(init_integration.runtime_data, GLinetRouter)
+    assert isinstance(init_integration.runtime_data, GLinetRuntimeData)
+    assert isinstance(init_integration.runtime_data.router, GLinetRouter)
+    assert isinstance(
+        init_integration.runtime_data.coordinator, GLinetStatusCoordinator
+    )
+    assert isinstance(
+        init_integration.runtime_data.switch_coordinator, GLinetSwitchCoordinator
+    )
 
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, init_integration.entry_id)
@@ -117,5 +129,5 @@ async def test_update_listener_reloads_entry(
 
     assert init_integration.state is ConfigEntryState.LOADED
     assert mock_glinet.call_count == 2
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router._consider_home == pytest.approx(60)

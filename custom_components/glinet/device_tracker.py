@@ -7,85 +7,72 @@ from typing import TYPE_CHECKING
 
 from homeassistant.components.device_tracker import ScannerEntity, SourceType
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import TRACK_RANDOMIZED_MAC_DISABLED, TRACK_RANDOMIZED_MAC_ENABLED
+from .coordinator import GLinetConfigEntry, GLinetStatusCoordinator
 from .utils import is_randomized_mac
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
     from homeassistant.helpers.typing import StateType
 
-    from .router import ClientDevInfo, GLinetConfigEntry, GLinetRouter
+    from .router import ClientDevInfo
 
 DEFAULT_DEVICE_NAME = "Unknown device"
 
+_LOGGER = logging.getLogger(__name__)
+
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
-    hass: HomeAssistant,
+    _: HomeAssistant,
     entry: GLinetConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up device tracker for GLinet component."""
-    router = entry.runtime_data
+    coordinator: GLinetStatusCoordinator = entry.runtime_data.coordinator
     tracked: set[str] = set()
 
     @callback
-    def update_router() -> None:
-        """Update the values of the router."""
-        add_entities(router, async_add_entities, tracked)
+    def _check_new_devices() -> None:
+        """Add new devices."""
+        new_tracked = []
+        for mac, device in coordinator.router.devices.items():
+            if mac in tracked:
+                continue
 
-    entry.async_on_unload(
-        async_dispatcher_connect(hass, router.signal_device_new, update_router)
-    )
+            new_tracked.append(GLinetDevice(coordinator, device))
+            tracked.add(mac)
 
-    update_router()
+        if new_tracked:
+            async_add_entities(new_tracked)
 
-
-_LOGGER = logging.getLogger(__name__)
-
-
-@callback
-def add_entities(
-    router: GLinetRouter,
-    async_add_entities: AddConfigEntryEntitiesCallback,
-    tracked: set[str],
-) -> None:
-    """Add all new tracker entities from the router."""
-    new_tracked = []
-    for mac, device in router.devices.items():
-        if mac in tracked:
-            continue
-
-        new_tracked.append(GLinetDevice(router, device))
-        tracked.add(mac)
-
-    if new_tracked:
-        async_add_entities(new_tracked)
+    entry.async_on_unload(coordinator.async_add_listener(_check_new_devices))
+    _check_new_devices()
 
 
-class GLinetDevice(ScannerEntity):
+# Device tracker entities represent client devices, not the router itself,
+# so they must NOT inherit GLinetEntity (which sets device_info to the
+# router).  Home Assistant expects tracker entities to stand alone without
+# a parent device_info binding.
+class GLinetDevice(CoordinatorEntity[GLinetStatusCoordinator], ScannerEntity):
     """Representation of a GLinet tracked device."""
 
-    _attr_hostname: str
-    _attr_ip_address: str | None
-    _attr_mac_address: str
     _attr_source_type: SourceType = SourceType.ROUTER
 
-    def __init__(self, router: GLinetRouter, device: ClientDevInfo) -> None:
+    def __init__(
+        self, coordinator: GLinetStatusCoordinator, device: ClientDevInfo
+    ) -> None:
         """Initialize a GLinet device."""
-        self._router: GLinetRouter = router
+        super().__init__(coordinator)
+        self.router = coordinator.router
         self._device: ClientDevInfo = device
         self._icon = "mdi:radar"
         self._is_randomized = is_randomized_mac(self._device.mac)
-        self._attr_hostname: str = self._device.name or DEFAULT_DEVICE_NAME
-        self._attr_ip_address: str | None = self._device.ip_address
         self._attr_mac_address: str = self._device.mac
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique ID."""
-        return self.mac_address
+        self._attr_unique_id: str = self._device.mac
 
     @property
     def icon(self) -> str:
@@ -101,11 +88,6 @@ class GLinetDevice(ScannerEntity):
     def is_connected(self) -> bool:
         """Return true if the device is connected to the network."""
         return self._device.is_connected
-
-    @property
-    def source_type(self) -> SourceType:
-        """Return the source type."""
-        return SourceType.ROUTER
 
     @property
     def extra_state_attributes(self) -> dict[str, StateType | bool]:
@@ -136,34 +118,18 @@ class GLinetDevice(ScannerEntity):
         return self._device.mac
 
     @property
-    def should_poll(self) -> bool:
-        """No polling needed."""
-        return False
-
-    @property
     def entity_registry_enabled_default(self) -> bool:
         """Return if entity is enabled by default."""
         if self._is_randomized:
-            if self._router.randomized_mac_mode == TRACK_RANDOMIZED_MAC_ENABLED:
+            if self.router.randomized_mac_mode == TRACK_RANDOMIZED_MAC_ENABLED:
                 return True
-            if self._router.randomized_mac_mode == TRACK_RANDOMIZED_MAC_DISABLED:
+            if self.router.randomized_mac_mode == TRACK_RANDOMIZED_MAC_DISABLED:
                 return False
         return super().entity_registry_enabled_default
 
     @callback
-    def async_on_demand_update(self) -> None:
-        """Update state."""
-        self._device = self._router.devices[self._device.mac]
-        self._attr_hostname = self.hostname
-        self._attr_ip_address = self.ip_address
-        self.async_write_ha_state()
-
-    async def async_added_to_hass(self) -> None:
-        """Register state update callback."""
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                self._router.signal_device_update,
-                self.async_on_demand_update,
-            )
-        )
+    def _handle_coordinator_update(self) -> None:
+        """Update state when coordinator refreshes."""
+        if self._device.mac in self.router.devices:
+            self._device = self.router.devices[self._device.mac]
+        super()._handle_coordinator_update()

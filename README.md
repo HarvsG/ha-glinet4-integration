@@ -10,6 +10,9 @@
 
 A Home Assistant custom component for **GL.iNet routers** powered by [their API version 4](https://dev.gl-inet.com/api/) via the [`gli4py`](https://github.com/HarvsG/gli4py) library.
 
+> [!IMPORTANT]
+> This integration requires **Python 3.14** or later (uses [PEP 758](https://peps.python.org/pep-0758/) exception syntax).
+
 > [!NOTE]
 > GL.iNet no longer publicly documents API v4, so the longevity of this integration relies on API reverse-engineering and may change across future firmware versions.
 > Contributions are warmly welcomed! See the [TODO list](#todo) or search for `#TODO` comments across the codebase.
@@ -61,6 +64,10 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 - **Re-authentication**: Automatic notification and re-auth flow when the router's login password changes.
 - **Reconfiguration**: Easily modify host URL or connection parameters without re-creating entities.
 - **Options Flow**: Adjust the "Consider Home" presence threshold and configure "Randomized-MAC devices" handling anytime without restarting Home Assistant.
+- **Data Updates & Polling**: Uses Home Assistant's standard `DataUpdateCoordinator` with tiered polling:
+  - **Fast tier (30 seconds)**: System status, WAN interface states, and connected client presence.
+  - **Slow tier (60 seconds)**: Wi-Fi interface configurations, VPN connection states, LED state, and non-configured endpoint probes (probed at startup only).
+  - **Dynamic Entity Discovery**: Newly discovered client devices and WAN interfaces are registered automatically on poll without reloading.
 - **Diagnostics**: Full diagnostic support with automatic redaction of passwords, MACs, and tokens.
 
 ---
@@ -149,7 +156,7 @@ If you want to contribute to this integration:
 
 ### 🏗️ Architecture & Core
 
-- [ ] **Migrate to `DataUpdateCoordinator`**: Refactor `GLinetRouter` away from custom `async_track_time_interval` polling and manual dispatcher signals to Home Assistant's standard `DataUpdateCoordinator` pattern (including tiered polling rates for high-frequency device trackers vs low-frequency status endpoints).
+- [x] **Migrate to `DataUpdateCoordinator`**: Refactor `GLinetRouter` away from custom `async_track_time_interval` polling and manual dispatcher signals to Home Assistant's standard `DataUpdateCoordinator` pattern (including tiered polling rates for high-frequency device trackers vs low-frequency status endpoints).
 - [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
 - [ ] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
 - [x] **Strict Typing**: Add complete typing to upstream [`gli4py`](https://github.com/HarvsG/gli4py) and enforce strict typing with `mypy --strict` in CI.

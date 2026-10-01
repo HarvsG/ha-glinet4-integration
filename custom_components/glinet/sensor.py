@@ -16,9 +16,10 @@ from homeassistant.components.sensor import (
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
 
+from .coordinator import GLinetStatusCoordinator
+from .entity import GLinetEntity
 from .wan import (
     STATE_CONNECTED,
     STATE_DISCONNECTED,
@@ -36,9 +37,12 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
     from homeassistant.helpers.typing import StateType
 
-    from .router import ClientCounts, GLinetConfigEntry, GLinetRouter
+    from .coordinator import GLinetConfigEntry
+    from .router import ClientCounts
 
 _LOGGER = logging.getLogger(__name__)
+
+PARALLEL_UPDATES = 0
 
 
 class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=True):
@@ -162,15 +166,15 @@ async def async_setup_entry(
     """Set up sensors."""
     _LOGGER.debug("Setting up GL-iNet Sensors")
 
-    router = entry.runtime_data
+    coordinator: GLinetStatusCoordinator = entry.runtime_data.coordinator
     sensors: list[SystemStatusSensor | SystemUptimeSensor] = [
-        SystemStatusSensor(router=router, entity_description=description)
+        SystemStatusSensor(coordinator=coordinator, entity_description=description)
         for description in SYSTEM_SENSORS
     ]
     # Special case for uptime as it requires additional data processing
     sensors.append(
         SystemUptimeSensor(
-            router=router,
+            coordinator=coordinator,
             entity_description=SystemStatusEntityDescription(
                 key="uptime",
                 translation_key="uptime",
@@ -186,22 +190,23 @@ async def async_setup_entry(
     # temperature), but only when we have status data to judge by: if the
     # first poll failed, dropping every sensor would leave them all missing
     # until the entry is reloaded.
-    if router.system_status.get("uptime") is not None:
+    if coordinator.data.system_status.get("uptime") is not None:
         sensors = [sensor for sensor in sensors if sensor.native_value is not None]
 
-    async_add_entities(sensors, True)
+    async_add_entities(sensors)
 
     async_add_entities(
-        ClientCountSensor(router, description) for description in CLIENT_COUNT_SENSORS
+        ClientCountSensor(coordinator, description)
+        for description in CLIENT_COUNT_SENSORS
     )
 
-    await _setup_wan_sensors(hass, entry, router, async_add_entities)
+    await _setup_wan_sensors(hass, entry, coordinator, async_add_entities)
 
 
 async def _setup_wan_sensors(
     hass: HomeAssistant,
     entry: GLinetConfigEntry,
-    router: GLinetRouter,
+    coordinator: GLinetStatusCoordinator,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Register WAN sensors from registry + currently-up interfaces, then subscribe."""
@@ -210,6 +215,7 @@ async def _setup_wan_sensors(
         entity_registry, entry.entry_id
     )
 
+    router = coordinator.router
     wan_unique_id_prefix = f"glinet_sensor/{router.factory_mac}/wan_"
     persisted_interfaces: set[str] = set()
     for reg_entry in registry_entries:
@@ -219,23 +225,39 @@ async def _setup_wan_sensors(
             continue
         persisted_interfaces.add(reg_entry.unique_id[len(wan_unique_id_prefix) :])
 
-    currently_up = {name for name, state in router.wan_status.items() if state.up}
+    currently_up = {
+        name for name, state in coordinator.data.wan_status.items() if state.up
+    }
 
     initial_interfaces = persisted_interfaces | currently_up
     router.register_known_wan_interfaces(initial_interfaces)
     if initial_interfaces:
         async_add_entities(
-            [WanStatusSensor(router, iface) for iface in sorted(initial_interfaces)]
+            [
+                WanStatusSensor(coordinator, iface)
+                for iface in sorted(initial_interfaces)
+            ]
         )
 
     @callback
-    def _handle_new_wan(new_interfaces: list[str]) -> None:
+    def _check_wan_interfaces() -> None:
         """Add entities for newly-discovered up interfaces."""
-        async_add_entities([WanStatusSensor(router, iface) for iface in new_interfaces])
+        new_interfaces = {
+            iface
+            for iface, state in coordinator.data.wan_status.items()
+            if state.up and iface not in initial_interfaces
+        }
+        if new_interfaces:
+            initial_interfaces.update(new_interfaces)
+            router.register_known_wan_interfaces(new_interfaces)
+            async_add_entities(
+                [
+                    WanStatusSensor(coordinator, iface)
+                    for iface in sorted(new_interfaces)
+                ]
+            )
 
-    entry.async_on_unload(
-        async_dispatcher_connect(hass, router.signal_wan_new, _handle_new_wan)
-    )
+    entry.async_on_unload(coordinator.async_add_listener(_check_wan_interfaces))
 
 
 # Minimum movement in the derived boot time before a new timestamp is committed
@@ -253,37 +275,31 @@ def _boot_time_changed(old: datetime | None, new: datetime) -> bool:
     return old is None or abs(new - old) > UPTIME_DEVIATION
 
 
-class GliSensorBase(SensorEntity):
+class GliSensorBase(GLinetEntity[GLinetStatusCoordinator], SensorEntity):
     """GL-iNet sensor base class."""
-
-    _attr_has_entity_name = True
 
     def __init__(
         self,
-        router: GLinetRouter,
+        coordinator: GLinetStatusCoordinator,
         entity_description: SystemStatusEntityDescription,
     ) -> None:
         """Initialize the sensor class."""
-        self.router = router
+        super().__init__(coordinator)
         self.entity_description: SystemStatusEntityDescription = entity_description
-        self._attr_device_info = router.device_info
 
     @property
     def unique_id(self) -> str:
-        """Return the unique id of the switch."""
+        """Return the unique id of the sensor."""
         return f"glinet_sensor/{self.router.factory_mac}/system_{self.entity_description.key}"
-
-    @property
-    def available(self) -> bool:
-        """Return True when the router is reachable."""
-        return self.router.available
 
     @property
     def extra_state_attributes(self) -> dict[str, StateType | bool] | None:
         """Return the state attributes."""
         if self.entity_description.extra_attributes_fn is None:
             return None
-        return self.entity_description.extra_attributes_fn(self.router.system_status)
+        return self.entity_description.extra_attributes_fn(
+            self.coordinator.data.system_status
+        )
 
 
 class SystemStatusSensor(GliSensorBase):
@@ -292,7 +308,7 @@ class SystemStatusSensor(GliSensorBase):
     @property
     def native_value(self) -> int | float | None:
         """Return the native value of the sensor."""
-        return self.entity_description.value_fn(self.router.system_status)
+        return self.entity_description.value_fn(self.coordinator.data.system_status)
 
 
 class SystemUptimeSensor(GliSensorBase):
@@ -311,7 +327,7 @@ class SystemUptimeSensor(GliSensorBase):
     @property
     def native_value(self) -> datetime | None:
         """Return the cached boot timestamp, recomputing only on fresh data."""
-        if (uptime := self.router.system_status.get("uptime")) is None:
+        if (uptime := self.coordinator.data.system_status.get("uptime")) is None:
             return self._attr_native_value
 
         if uptime != self._last_uptime:
@@ -329,32 +345,27 @@ _ICON_FOR_WAN_STATE: dict[str, str] = {
 }
 
 
-class WanStatusSensor(SensorEntity):
+class WanStatusSensor(GLinetEntity[GLinetStatusCoordinator], SensorEntity):
     """Sensor showing the connectivity state of one WAN interface."""
 
-    _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [STATE_CONNECTED, STATE_FAILING, STATE_DISCONNECTED]
     _attr_translation_key = "wan_status"
 
-    def __init__(self, router: GLinetRouter, interface: str) -> None:
+    def __init__(self, coordinator: GLinetStatusCoordinator, interface: str) -> None:
         """Initialise a WAN status sensor for the given interface name."""
-        self._router = router
+        super().__init__(coordinator)
         self._interface = interface
-        self._attr_unique_id = f"glinet_sensor/{router.factory_mac}/wan_{interface}"
+        self._attr_unique_id = (
+            f"glinet_sensor/{self.router.factory_mac}/wan_{interface}"
+        )
         self._attr_name = friendly_name(interface)
-        self._attr_device_info = router.device_info
-
-    @property
-    def available(self) -> bool:
-        """Return True when the router is reachable."""
-        return self._router.available
 
     @property
     def native_value(self) -> str:
         """Return one of connected / failing / disconnected."""
-        state = self._router.wan_status.get(self._interface)
+        state = self.coordinator.data.wan_status.get(self._interface)
         if state is None:
             return STATE_DISCONNECTED
         return state_for(up=state.up, online=state.online)
@@ -367,26 +378,11 @@ class WanStatusSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, StateType | bool]:
         """Expose raw interface name and link-layer state."""
-        state = self._router.wan_status.get(self._interface)
+        state = self.coordinator.data.wan_status.get(self._interface)
         return {
             "interface": self._interface,
             "up": state.up if state else False,
         }
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to the router's per-poll WAN-update signal."""
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                self._router.signal_wan_update,
-                self._handle_update,
-            )
-        )
-
-    @callback
-    def _handle_update(self) -> None:
-        """Re-render this entity's state."""
-        self.async_write_ha_state()
 
 
 class ClientCountEntityDescription(SensorEntityDescription, frozen_or_thawed=True):
@@ -437,54 +433,36 @@ CLIENT_COUNT_SENSORS: tuple[ClientCountEntityDescription, ...] = (
 )
 
 
-class ClientCountSensor(SensorEntity):
+class ClientCountSensor(GLinetEntity[GLinetStatusCoordinator], SensorEntity):
     """A count of connected clients (total, or by connection type)."""
 
-    _attr_has_entity_name = True
     entity_description: ClientCountEntityDescription
 
     def __init__(
-        self, router: GLinetRouter, description: ClientCountEntityDescription
+        self,
+        coordinator: GLinetStatusCoordinator,
+        description: ClientCountEntityDescription,
     ) -> None:
         """Initialise the client-count sensor."""
-        self._router = router
+        super().__init__(coordinator)
         self.entity_description = description
-        self._attr_device_info = router.device_info
-        self._attr_unique_id = f"glinet_sensor/{router.factory_mac}/{description.key}"
-
-    @property
-    def available(self) -> bool:
-        """Return True when the router is reachable."""
-        return self._router.available
+        self._attr_unique_id = (
+            f"glinet_sensor/{self.router.factory_mac}/{description.key}"
+        )
 
     @property
     def native_value(self) -> int:
         """Return the client count for this sensor."""
-        return self.entity_description.value_fn(self._router.client_counts)
+        return self.entity_description.value_fn(self.coordinator.data.client_counts)
 
     @property
     def extra_state_attributes(self) -> dict[str, int] | None:
         """Expose the wired/wireless/guest split on the total sensor."""
         if not self.entity_description.with_breakdown:
             return None
-        counts = self._router.client_counts
+        counts = self.coordinator.data.client_counts
         return {
             "wired": counts.wired,
             "wireless": counts.wireless,
             "guest": counts.guest,
         }
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to the router's per-poll device-update signal."""
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                self._router.signal_device_update,
-                self._handle_update,
-            )
-        )
-
-    @callback
-    def _handle_update(self) -> None:
-        """Re-render this entity's state on each poll."""
-        self.async_write_ha_state()
