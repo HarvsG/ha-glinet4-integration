@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from gli4py.models import RouterStatusResponse, SystemStatusMetrics, SystemStatusNetwork
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -66,13 +67,13 @@ async def test_wan_sensor_integration(
     assert router is not None
 
     # Update router network status with active WAN interfaces
-    mock_status = {
-        "system": {"uptime": 1000},
-        "network": [
-            {"interface": "wan", "up": True, "online": True},
-            {"interface": "secondwan", "up": True, "online": False},
+    mock_status: RouterStatusResponse = RouterStatusResponse(
+        system=SystemStatusMetrics(uptime=1000),
+        network=[
+            SystemStatusNetwork(interface="wan", up=True, online=True),
+            SystemStatusNetwork(interface="secondwan", up=True, online=False),
         ],
-    }
+    )
     mock_api.router_get_status.side_effect = None
     mock_api.router_get_status.return_value = mock_status
 
