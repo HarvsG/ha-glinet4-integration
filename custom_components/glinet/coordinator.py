@@ -86,7 +86,7 @@ class GLinetBaseCoordinator[T](DataUpdateCoordinator[T]):
         except ConfigEntryAuthFailed as exc:
             self._consecutive_auth_errors += 1
             if self._consecutive_auth_errors < MAX_CONSECUTIVE_AUTH_FAILURES:
-                _LOGGER.warning(
+                _LOGGER.info(
                     "GL-iNet router %s auth failed (attempt %d/%d); will retry before prompting re-authentication",
                     self.router.host,
                     self._consecutive_auth_errors,
@@ -95,7 +95,7 @@ class GLinetBaseCoordinator[T](DataUpdateCoordinator[T]):
                 raise UpdateFailed(
                     f"Authentication failed for {self.router.host} (attempt {self._consecutive_auth_errors}/{MAX_CONSECUTIVE_AUTH_FAILURES})"
                 ) from exc
-            _LOGGER.error(  # noqa: TRY400
+            _LOGGER.warning(
                 "GL-iNet router %s failed authentication %d consecutive times; requesting re-authentication",
                 self.router.host,
                 self._consecutive_auth_errors,
