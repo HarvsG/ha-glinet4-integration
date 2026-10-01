@@ -66,7 +66,7 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 - **Options Flow**: Adjust the "Consider Home" presence threshold and configure "Randomized-MAC devices" handling anytime without restarting Home Assistant.
 - **Data Updates & Polling**: Uses Home Assistant's standard `DataUpdateCoordinator` with tiered polling:
   - **Fast tier (30 seconds)**: System status, WAN interface states, and connected client presence.
-  - **Slow tier (5 minutes)**: Wi-Fi interface configurations, WireGuard client list, LED configuration, and non-configured endpoint probes.
+  - **Slow tier (60 seconds)**: Wi-Fi interface configurations, VPN connection states, LED state, and non-configured endpoint probes (probed at startup only).
   - **Dynamic Entity Discovery**: Newly discovered client devices and WAN interfaces are registered automatically on poll without reloading.
 - **Diagnostics**: Full diagnostic support with automatic redaction of passwords, MACs, and tokens.
 

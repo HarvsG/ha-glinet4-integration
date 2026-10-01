@@ -37,10 +37,10 @@ async def async_setup_entry(
     router: GLinetRouter = coordinator.router
     switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch | LedSwitch] = []
     if router.wireguard_clients:
-        switches = [
+        switches.extend(
             WireGuardSwitch(coordinator, client)
             for client in router.wireguard_clients.values()
-        ]
+        )
     if router.tailscale_configured:
         switches.append(TailscaleSwitch(coordinator))
     for iface_name, iface in router.wifi_ifaces.items():
