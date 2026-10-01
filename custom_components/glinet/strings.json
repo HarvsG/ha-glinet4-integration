@@ -86,6 +86,7 @@
       "flash_use": { "name": "Flash usage" },
       "uptime": { "name": "Uptime" },
       "wan_status": {
+        "name": "WAN status",
         "state": {
           "connected": "Connected",
           "failing": "Failing",
