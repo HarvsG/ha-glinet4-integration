@@ -71,6 +71,8 @@ async def mock_api(hass: HomeAssistant, mock_router: MockRouter) -> MockGLinet:
         "router_info",
         "router_get_status",
         "connected_clients",
+        "all_clients",
+        "disconnected_clients",
         "wifi_ifaces_get",
         "wireguard_client_list",
         "wireguard_client_state",

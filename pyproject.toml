@@ -17,7 +17,7 @@ dependencies = [
 dev = [
     "codespell>=2.4.3",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
-    "gli4py[mock]==0.1.0-beta.5",
+    "gli4py[mock]==0.1.0-beta.6",
     "homeassistant-stubs==2026.9.4",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
@@ -28,6 +28,9 @@ dev = [
     "pytest-homeassistant-custom-component==0.13.367",
     "ruff>=0.16.9",
 ]
+
+[tool.uv.sources]
+gli4py = { path = "../gli4py", editable = true }
 
 [tool.hatch.version]
 source = "vcs"

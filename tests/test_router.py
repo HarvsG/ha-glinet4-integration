@@ -513,8 +513,8 @@ async def test_empty_client_list_ignored_during_reboot_grace(
 
     # Set router uptime to low value (within grace period)
     router._system_status["uptime"] = 30
-    mock_api.connected_clients.side_effect = None
-    mock_api.connected_clients.return_value = {}
+    mock_api.all_clients.side_effect = None
+    mock_api.all_clients.return_value = {}
 
     await router.update_device_trackers()
     assert test_device.is_connected
@@ -535,8 +535,8 @@ async def test_empty_client_list_processed_after_reboot_grace(
 
     # Set router uptime beyond grace period
     router._system_status["uptime"] = 1000
-    mock_api.connected_clients.side_effect = None
-    mock_api.connected_clients.return_value = {}
+    mock_api.all_clients.side_effect = None
+    mock_api.all_clients.return_value = {}
 
     await router.update_device_trackers()
     assert router.connected_devices_count == 0
@@ -739,8 +739,8 @@ async def test_update_device_trackers_empty_response_during_startup(
     """Test empty payload from connected_clients exits cleanly without wiping known devices."""
     router: GLinetRouter = init_integration.runtime_data.router
     assert router.devices
-    mock_api.connected_clients.side_effect = None
-    mock_api.connected_clients.return_value = {}
+    mock_api.all_clients.side_effect = None
+    mock_api.all_clients.return_value = {}
 
     await router.update_device_trackers()
     # Devices are retained (no wipe on empty response with non-zero uptime)
@@ -912,8 +912,8 @@ async def test_update_device_trackers_skips_unassigned_client(
 ) -> None:
     """Test update_device_trackers skips unassigned new client with asterisk name."""
     router: GLinetRouter = init_integration.runtime_data.router
-    mock_api.connected_clients.side_effect = None
-    mock_api.connected_clients.return_value = {
+    mock_api.all_clients.side_effect = None
+    mock_api.all_clients.return_value = {
         "aa:bb:cc:dd:ee:99": {"name": "*", "ip": "192.168.8.199"}
     }
 

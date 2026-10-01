@@ -959,23 +959,29 @@ wheels = [
 
 [[package]]
 name = "gli4py"
-version = "0.1.0b5"
-source = { registry = "https://pypi.org/simple" }
+version = "0.1.0b6"
+source = { editable = "../gli4py" }
 dependencies = [
     { name = "libpass" },
     { name = "mashumaro" },
     { name = "semver" },
     { name = "uplink" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/db/69/c14d7b9eb702e7501173a48348898e719a43b2accd8beb4ef4c7c4c3d026/gli4py-0.1.0b5.tar.gz", hash = "sha256:1f4f0642c7c3a46bba650b9f15efde7817069ca5afad68d3fdf18742d0c85482", size = 50876, upload-time = "2026-09-28T18:22:18.433Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/4c/92eef326f4e76bc7f30dec7020363d3ff7f4762addbe26fc7cdeb49a52a3/gli4py-0.1.0b5-py3-none-any.whl", hash = "sha256:7d8c79a79d514f84cb6be81e5d49a75af22cc60424cba12bda1ab4150f1a80ca", size = 59751, upload-time = "2026-09-28T18:22:17.272Z" },
-]
 
 [package.optional-dependencies]
 mock = [
     { name = "aiohttp" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", marker = "extra == 'mock'", specifier = ">=3.8.4" },
+    { name = "libpass", specifier = ">=1.8.0,<2.0.0" },
+    { name = "mashumaro", specifier = ">=3.14" },
+    { name = "semver", specifier = ">=3.0.0,<4.0.0" },
+    { name = "uplink", specifier = "==0.10.0" },
+]
+provides-extras = ["mock"]
 
 [[package]]
 name = "glinet"
@@ -1003,7 +1009,7 @@ requires-dist = [{ name = "homeassistant", specifier = ">=2025.9.0" }]
 [package.metadata.requires-dev]
 dev = [
     { name = "codespell", specifier = ">=2.4.3" },
-    { name = "gli4py", extras = ["mock"], specifier = "==0.1.0b5" },
+    { name = "gli4py", extras = ["mock"], editable = "../gli4py" },
     { name = "homeassistant-stubs", specifier = "==2026.9.4" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pre-commit", specifier = ">=4.6.2" },

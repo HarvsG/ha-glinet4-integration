@@ -6,8 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING, Any, Self, TypeVar, cast
-from unittest.mock import DEFAULT
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 import aiohttp
 from gli4py import GLinet
@@ -499,54 +498,9 @@ class GLinetRouter:
     async def update_device_trackers(self) -> None:
         """Update the device trackers."""
 
-        is_connected_clients_mocked = (
-            getattr(self._api.connected_clients, "_mock_side_effect", None) is not None
-        ) or (
-            getattr(self._api.connected_clients, "_mock_return_value", DEFAULT)
-            != DEFAULT
-        )
-
-        if is_connected_clients_mocked:
-            raw_clients = cast(
-                "Any", await self._update_platform(self._api.connected_clients)
-            )
-        else:
-            raw_clients = cast(
-                "Any", await self._update_platform(self._api.list_all_clients)
-            )
-            if raw_clients is None:
-                raw_clients = cast(
-                    "Any", await self._update_platform(self._api.connected_clients)
-                )
-
-        if raw_clients is None:
+        wrt_devices = await self._update_platform(self._api.all_clients)
+        if wrt_devices is None:
             return
-
-        wrt_devices: dict[str, ClientEntry] = {}
-        if hasattr(raw_clients, "clients"):
-            for client in getattr(raw_clients, "clients", []):
-                mac = getattr(client, "mac", None) or (
-                    client.get("mac") if isinstance(client, dict) else None
-                )
-                if mac:
-                    wrt_devices[mac] = client
-        elif isinstance(raw_clients, dict):
-            if "clients" in raw_clients and isinstance(raw_clients["clients"], list):
-                for client in raw_clients["clients"]:
-                    mac = getattr(client, "mac", None) or (
-                        client.get("mac") if isinstance(client, dict) else None
-                    )
-                    if mac:
-                        wrt_devices[mac] = client
-            else:
-                wrt_devices = raw_clients
-        elif isinstance(raw_clients, list):
-            for client in raw_clients:
-                mac = getattr(client, "mac", None) or (
-                    client.get("mac") if isinstance(client, dict) else None
-                )
-                if mac:
-                    wrt_devices[mac] = client
 
         uptime = self._system_status.get("uptime")
         if (

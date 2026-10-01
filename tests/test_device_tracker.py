@@ -100,7 +100,7 @@ async def test_tracker_goes_not_home_after_consider_home(
 
     # The device disappears, but the client list must stay non-empty
     remaining = {"B8:27:EB:44:55:66": deepcopy(MOCK_CLIENTS["B8:27:EB:44:55:66"])}
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(remaining)
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(remaining)
 
     # 31s elapsed: within the 180s consider_home window
     await _tick(hass, freezer)
@@ -142,7 +142,7 @@ async def test_new_device_mid_poll_creates_entity(
         "online": True,
         "type": 0,
     }
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     await _tick(hass, freezer)
     state = hass.states.get(_entity_id(hass, "00:bb:cc:dd:ee:03"))
@@ -200,7 +200,7 @@ async def test_device_with_no_name_tracked(
         "online": True,
         "type": 0,
     }
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     await _setup_with_known_devices(
         hass,
@@ -235,7 +235,7 @@ async def test_randomized_mac_ignored_by_default(
         "online": True,
         "type": 1,
     }
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     mock_config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -261,7 +261,7 @@ async def test_randomized_mac_disabled_option(
         "online": True,
         "type": 1,
     }
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     mock_config_entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(
@@ -295,7 +295,7 @@ async def test_randomized_mac_enabled_option(
         "online": True,
         "type": 1,
     }
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     mock_config_entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(
@@ -330,9 +330,7 @@ async def test_device_tracker_live_attributes_update(
     updated_clients = deepcopy(MOCK_CLIENTS)
     updated_clients[mac]["ip"] = "192.168.1.200"
     updated_clients[mac]["alias"] = "New HA Name"
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(
-        updated_clients
-    )
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(updated_clients)
 
     await _tick(hass, freezer)
 
@@ -368,7 +366,7 @@ async def test_restored_device_tracker_name_preserved_on_unassigned_update(
         "online": True,
         "type": 2,
     }
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
@@ -427,7 +425,7 @@ async def test_stale_device_omitted_from_clients_is_pruned_and_deleted(
     # Omit mac from connected_clients response
     clients = deepcopy(MOCK_CLIENTS)
     clients.pop(mac, None)
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     # User deletes the entity from entity registry
     entity_reg.async_remove(entity_id)
@@ -468,7 +466,7 @@ async def test_offline_device_retains_metadata_and_marked_not_home(
     # Router reports client with online: False
     clients = deepcopy(MOCK_CLIENTS)
     clients[mac]["online"] = False
-    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     # Tick past consider_home (180s)
     freezer.tick(timedelta(seconds=190))
