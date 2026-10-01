@@ -446,3 +446,38 @@ async def test_stale_device_omitted_from_clients_is_pruned_and_deleted(
     await mock_config_entry.runtime_data.coordinator.async_refresh()
     await hass.async_block_till_done()
     assert entity_reg.async_get_entity_id("device_tracker", DOMAIN, mac) is None
+
+
+async def test_offline_device_retains_metadata_and_marked_not_home(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test that a device returned with online: False by the router becomes not_home without being orphaned."""
+    mac = "00:1E:67:A1:B2:C3"
+    await _setup_with_known_devices(hass, mock_config_entry, [mac])
+
+    router: GLinetRouter = mock_config_entry.runtime_data.router
+    entity_id = _entity_id(hass, mac)
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_HOME
+
+    # Router reports client with online: False
+    clients = deepcopy(MOCK_CLIENTS)
+    clients[mac]["online"] = False
+    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
+    # Tick past consider_home (180s)
+    freezer.tick(timedelta(seconds=190))
+    await mock_config_entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    # Device state is NOT_HOME (away), metadata preserved, device stays in router.devices
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_NOT_HOME
+    assert state.attributes.get("ip") == "192.168.1.20"
+    assert mac in router.devices
