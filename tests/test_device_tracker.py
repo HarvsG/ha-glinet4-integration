@@ -578,3 +578,42 @@ async def test_multiple_offline_restored_devices_tracked_on_setup(
     assert state2 is not None
     assert state1.state == STATE_NOT_HOME
     assert state2.state == STATE_NOT_HOME
+
+
+async def test_omitted_unavailable_device_ui_deletion_persistence(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test that an omitted device becomes unavailable and stays deleted when removed via UI."""
+    mac = "00:1E:67:A1:B2:C3"
+    await _setup_with_known_devices(hass, mock_config_entry, [mac])
+    entity_id = _entity_id(hass, mac)
+
+    state = hass.states.get(entity_id)
+    assert state is not None
+
+    # Router now omits this device completely
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: {}
+
+    # Tick past consider_home (180s)
+    await _tick(hass, freezer, seconds=200)
+
+    # State is UNAVAILABLE, enabling the Delete button on entity More Info page
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_UNAVAILABLE
+
+    # User clicks Delete in HA UI (removes entity from entity registry)
+    registry = er.async_get(hass)
+    registry.async_remove(entity_id)
+    await hass.async_block_till_done()
+
+    # Entity state is removed from state machine
+    assert hass.states.get(entity_id) is None
+
+    # Subsequent poll does NOT re-create the deleted entity
+    await _tick(hass, freezer, seconds=31)
+    assert hass.states.get(entity_id) is None

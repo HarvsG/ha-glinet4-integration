@@ -85,7 +85,13 @@ class GLinetDevice(CoordinatorEntity[GLinetStatusCoordinator], ScannerEntity):
         """Handle entity addition to hass."""
         await super().async_added_to_hass()
         if (tracked := self._tracked) is not None:
-            self.async_on_remove(lambda: tracked.discard(self._attr_mac_address))
+
+            def _on_remove() -> None:
+                tracked.discard(self._attr_mac_address)
+                self.router.devices.pop(self._attr_mac_address, None)
+                self.router.devices.pop(self._attr_mac_address.lower(), None)
+
+            self.async_on_remove(_on_remove)
 
     @property
     def name(self) -> str:

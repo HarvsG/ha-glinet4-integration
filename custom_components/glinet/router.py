@@ -522,7 +522,9 @@ class GLinetRouter:
                 dev_info is None
                 and not device.is_connected
                 and not device.available
-                and not registry.async_get_entity_id(TRACKER_DOMAIN, DOMAIN, device_mac)
+                and not registry.async_get_entity_id(
+                    TRACKER_DOMAIN, DOMAIN, device_mac.lower()
+                )
             ):
                 del self._devices[device_mac]
 
