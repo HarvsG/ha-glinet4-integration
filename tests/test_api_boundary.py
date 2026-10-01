@@ -210,3 +210,62 @@ def test_dict_str_any_checker_detects_violations() -> None:
     violations = _check_source_for_dict_str_any(bad_code, "test.py")
     assert len(violations) == 1
     assert "Prohibited 'dict[str, Any]' found" in violations[0]
+
+
+MODEL_TARGET_NAMES = frozenset(
+    {
+        "system_status",
+        "dev_info",
+        "client",
+        "iface",
+        "network",
+        "status_item",
+        "tailscale_config",
+    }
+)
+
+
+def _check_source_for_model_get_calls(
+    source_code: str, filename: str = "module.py"
+) -> list[str]:
+    """Scan Python source code for occurrences of .get() calls on model objects."""
+    violations: list[str] = []
+    tree = ast.parse(source_code, filename=filename)
+
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+        ):
+            target = node.func.value
+            target_name = ""
+            if isinstance(target, ast.Name):
+                target_name = target.id
+            elif isinstance(target, ast.Attribute):
+                target_name = target.attr
+
+            if target_name in MODEL_TARGET_NAMES:
+                violations.append(
+                    f"{filename}:{node.lineno} Prohibited '.get()' call on model object '{target_name}'. "
+                    "Access typed attributes directly (e.g. obj.attr) instead of using .get()."
+                )
+    return violations
+
+
+def test_no_model_get_calls_in_integration() -> None:
+    """Ensure integration modules do not use .get() on gli4py response model objects."""
+    all_violations: list[str] = []
+
+    py_files = sorted(PACKAGE_ROOT.glob("**/*.py"))
+    assert len(py_files) > 0, "No python source files found to check"
+
+    for py_file in py_files:
+        code = py_file.read_text(encoding="utf-8")
+        all_violations.extend(_check_source_for_model_get_calls(code, py_file.name))
+
+    assert not all_violations, (
+        "Prohibited .get() calls on model objects found in integration code:\n"
+        + "\n".join(f"  - {v}" for v in all_violations)
+        + "\n\nAccess typed attributes directly (e.g. obj.attr) instead of using .get()."
+    )

@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from freezegun.api import FrozenDateTimeFactory
-from gli4py.models import RouterStatusResponse
+from gli4py.models import RouterStatusResponse, SystemStatusCpu, SystemStatusNetwork
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -147,8 +147,8 @@ async def test_cpu_temp_sensor_when_reported(
     mock_api: MagicMock,
 ) -> None:
     """Test cpu_temp sensor is created and reports value when router reports cpu."""
-    status: dict[str, Any] = deepcopy(MOCK_STATUS)
-    status["system"]["cpu"] = {"temperature": 42.5}
+    status = deepcopy(MOCK_STATUS)
+    status.system.cpu = SystemStatusCpu(temperature=42.5)
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(status)
 
     mock_config_entry.add_to_hass(hass)
@@ -180,8 +180,8 @@ async def test_missing_cpu_temp_filters_sensor(
     mock_api: MagicMock,
 ) -> None:
     """Test a sensor the router does not report is not created."""
-    status: dict[str, Any] = deepcopy(MOCK_STATUS)
-    status["system"].pop("cpu", None)
+    status = deepcopy(MOCK_STATUS)
+    status.system.cpu = None
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(status)
 
     mock_config_entry.add_to_hass(hass)
@@ -255,14 +255,14 @@ async def test_uptime_moves_after_reboot(
     initial = state.state
 
     reboot_boot_time = dt_util.utcnow() - timedelta(seconds=5)
-    status: dict[str, Any] = deepcopy(MOCK_STATUS)
-    mock_api.router_get_status.side_effect = lambda *_a, **_kw: {
-        **status,
-        "system": {
-            **status["system"],
-            "uptime": (dt_util.utcnow() - reboot_boot_time).total_seconds(),
-        },
-    }
+    status = deepcopy(MOCK_STATUS)
+
+    def _status_with_reboot(*_a: Any, **_kw: Any) -> RouterStatusResponse:
+        s = deepcopy(status)
+        s.system.uptime = (dt_util.utcnow() - reboot_boot_time).total_seconds()
+        return s
+
+    mock_api.router_get_status.side_effect = _status_with_reboot
 
     # Two ticks guarantee that both the router poll and entity poll fire
     await _tick(hass, freezer)
@@ -323,7 +323,9 @@ async def test_wan_sensor_setup_from_registry_and_initial_up(
     )
 
     mock_status = deepcopy(MOCK_STATUS)
-    mock_status["network"] = [{"interface": "wan", "up": True, "online": True}]
+    mock_status.network = [
+        SystemStatusNetwork.from_dict({"interface": "wan", "up": True, "online": True})
+    ]
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(mock_status)
 
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)

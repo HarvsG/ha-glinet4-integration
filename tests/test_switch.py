@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import timedelta
-from typing import cast
 from unittest.mock import MagicMock, call
 
 from freezegun.api import FrozenDateTimeFactory
@@ -369,32 +368,29 @@ async def test_tailscale_switch_lan_access(
     router = coordinator.router
     switch = TailscaleSwitch(coordinator)
 
-    router._tailscale_config = {
-        "enabled": True,
-        "lan_enabled": True,
-        "lan_ip": "100.64.0.1",
-        "wan_enabled": False,
-    }
+    router._tailscale_config = TailscaleConfigResponse.from_dict(
+        {
+            "enabled": True,
+            "lan_enabled": True,
+            "lan_ip": "100.64.0.1",
+            "wan_enabled": False,
+        }
+    )
     assert switch.lan_access is True
     assert switch.extra_state_attributes == {"lan_access": True}
 
-    router._tailscale_config = {
-        "enabled": True,
-        "lan_enabled": False,
-        "lan_ip": "100.64.0.1",
-        "wan_enabled": False,
-    }
+    router._tailscale_config = TailscaleConfigResponse.from_dict(
+        {
+            "enabled": True,
+            "lan_enabled": False,
+            "lan_ip": "100.64.0.1",
+            "wan_enabled": False,
+        }
+    )
     assert switch.lan_access is False
     assert switch.extra_state_attributes == {"lan_access": False}
 
     router._tailscale_config = None
-    assert switch.lan_access is None
-    assert switch.extra_state_attributes == {}
-
-    router._tailscale_config = cast(
-        "TailscaleConfigResponse",
-        {"enabled": True, "lan_ip": "100.64.0.1", "wan_enabled": False},
-    )
     assert switch.lan_access is None
     assert switch.extra_state_attributes == {}
 
