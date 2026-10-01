@@ -1,0 +1,67 @@
+{
+  "entity": {
+    "sensor": {
+      "connected_clients": {
+        "default": "mdi:devices"
+      },
+      "wired_clients": {
+        "default": "mdi:ethernet"
+      },
+      "wireless_clients": {
+        "default": "mdi:wifi"
+      },
+      "guest_clients": {
+        "default": "mdi:account-multiple"
+      },
+      "cpu_temp": {
+        "default": "mdi:thermometer"
+      },
+      "load_avg1": {
+        "default": "mdi:cpu-64-bit"
+      },
+      "load_avg5": {
+        "default": "mdi:cpu-64-bit"
+      },
+      "load_avg15": {
+        "default": "mdi:cpu-64-bit"
+      },
+      "memory_use": {
+        "default": "mdi:memory"
+      },
+      "flash_use": {
+        "default": "mdi:harddisk"
+      },
+      "uptime": {
+        "default": "mdi:clock"
+      },
+      "wan_status": {
+        "default": "mdi:lan-pending",
+        "state": {
+          "connected": "mdi:lan-connect",
+          "failing": "mdi:lan-disconnect",
+          "disconnected": "mdi:lan-pending"
+        }
+      }
+    },
+    "switch": {
+      "tailscale": {
+        "default": "mdi:vpn"
+      },
+      "wireguard_client": {
+        "default": "mdi:vpn"
+      },
+      "led": {
+        "default": "mdi:led-on",
+        "state": {
+          "off": "mdi:led-off",
+          "on": "mdi:led-on"
+        }
+      }
+    },
+    "button": {
+      "reboot": {
+        "default": "mdi:restart"
+      }
+    }
+  }
+}

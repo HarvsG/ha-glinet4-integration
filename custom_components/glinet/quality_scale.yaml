@@ -59,9 +59,11 @@ rules:
   entity-category: done
   entity-device-class: done
   entity-disabled-by-default: done
-  entity-translations: todo
-  exception-translations: todo
-  icon-translations: todo
+  entity-translations: done
+  exception-translations:
+    status: exempt
+    comment: The integration does not register custom actions or raise custom user-facing exceptions.
+  icon-translations: done
   reconfiguration-flow: done
   repair-issues: done
   stale-devices: done
