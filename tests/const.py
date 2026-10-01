@@ -127,6 +127,8 @@ POLLED_METHODS = (
     "connected_clients",
     "wifi_ifaces_get",
     "wireguard_client_list",
+    "wireguard_client_state",
     "tailscale_configured",
+    "tailscale_connection_state",
     "led_get_config",
 )

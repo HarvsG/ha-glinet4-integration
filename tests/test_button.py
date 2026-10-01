@@ -37,3 +37,26 @@ async def test_reboot_button_press(
         BUTTON_DOMAIN, SERVICE_PRESS, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
     mock_api.router_reboot.assert_awaited_once()
+
+
+async def test_reboot_button_press_debounced(
+    hass: HomeAssistant, init_integration: MockConfigEntry, mock_api: MagicMock
+) -> None:
+    """Test pressing the reboot button twice in quick succession only reboots once."""
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "button", DOMAIN, f"glinet_button/{MOCK_MAC}/reboot"
+    )
+    assert entity_id is not None
+
+    # First press triggers reboot
+    await hass.services.async_call(
+        BUTTON_DOMAIN, SERVICE_PRESS, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert mock_api.router_reboot.await_count == 1
+
+    # Second press in quick succession is debounced and ignored
+    await hass.services.async_call(
+        BUTTON_DOMAIN, SERVICE_PRESS, {ATTR_ENTITY_ID: entity_id}, blocking=True
+    )
+    assert mock_api.router_reboot.await_count == 1

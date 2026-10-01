@@ -1,5 +1,9 @@
 """Constants for the GL-iNet integration."""
 
+from __future__ import annotations
+
+from datetime import timedelta
+
 DOMAIN = "glinet"
 DATA_GLINET = "glinet"
 API_PATH = "/rpc"
@@ -10,6 +14,9 @@ GLINET_DEFAULT_USERNAME = "root"
 
 CONF_TITLE = "title"
 DEFAULT_VERIFY_SSL = True
+
+SCAN_INTERVAL = timedelta(seconds=30)
+SLOW_SCAN_INTERVAL = timedelta(seconds=300)
 
 CONF_TRACK_RANDOMIZED_MAC = "track_randomized_mac"
 TRACK_RANDOMIZED_MAC_IGNORE = "ignore"

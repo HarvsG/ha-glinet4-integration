@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
+from time import monotonic
 from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 import aiohttp
@@ -35,9 +36,8 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format_mac
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -46,8 +46,10 @@ from .const import (
     DEFAULT_TRACK_RANDOMIZED_MAC,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
+    SLOW_SCAN_INTERVAL,
     TRACK_RANDOMIZED_MAC_IGNORE,
 )
+from .coordinator import GLinetConfigEntry, GLinetData
 from .utils import adjust_mac, is_randomized_mac, is_ssl_error
 from .wan import WanInterfaceState, parse_network_array
 
@@ -56,18 +58,12 @@ if TYPE_CHECKING:
 
     from gli4py.models import ClientEntry, TailscaleConfigResponse, WifiInterface
 
-    from homeassistant.core import CALLBACK_TYPE, HomeAssistant
+    from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_registry import RegistryEntry
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(seconds=30)
 REBOOT_GRACE_PERIOD: int = 90
-MAX_CONSECUTIVE_AUTH_FAILURES: int = 3
 T = TypeVar("T")
-
-# PEP 695 type aliases are evaluated lazily, so the forward
-# reference to GLinetRouter is resolved when first used
-type GLinetConfigEntry = ConfigEntry[GLinetRouter]  # pylint: disable=used-before-assignment
 
 
 class DeviceInterfaceType(StrEnum):
@@ -242,7 +238,26 @@ class GLinetRouter:
         self._late_init_complete: bool = False
         self._connect_error: bool = False
         self._consecutive_auth_errors: int = 0
-        self._unsub_update: CALLBACK_TYPE | None = None
+
+        # Polling tiers
+        self._last_slow_update: float = 0.0
+        self.slow_scan_interval: timedelta = SLOW_SCAN_INTERVAL
+
+        # Reboot debouncing
+        self._last_reboot: float = -float(REBOOT_GRACE_PERIOD)
+
+    async def async_reboot(self) -> bool:
+        """Send reboot command to router, guarding against serial reboots."""
+        now = monotonic()
+        if now - self._last_reboot < REBOOT_GRACE_PERIOD:
+            _LOGGER.warning(
+                "Ignoring duplicate reboot request for %s; router reboot was requested recently",
+                self._host,
+            )
+            return False
+        self._last_reboot = now
+        await self._api.router_reboot()
+        return True
 
     async def async_init(self) -> None:
         """Set up a GL-iNet router.
@@ -250,6 +265,7 @@ class GLinetRouter:
         Do some late initialization
         """
 
+        # Store an API object for platforms to access
         self._api = self._create_api()
         try:
             await self.renew_token()
@@ -288,7 +304,7 @@ class GLinetRouter:
         self._late_init_complete = True
 
     async def setup(self) -> None:
-        """Load in old and new entities and establish a new session token."""
+        """Load in saved tracker entities from the registry."""
 
         if not self._late_init_complete:
             await self.async_init()
@@ -307,28 +323,17 @@ class GLinetRouter:
                     entry.unique_id, entry.name or entry.original_name
                 )
 
-        # Update device tracker and switch entities
-        await self.update_all()
-
-        # TODO here we ask this to update all on the same scan interval
-        # but in future some sensors e.g WANip need to update less regularly than
-        # others
-        self._unsub_update = async_track_time_interval(
-            self.hass, self.update_states, SCAN_INTERVAL
-        )
-
     @callback
     def unload(self) -> None:
-        """Cancel the periodic update timer."""
-        if self._unsub_update is not None:
-            self._unsub_update()
-            self._unsub_update = None
+        """Unload router resources if needed."""
 
     @callback
-    def _async_dismiss_reauth_flow(self) -> None:
+    def async_dismiss_reauth_flow(self) -> None:
         """Dismiss any active reauth flow for this entry if communication recovered."""
         for flow in self._entry.async_get_active_flows(self.hass, {SOURCE_REAUTH}):
             self.hass.config_entries.flow.async_abort(flow["flow_id"])
+
+    _async_dismiss_reauth_flow = async_dismiss_reauth_flow
 
     def _create_api(self) -> GLinet:
         """Optimistically return a GLinet object for connection to the API, no test included."""
@@ -393,34 +398,60 @@ class GLinetRouter:
         await self.update_wifi_ifaces_state()
         await self.update_wireguard_client_state()
         await self.update_tailscale_state()
+        if self._led_supported:
+            await self.update_led_state()
+        self._last_slow_update = monotonic()
 
-    async def update_states(self, _: datetime | None = None) -> None:
-        """Update platforms and states that aren't handled elsewhere."""
-        try:
-            await self.update_system_status()
-            await self.update_device_trackers()
+    async def async_fetch_all(self, full_update: bool = False) -> GLinetData:
+        """Fetch router state according to tiered polling intervals and return snapshot."""
+        now = monotonic()
+        is_slow_tick = (
+            full_update
+            or self._last_slow_update == 0.0
+            or (now - self._last_slow_update >= self.slow_scan_interval.total_seconds())
+        )
+
+        # Fast tier: Real-time system metrics, WAN state, and client presence
+        await self.update_system_status()
+        await self.update_device_trackers()
+
+        # Slow tier: Configuration that changes infrequently and non-configured endpoints
+        # TODO here we ask this to update all on the same scan interval
+        # but in future some sensors e.g WANip need to update less regularly than
+        # others
+        if is_slow_tick:
             # If a user may have many switches, best to update in bulk
             await self.update_wifi_ifaces_state()
-            await self.update_wireguard_client_state()
-        except ConfigEntryAuthFailed:
-            self._consecutive_auth_errors += 1
-            if self._consecutive_auth_errors < MAX_CONSECUTIVE_AUTH_FAILURES:
-                _LOGGER.warning(
-                    "GL-iNet router %s auth failed (attempt %d/%d); will retry before prompting re-authentication",
-                    self._host,
-                    self._consecutive_auth_errors,
-                    MAX_CONSECUTIVE_AUTH_FAILURES,
-                )
-                return
-            _LOGGER.exception(
-                "GL-iNet router %s failed authentication %d consecutive times; requesting re-authentication",
-                self._host,
-                self._consecutive_auth_errors,
-            )
-            self._entry.async_start_reauth(self.hass)
-        else:
-            self._consecutive_auth_errors = 0
-            self._async_dismiss_reauth_flow()
+            # TODO detect all configured wireguard, openvpn, shadowsocks and
+            # TOR clients & servers with router/vpn/status? and gen a switch for each
+            await self.update_wireguard_client_list()
+            if self._led_supported:
+                await self.update_led_state()
+            # Ensure non-configured endpoints are not polled frequently:
+            # Tailscale configuration probe only runs on slow tier
+            await self.update_tailscale_config()
+            self._last_slow_update = now
+
+        # Active connection states for configured services (polled each cycle if configured)
+        if len(self._wireguard_clients) > 0:
+            await self.update_wireguard_connection_state()
+
+        if self.tailscale_configured:
+            await self.update_tailscale_connection_state()
+
+        if self._connect_error:
+            raise UpdateFailed(f"Communication error with GL-iNet router {self._host}")
+        return GLinetData(
+            system_status=self._system_status,
+            wan_status=self._wan_status,
+            client_counts=self._client_counts,
+            wifi_ifaces=self._wifi_ifaces,
+            wireguard_clients=self._wireguard_clients,
+            wireguard_connections=self._wireguard_connections,
+            tailscale_config=self._tailscale_config,
+            tailscale_connection=self._tailscale_connection,
+            led_enabled=self._led_enable if self._led_supported else None,
+        )
 
     async def _update_platform(
         self, api_callable: Callable[[], Awaitable[T]]
@@ -531,16 +562,10 @@ class GLinetRouter:
         new_to_register = currently_up - self._known_wan_interfaces
         if new_to_register:
             self._known_wan_interfaces.update(new_to_register)
-            async_dispatcher_send(
-                self.hass, self.signal_wan_new, sorted(new_to_register)
-            )
-
-        async_dispatcher_send(self.hass, self.signal_wan_update)
 
     async def update_device_trackers(self) -> None:
         """Update the device trackers."""
 
-        new_device = False
         wrt_devices = await self._update_platform(self._api.connected_clients)
         if wrt_devices is None:
             return
@@ -580,7 +605,6 @@ class GLinetRouter:
             ):
                 continue
 
-            new_device = True
             device = ClientDevInfo(device_mac)
             device.update(dev_info)
             self._devices[device_mac] = device
@@ -590,10 +614,6 @@ class GLinetRouter:
                 dev_info.get("name"),
                 dev_info.get("alias"),
             )
-
-        async_dispatcher_send(self.hass, self.signal_device_update)
-        if new_device:
-            async_dispatcher_send(self.hass, self.signal_device_new)
 
         self._client_counts = _count_clients_by_type(wrt_devices)
 
@@ -634,15 +654,15 @@ class GLinetRouter:
         self._led_supported = True
         self._led_enable = config.led_enable
 
-    async def update_tailscale_state(self) -> None:
-        """Make a call to the API to get the tailscale state."""
-
+    async def update_tailscale_config(self) -> None:
+        """Make a call to the API to check tailscale configuration and details."""
         configured = await self._update_platform(self._api.tailscale_configured)
         if configured is None:
             # The request failed - keep the previous state
             return
         if not configured:
             self._tailscale_config = None
+            self._tailscale_connection = None
             return
         # TODO this is a placeholder that needs to be replaced with a pulic method that combines useful info in _tailscale_status and _tailscale_get_config
         config_response = await self._update_platform(
@@ -655,6 +675,12 @@ class GLinetRouter:
             self._tailscale_config = config_response
         else:
             self._tailscale_config = None
+
+    async def update_tailscale_connection_state(self) -> None:
+        """Make a call to the API to get tailscale connection state."""
+        if not self.tailscale_configured:
+            self._tailscale_connection = None
+            return
         state: TailscaleConnection | None = await self._update_platform(
             self._api.tailscale_connection_state
         )
@@ -663,11 +689,14 @@ class GLinetRouter:
             return
         self._tailscale_connection = state == TailscaleConnection.CONNECTED
 
-    async def update_wireguard_client_state(self) -> None:
-        """Make call to the API to get the wireguard client state."""
-        # TODO as part of changes to switch.py, this probably needs to become
-        # client/server/VPN type agnostic it may be that router/vpn/status
-        # is a better API endpoint to do it in only 1 call
+    async def update_tailscale_state(self) -> None:
+        """Make a call to the API to get the tailscale state."""
+        await self.update_tailscale_config()
+        if self.tailscale_configured:
+            await self.update_tailscale_connection_state()
+
+    async def update_wireguard_client_list(self) -> None:
+        """Make call to the API to get the wireguard client profiles list."""
         response = await self._update_platform(self._api.wireguard_client_list)
         if not response:
             return
@@ -700,6 +729,8 @@ class GLinetRouter:
                 tunnel_id=tunnel_id,
             )
 
+    async def update_wireguard_connection_state(self) -> None:
+        """Update whether the currently selected WG client is connected."""
         if len(self._wireguard_clients) == 0:
             _LOGGER.debug("No wireguard clients, there is nothing to update")
             return
@@ -723,6 +754,14 @@ class GLinetRouter:
                 # If more modern firmware supports more than 1 client being connected, we need to change this
                 self._wireguard_connections.append(client)
 
+    async def update_wireguard_client_state(self) -> None:
+        """Make call to the API to get the wireguard client state."""
+        # TODO as part of changes to switch.py, this probably needs to become
+        # client/server/VPN type agnostic it may be that router/vpn/status
+        # is a better API endpoint to do it in only 1 call
+        await self.update_wireguard_client_list()
+        await self.update_wireguard_connection_state()
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device information."""
@@ -739,26 +778,6 @@ class GLinetRouter:
             configuration_url=self._host,
             sw_version=self._sw_v,
         )
-
-    @property
-    def signal_device_new(self) -> str:
-        """Event specific per GL-iNet entry to signal new device."""
-        return f"{DOMAIN}-device-new-{self._factory_mac}"
-
-    @property
-    def signal_device_update(self) -> str:
-        """Event specific per GL-iNet entry to signal updates in devices."""
-        return f"{DOMAIN}-device-update-{self._factory_mac}"
-
-    @property
-    def signal_wan_new(self) -> str:
-        """Dispatcher signal: a never-before-seen WAN interface is now up."""
-        return f"{DOMAIN}-wan-new-{self._factory_mac}"
-
-    @property
-    def signal_wan_update(self) -> str:
-        """Dispatcher signal: WAN states have been refreshed (fired every poll)."""
-        return f"{DOMAIN}-wan-update-{self._factory_mac}"
 
     @property
     def host(self) -> str:

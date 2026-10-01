@@ -155,7 +155,8 @@ async def test_wan_sensor_integration(
     mock_api.router_get_status.side_effect = None
     mock_api.router_get_status.return_value = mock_status
 
-    await router.update_system_status()
+    coordinator = init_integration.runtime_data
+    await coordinator.async_refresh()
     await hass.async_block_till_done()
 
     entity_reg = er.async_get(hass)
