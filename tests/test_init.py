@@ -156,7 +156,8 @@ async def test_remove_config_entry_device_connected_client_rejected(
 ) -> None:
     """Test that an actively connected client device cannot be removed."""
     device_registry = dr.async_get(hass)
-    active_mac = "00:bb:cc:dd:ee:01"
+    router: GLinetRouter = init_integration.runtime_data.router
+    active_mac = next(iter(router.devices.keys()))
     client_device = device_registry.async_get_or_create(
         config_entry_id=init_integration.entry_id,
         connections={(dr.CONNECTION_NETWORK_MAC, active_mac)},
@@ -164,7 +165,6 @@ async def test_remove_config_entry_device_connected_client_rejected(
     assert not await async_remove_config_entry_device(
         hass, init_integration, client_device
     )
-    router: GLinetRouter = init_integration.runtime_data.router
     assert active_mac in router.devices
 
 
@@ -174,8 +174,8 @@ async def test_remove_config_entry_device_disconnected_client_success(
 ) -> None:
     """Test that a disconnected client device can be removed and pruned."""
     device_registry = dr.async_get(hass)
-    client_mac = "00:bb:cc:dd:ee:01"
     router: GLinetRouter = init_integration.runtime_data.router
+    client_mac = next(iter(router.devices.keys()))
     router.devices[client_mac]._connected = False
 
     client_device = device_registry.async_get_or_create(

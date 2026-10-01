@@ -385,7 +385,7 @@ async def test_device_retracked_after_removal(
     mock_api: MagicMock,
 ) -> None:
     """Test that a device can be rediscovered and re-tracked after being removed."""
-    mac = "00:bb:cc:dd:ee:01"
+    mac = "00:1E:67:A1:B2:C3"
     await _setup_with_known_devices(hass, mock_config_entry, [mac])
 
     entity_reg = er.async_get(hass)
@@ -398,9 +398,9 @@ async def test_device_retracked_after_removal(
     assert hass.states.get(entity_id) is None
 
     # Router signals discovery of new devices again
-    router = mock_config_entry.runtime_data
+    router = mock_config_entry.runtime_data.router
     router.devices.pop(mac, None)
-    await router.update_device_trackers()
+    await mock_config_entry.runtime_data.coordinator.async_refresh()
     await hass.async_block_till_done()
 
     # Verify device tracker entity is re-created

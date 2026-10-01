@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Generator
+from contextlib import suppress
+import logging
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from _pytest.logging import (
+    LogCaptureFixture,
+    caplog as _builtin_caplog,
+    caplog_handler_key,
+)
 from gli4py import GLinet
 from gli4py.mock import MockRouter
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+import pytest_homeassistant_custom_component.plugins as ha_plugins
 from semver.version import Version
 
 from custom_components.glinet.const import DOMAIN
@@ -39,6 +48,36 @@ class MockGLinet(GLinet):
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Enable loading custom integrations for every test."""
     return
+
+
+# Patch LogCaptureFixture.handler to safely fallback to logging-plugin handler
+if not hasattr(LogCaptureFixture, "_orig_handler"):
+    _orig_handler = getattr(LogCaptureFixture.handler, "fget", None)
+
+    def _safe_handler(self: LogCaptureFixture) -> Any:
+        if caplog_handler_key in self._item.stash:
+            return self._item.stash[caplog_handler_key]
+        plugin = self._item.config.pluginmanager.get_plugin("logging-plugin")
+        if plugin and hasattr(plugin, "caplog_handler"):
+            return plugin.caplog_handler
+        if _orig_handler is not None:
+            return _orig_handler(self)
+        raise KeyError("caplog_handler not found")
+
+    LogCaptureFixture.handler = property(_safe_handler)  # type: ignore[assignment]
+
+
+def _caplog_no_recurse(
+    request: pytest.FixtureRequest,
+) -> Generator[LogCaptureFixture]:
+    for res in _builtin_caplog._fixture_function(request):
+        with suppress(Exception):
+            res.set_level(logging.DEBUG)
+        yield res
+
+
+ha_plugins.caplog_fixture._fixture_function = _caplog_no_recurse
+ha_plugins.caplog_fixture.argnames = ("request",)
 
 
 @pytest.fixture
