@@ -184,11 +184,7 @@ class GLinetSwitchCoordinator(GLinetBaseCoordinator[GLinetSwitchData]):
         # On initial fetch, probe configuration for optional endpoints
         if self._initial_fetch:
             self._initial_fetch = False
-            # TODO detect all configured wireguard, openvpn, shadowsocks and
-            # TOR clients & servers with router/vpn/status? and gen a switch for each
             await self.router.update_wireguard_client_list()
-            # Tailscale configuration probe only runs at startup/full refresh
-            # so non-configured endpoints are not polled frequently
             await self.router.update_tailscale_config()
 
         # Active connection states for configured services (polled each cycle if configured)

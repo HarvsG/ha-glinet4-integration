@@ -673,9 +673,6 @@ class GLinetRouter:
 
     async def update_wireguard_client_state(self) -> None:
         """Make call to the API to get the wireguard client state."""
-        # TODO as part of changes to switch.py, this probably needs to become
-        # client/server/VPN type agnostic it may be that router/vpn/status
-        # is a better API endpoint to do it in only 1 call
         await self.update_wireguard_client_list()
         await self.update_wireguard_connection_state()
 
