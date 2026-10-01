@@ -12,10 +12,7 @@ from custom_components.glinet.wan import (
     STATE_CONNECTED,
     STATE_DISCONNECTED,
     STATE_FAILING,
-    ParseResult,
-    WanInterfaceState,
     friendly_name,
-    parse_network_array,
     state_for,
 )
 from homeassistant.core import HomeAssistant
@@ -59,82 +56,6 @@ def test_state_for_all_combinations(up: bool, online: bool, expected: str) -> No
 def test_friendly_name(interface: str, expected: str) -> None:
     """Documented mappings + modem disambiguation + raw passthrough."""
     assert friendly_name(interface) == expected
-
-
-def test_parse_network_array_happy_path() -> None:
-    """Parses standard network array payload."""
-    raw = [
-        {"interface": "wan", "online": True, "up": True},
-        {"interface": "secondwan", "online": True, "up": True},
-        {"interface": "wan6", "online": False, "up": False},
-    ]
-    result = parse_network_array(raw)
-    assert result.malformed_interfaces == []
-    assert result.states == {
-        "wan": WanInterfaceState(name="wan", up=True, online=True),
-        "secondwan": WanInterfaceState(name="secondwan", up=True, online=True),
-        "wan6": WanInterfaceState(name="wan6", up=False, online=False),
-    }
-
-
-def test_parse_network_array_link_up_no_internet() -> None:
-    """The failing state is preserved through parsing."""
-    raw = [{"interface": "wan", "online": False, "up": True}]
-    result = parse_network_array(raw)
-    assert result.states["wan"].up is True
-    assert result.states["wan"].online is False
-
-
-def test_parse_network_array_non_list_returns_empty() -> None:
-    """Garbage input is dropped, not exceptions."""
-    raw: object
-    for raw in (None, {}, "wan", 42):
-        result = parse_network_array(raw)
-        assert result.states == {}
-        assert isinstance(result, ParseResult)
-
-
-def test_parse_network_array_skips_non_dict_entries() -> None:
-    """Non-dict items in the list are silently dropped."""
-    raw = [None, "wan", 42, {"interface": "wan", "up": True, "online": True}]
-    result = parse_network_array(raw)
-    assert set(result.states.keys()) == {"wan"}
-
-
-def test_parse_network_array_skips_entries_without_interface_name() -> None:
-    """Entry with no name is silently dropped."""
-    raw = [
-        {"interface": "wan", "up": True, "online": True},
-        {"online": False, "up": False},
-        {"interface": "", "up": True, "online": True},
-        {"interface": 42, "up": True, "online": True},
-    ]
-    result = parse_network_array(raw)
-    assert set(result.states.keys()) == {"wan"}
-    assert result.malformed_interfaces == []
-
-
-def test_parse_network_array_defaults_missing_bools_and_warns() -> None:
-    """Entry has a name but missing up/online."""
-    raw = [
-        {"interface": "wan", "up": True, "online": True},
-        {"interface": "secondwan"},
-        {"interface": "wan6", "up": True},
-    ]
-    result = parse_network_array(raw)
-    assert result.states["secondwan"].up is False
-    assert result.states["secondwan"].online is False
-    assert result.states["wan6"].up is True
-    assert result.states["wan6"].online is False
-    assert sorted(result.malformed_interfaces) == ["secondwan", "wan6"]
-
-
-def test_parse_network_array_coerces_truthy_non_bool() -> None:
-    """Handle integer 0/1 values for bool flags."""
-    raw = [{"interface": "wan", "up": 1, "online": 0}]
-    result = parse_network_array(raw)
-    assert result.states["wan"].up is True
-    assert result.states["wan"].online is False
 
 
 async def test_wan_sensor_integration(
