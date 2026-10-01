@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from homeassistant.components.device_tracker import ScannerEntity, SourceType
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -85,19 +86,26 @@ class GLinetDevice(CoordinatorEntity[GLinetStatusCoordinator], ScannerEntity):
             self.async_on_remove(lambda: tracked.discard(self._attr_mac_address))
 
     @property
-    def icon(self) -> str:
-        """Icon."""
-        return self._icon
-
-    @property
     def name(self) -> str:
         """Return the name."""
         return self.hostname
 
     @property
+    def icon(self) -> str:
+        """Icon."""
+        return self._icon
+
+    @property
     def available(self) -> bool:
         """Return True if entity is available."""
         return super().available and self._device.available
+
+    @property
+    def state(self) -> str | None:
+        """Return the state of the device tracker."""
+        if not self.available:
+            return STATE_UNAVAILABLE
+        return super().state
 
     @property
     def is_connected(self) -> bool:

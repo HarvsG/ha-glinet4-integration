@@ -498,3 +498,44 @@ async def test_offline_device_retains_metadata_and_marked_not_home(
     assert state.state == STATE_NOT_HOME
     assert state.attributes.get("ip") == "192.168.1.20"
     assert mac in router.devices
+
+
+async def test_offline_device_with_uppercase_mac_is_not_home(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test that an offline device returned with uppercase MAC by clients.get_list remains not_home and available."""
+    mac = "00:1E:67:A1:B2:C3"
+    await _setup_with_known_devices(hass, mock_config_entry, [mac])
+
+    entity_id = _entity_id(hass, mac)
+    state = hass.states.get(entity_id)
+    assert state is not None
+
+    # Router API returns uppercase MAC with online: False (like clients.get_list)
+    clients = {
+        mac.upper(): ClientEntry.from_dict(
+            {
+                "mac": mac.upper(),
+                "name": "turntable-monitor",
+                "ip": "192.168.0.100",
+                "online": False,
+                "type": 2,
+            }
+        )
+    }
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
+    # Tick past consider_home (180s)
+    freezer.tick(timedelta(seconds=190))
+    await mock_config_entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    # Device is NOT_HOME (away), available == True (NOT unavailable)
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_NOT_HOME
+    assert state.attributes.get("ip") == "192.168.0.100"

@@ -490,6 +490,8 @@ class GLinetRouter:
         if all_clients is None:
             return
 
+        all_clients_by_mac = {mac.lower(): dev for mac, dev in all_clients.items()}
+
         uptime = self._system_status.uptime if self._system_status else None
         if (
             not all_clients
@@ -510,19 +512,23 @@ class GLinetRouter:
         )
 
         registry = er.async_get(self.hass)
+        devices_by_lower = {
+            mac.lower(): device for mac, device in self._devices.items()
+        }
         for device_mac, device in list(self._devices.items()):
-            dev_info = all_clients.get(device_mac)
+            dev_info = all_clients_by_mac.get(device_mac.lower())
             device.update(dev_info, self._consider_home)
             if (
                 dev_info is None
                 and not device.is_connected
+                and not device.available
                 and not registry.async_get_entity_id(TRACKER_DOMAIN, DOMAIN, device_mac)
             ):
                 del self._devices[device_mac]
 
         for device_mac, dev_info in all_clients.items():
             # Skip if we already have this device
-            if device_mac in self._devices:
+            if device_mac.lower() in devices_by_lower or device_mac in self._devices:
                 continue
 
             # Optionally ignore clients using MAC randomization entirely
