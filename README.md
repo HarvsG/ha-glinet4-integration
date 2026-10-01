@@ -103,6 +103,8 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
    - **Password**: The administrator password used to log in to the GL.iNet web admin panel.
    - **Consider Home**: Number of seconds to consider a device still connected after it was last reachable (default: `180`).
 
+For full integration documentation, supported device lists, automation examples, and troubleshooting guides, see [`docs/glinet.markdown`](docs/glinet.markdown).
+
 ---
 
 ## Removal
@@ -165,7 +167,6 @@ If you want to contribute to this integration:
 
 ### 🏗️ Architecture & Core
 
-- [ ] **Home Assistant Code Quality**: Build towards gold and platinum [code-quality](https://developers.home-assistant.io/docs/core/integration-quality-scale/) by comparing against their [checklist](https://developers.home-assistant.io/docs/core/integration-quality-scale/checklist/) and a [similar integration](https://github.com/home-assistant/core/tree/dev/homeassistant/components/fritz)
 - [ ] **Switch from `.get()` to attributes**: Build on the new strongly types responses from gli4py and replace `.get()` methods with accessing attributes - this will require using the types in many tests instead of the mock dictionaries - it may be appropriate to switch these tests to use gli4py's mock api instead.
 - [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
 - [ ] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
@@ -182,6 +183,7 @@ If you want to contribute to this integration:
 
 ### ✅ Completed
 
+- [x] **Home Assistant Quality Scale**: Reached **Platinum** quality scale tier with full documentation ([`docs/glinet.markdown`](docs/glinet.markdown)).
 - [x] Comprehensive automated test suite with real router hardware fixtures and upstream mock router (`pytest`, `gli4py[mock]`).
 - [x] Strict typing (`mypy --strict`) enforced in CI across integration and tests.
 - [x] Multi-WAN interface connection status sensors.
