@@ -133,12 +133,26 @@ class ClientCounts:
     guest: int = 0
 
 
-def _count_clients_by_type(clients: dict[str, ClientEntry]) -> ClientCounts:
+def _count_clients_by_type(
+    clients: dict[str, ClientEntry],
+) -> ClientCounts:
     """Group connected clients into wired / wireless / guest counts."""
     wired = wireless = guest = 0
     for client in clients.values():
+        is_online = (
+            client.get("online", True)
+            if isinstance(client, dict)
+            else getattr(client, "online", True)
+        )
+        if not is_online:
+            continue
+        iface_val = (
+            client.get("type", 5)
+            if isinstance(client, dict)
+            else getattr(client, "type", 5)
+        )
         iface_type = DEVICE_INTERFACE_TYPE_MAP.get(
-            client.get("type", 5), DeviceInterfaceType.UNKNOWN
+            iface_val, DeviceInterfaceType.UNKNOWN
         )
         if iface_type == DeviceInterfaceType.LAN:
             wired += 1
@@ -146,7 +160,9 @@ def _count_clients_by_type(clients: dict[str, ClientEntry]) -> ClientCounts:
             guest += 1
         elif iface_type in _WIRELESS_INTERFACE_TYPES:
             wireless += 1
-    return ClientCounts(total=len(clients), wired=wired, wireless=wireless, guest=guest)
+    return ClientCounts(
+        total=wired + wireless + guest, wired=wired, wireless=wireless, guest=guest
+    )
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -482,13 +498,13 @@ class GLinetRouter:
     async def update_device_trackers(self) -> None:
         """Update the device trackers."""
 
-        wrt_devices = await self._update_platform(self._api.connected_clients)
-        if wrt_devices is None:
+        all_clients = await self._update_platform(self._api.all_clients)
+        if all_clients is None:
             return
 
         uptime = self._system_status.get("uptime")
         if (
-            not wrt_devices
+            not all_clients
             and uptime is not None
             and uptime < REBOOT_GRACE_PERIOD
             and self._devices
@@ -500,16 +516,23 @@ class GLinetRouter:
             return
 
         _LOGGER.debug(
-            "connected_clients returned %d online device(s): %s",
-            len(wrt_devices),
-            list(wrt_devices.keys()),
+            "update_device_trackers returned %d device(s): %s",
+            len(all_clients),
+            list(all_clients.keys()),
         )
 
-        for device_mac, device in self._devices.items():
-            dev_info = wrt_devices.get(device_mac)
+        registry = er.async_get(self.hass)
+        for device_mac, device in list(self._devices.items()):
+            dev_info = all_clients.get(device_mac)
             device.update(dev_info, self._consider_home)
+            if (
+                dev_info is None
+                and not device.is_connected
+                and not registry.async_get_entity_id(TRACKER_DOMAIN, DOMAIN, device_mac)
+            ):
+                del self._devices[device_mac]
 
-        for device_mac, dev_info in wrt_devices.items():
+        for device_mac, dev_info in all_clients.items():
             # Skip if we already have this device
             if device_mac in self._devices:
                 continue
@@ -527,11 +550,15 @@ class GLinetRouter:
             _LOGGER.debug(
                 "Discovered new tracked device %s (name=%r alias=%r)",
                 device_mac,
-                dev_info.get("name"),
-                dev_info.get("alias"),
+                dev_info.get("name")
+                if isinstance(dev_info, dict)
+                else getattr(dev_info, "name", None),
+                dev_info.get("alias")
+                if isinstance(dev_info, dict)
+                else getattr(dev_info, "alias", None),
             )
 
-        self._client_counts = _count_clients_by_type(wrt_devices)
+        self._client_counts = _count_clients_by_type(all_clients)
 
     async def update_wifi_ifaces_state(self) -> None:
         """Make a call to the API to get the WiFi ifaces config state."""
@@ -847,30 +874,66 @@ class ClientDevInfo:
         self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN
 
     def update(
-        self, dev_info: ClientEntry | None = None, consider_home: float = 0
+        self,
+        dev_info: ClientEntry | None = None,
+        consider_home: float = 0,
     ) -> None:
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
         if dev_info:
             # Prefer the user-defined alias as a name
-            alias = dev_info.get("alias")
+            alias = (
+                dev_info.get("alias")
+                if isinstance(dev_info, dict)
+                else getattr(dev_info, "alias", None)
+            )
             if alias and alias.strip():
                 self._name = alias
             else:
                 # If no alias, fallback to auto-assigned name field
-                name = dev_info.get("name", "")
+                name = (
+                    dev_info.get("name", "")
+                    if isinstance(dev_info, dict)
+                    else getattr(dev_info, "name", "")
+                )
                 if name and name.strip() and name != "*":
                     self._name = name
                 elif not self._name:
                     self._name = self._mac.replace(":", "_")
-            self._ip_address = dev_info.get("ip")
-            self._last_activity = now
-            self._connected = dev_info.get("online", False)
-            self._if_type = DEVICE_INTERFACE_TYPE_MAP.get(
-                dev_info.get("type", 5), DeviceInterfaceType.UNKNOWN
+
+            ip = (
+                dev_info.get("ip")
+                if isinstance(dev_info, dict)
+                else getattr(dev_info, "ip", None)
             )
-        # a device might not actually be online but we want to consider it home
+            if ip:
+                self._ip_address = ip
+
+            is_online = (
+                dev_info.get("online", False)
+                if isinstance(dev_info, dict)
+                else getattr(dev_info, "online", False)
+            )
+            if is_online:
+                self._last_activity = now
+                self._connected = True
+            elif self._connected:
+                self._connected = (
+                    now - self._last_activity
+                ).total_seconds() < consider_home
+            else:
+                self._connected = False
+
+            iface_val = (
+                dev_info.get("type", 5)
+                if isinstance(dev_info, dict)
+                else getattr(dev_info, "type", 5)
+            )
+            self._if_type = DEVICE_INTERFACE_TYPE_MAP.get(
+                iface_val, DeviceInterfaceType.UNKNOWN
+            )
         elif self._connected:
+            # dev_info is None (device completely omitted from router response)
             self._connected = (
                 now - self._last_activity
             ).total_seconds() < consider_home

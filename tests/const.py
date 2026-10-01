@@ -124,7 +124,7 @@ MOCK_TAILSCALE_CONFIG: dict[str, Any] = {
 # latch, so unavailability tests must fail them all.
 POLLED_METHODS = (
     "router_get_status",
-    "connected_clients",
+    "all_clients",
     "wifi_ifaces_get",
     "wireguard_client_list",
     "wireguard_client_state",

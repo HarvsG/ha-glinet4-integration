@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from homeassistant.const import Platform
+from homeassistant.const import CONF_PASSWORD, Platform
+from homeassistant.helpers import issue_registry as ir
 
+from .const import DOMAIN, GLINET_DEFAULT_PW
 from .coordinator import (
     GLinetRuntimeData,
     GLinetStatusCoordinator,
@@ -46,6 +48,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: GLinetConfigEntry) -> bo
 
     await status_coordinator.async_config_entry_first_refresh()
     await switch_coordinator.async_config_entry_first_refresh()
+
+    if entry.data.get(CONF_PASSWORD) == GLINET_DEFAULT_PW:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            "default_password",
+            is_fixable=False,
+            is_persistent=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="default_password",
+            translation_placeholders={"host": router.host},
+        )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, "default_password")
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
