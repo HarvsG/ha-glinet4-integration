@@ -11,6 +11,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/HarvsG/ha-glinet4-integration/issues",
   "loggers": ["gli4py"],
+  "quality_scale": "silver",
   "requirements": ["gli4py==0.1.0-beta.5"],
   "ssdp": [],
   "version": "0.1.13"
