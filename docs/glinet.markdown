@@ -141,7 +141,6 @@ actions:
       - action: switch.turn_off
         target:
           entity_id: switch.study_gl_inet_mt1300_led
-
 ```
 
 ### 2. Reboot Router on Weekly Schedule
@@ -151,7 +150,7 @@ Automatically reboot the router early Sunday morning:
 ```yaml
 alias: Router - Weekly Reboot
 triggers:
-  - at: '04:00:00'
+  - at: "04:00:00"
     trigger: time
 conditions:
   - condition: time
@@ -162,7 +161,6 @@ actions:
     data: {}
     target:
       entity_id: button.gl_inet_mt1300_reboot
-
 ```
 
 ### 3. Presence-Based VPN Client Toggle
@@ -187,6 +185,7 @@ actions:
 ## Known Limitations
 
 - **Firmware API Version**: This integration targets GL.iNet firmware 4.x (API v4). Older firmware (3.x) is not supported.
+- **Scanner Entities Disabled by Default**: In compliance with Home Assistant integration quality standards, device tracker (scanner) entities for newly discovered client devices that are not already associated with an existing Home Assistant device registry entry are **disabled by default**. This prevents network routers from cluttering Home Assistant with transient or single-use network entities. To use a client for presence detection, manually enable its entity under **Settings** > **Devices & Services** > **Entities**. Clients with randomized MAC addresses follow the "Randomized-MAC devices" option configuration instead.
 - **Downstream Network Topology**: Clients connected through downstream switches, mesh nodes, or secondary access points reach the router via its LAN ports and are reported under LAN client counts even if connected over WiFi.
 - **Smartphone MAC Address Randomization**: Mobile devices with MAC randomization enabled generate dynamic MAC addresses when re-connecting. It is recommended to disable MAC randomization for your home Wi-Fi network on iOS and Android for reliable presence tracking.
 
