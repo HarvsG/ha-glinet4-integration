@@ -17,6 +17,7 @@ from .router import GLinetRouter
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
+    from homeassistant.helpers import device_registry as dr
 
     from .coordinator import GLinetConfigEntry
 
@@ -77,3 +78,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: GLinetConfigEntry) -> b
 async def update_listener(hass: HomeAssistant, entry: GLinetConfigEntry) -> None:
     """Reload the config entry when its data or options change."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_remove_config_entry_device(
+    _: HomeAssistant, __: GLinetConfigEntry, ___: dr.DeviceEntry
+) -> bool:
+    """Remove a config entry from a device."""
+    return True

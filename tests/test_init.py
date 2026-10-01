@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.glinet import async_remove_config_entry_device
 from custom_components.glinet.const import DOMAIN
 from custom_components.glinet.coordinator import (
     GLinetRuntimeData,
@@ -24,7 +25,11 @@ from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import CONF_PASSWORD
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
 
 
 async def test_setup_entry_ok(
@@ -169,3 +174,17 @@ async def test_custom_password_clears_repair_issue(
     issue_reg = ir.async_get(hass)
     issue = issue_reg.async_get_issue(DOMAIN, "default_password")
     assert issue is None
+
+
+async def test_remove_config_entry_device(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+) -> None:
+    """Test async_remove_config_entry_device allows deleting a device."""
+    device_registry = dr.async_get(hass)
+    device_entry = device_registry.async_get_or_create(
+        config_entry_id=init_integration.entry_id,
+        identifiers={(DOMAIN, "test_device")},
+    )
+
+    assert await async_remove_config_entry_device(hass, init_integration, device_entry)
