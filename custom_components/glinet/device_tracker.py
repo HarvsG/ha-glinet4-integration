@@ -53,6 +53,10 @@ async def async_setup_entry(
     _check_new_devices()
 
 
+# Device tracker entities represent client devices, not the router itself,
+# so they must NOT inherit GLinetEntity (which sets device_info to the
+# router).  Home Assistant expects tracker entities to stand alone without
+# a parent device_info binding.
 class GLinetDevice(CoordinatorEntity[GLinetStatusCoordinator], ScannerEntity):
     """Representation of a GLinet tracked device."""
 

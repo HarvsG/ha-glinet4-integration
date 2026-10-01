@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import aiohttp
 from gli4py.error_handling import APIClientError, NonZeroResponse
@@ -49,8 +50,6 @@ class GLinetSwitchData:
     led_enabled: bool | None
 
 
-# Backwards compatibility alias
-GLinetData = GLinetStatusData
 
 
 class GLinetBaseCoordinator[T](DataUpdateCoordinator[T]):
@@ -121,9 +120,9 @@ class GLinetBaseCoordinator[T](DataUpdateCoordinator[T]):
             self.router.async_dismiss_reauth_flow()
         return data
 
+    @abstractmethod
     async def _async_fetch_data(self) -> T:
         """Fetch data from the router (implemented by subclasses)."""
-        raise NotImplementedError
 
 
 class GLinetStatusCoordinator(GLinetBaseCoordinator[GLinetStatusData]):
@@ -212,10 +211,6 @@ class GLinetSwitchCoordinator(GLinetBaseCoordinator[GLinetSwitchData]):
         )
 
 
-# Backwards compatibility alias
-GLinetDataUpdateCoordinator = GLinetStatusCoordinator
-
-
 @dataclass
 class GLinetRuntimeData:
     """Runtime data for the GL-iNet integration."""
@@ -233,10 +228,6 @@ class GLinetRuntimeData:
     def data(self) -> GLinetStatusData:
         """Return status coordinator data for compatibility."""
         return self.coordinator.data
-
-    def __getattr__(self, name: str) -> Any:
-        """Proxy attribute access to the underlying router for compatibility."""
-        return getattr(self.router, name)
 
     async def async_refresh(self) -> None:
         """Refresh all coordinators."""

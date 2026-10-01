@@ -129,5 +129,5 @@ async def test_update_listener_reloads_entry(
 
     assert init_integration.state is ConfigEntryState.LOADED
     assert mock_glinet.call_count == 2
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router._consider_home == pytest.approx(60)

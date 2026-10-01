@@ -59,7 +59,7 @@ async def test_poll_updates_state(
     mock_api: MagicMock,
 ) -> None:
     """Test the periodic poll refreshes the router state."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.system_status["uptime"] == 86400.0
 
     new_status = deepcopy(MOCK_STATUS)
@@ -78,7 +78,7 @@ async def test_token_error_triggers_renew(
     mock_api: MagicMock,
 ) -> None:
     """Test a token error causes a re-login before the next API call."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     login_count = mock_api.login.await_count
 
     original = mock_api.router_get_status.side_effect
@@ -101,7 +101,7 @@ async def test_token_error_immediate_retry_recovers_state_same_tick(
     mock_api: MagicMock,
 ) -> None:
     """Test a token error immediately renews and retries in the same poll cycle without dropping data."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     login_count = mock_api.login.await_count
 
     new_status = deepcopy(MOCK_STATUS)
@@ -143,7 +143,7 @@ async def test_timeout_latches_unavailable_and_recovers(
     mock_api: MagicMock,
 ) -> None:
     """Test the router latches unavailable on timeouts and recovers."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.available
 
     originals = {name: getattr(mock_api, name).side_effect for name in POLLED_METHODS}
@@ -350,7 +350,7 @@ async def test_wireguard_malformed_config_skipped(
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    router: GLinetRouter = mock_config_entry.runtime_data
+    router: GLinetRouter = mock_config_entry.runtime_data.router
     assert router.wireguard_clients == {}
 
 
@@ -505,7 +505,7 @@ async def test_empty_client_list_ignored_during_reboot_grace(
     mock_api: MagicMock,
 ) -> None:
     """Test an empty client list right after reboot does not disconnect devices."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     # Ensure devices are tracked
     assert len(router.devices) > 0
     test_device = next(iter(router.devices.values()))
@@ -528,7 +528,7 @@ async def test_empty_client_list_processed_after_reboot_grace(
     mock_api: MagicMock,
 ) -> None:
     """Test an empty client list outside grace period updates device connection states."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert len(router.devices) > 0
     test_device = next(iter(router.devices.values()))
     assert test_device.is_connected
@@ -628,7 +628,7 @@ async def test_update_platform_non_zero_response(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test NonZeroResponse marks router unavailable and logs error."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.available
 
     mock_api.router_get_status.side_effect = NonZeroResponse("Error code 1")
@@ -645,7 +645,7 @@ async def test_update_platform_broad_exception(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test unexpected exception during polling marks router unavailable."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.available
 
     mock_api.router_get_status.side_effect = RuntimeError("Unexpected internal crash")
@@ -668,7 +668,7 @@ async def test_update_platform_timeout_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test TimeoutError marks router unavailable and deduplicates warnings."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.available
 
     mock_api.router_get_status.side_effect = TimeoutError("Connection timed out")
@@ -690,7 +690,7 @@ async def test_update_platform_client_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test aiohttp.ClientError marks router unavailable and deduplicates warnings."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.available
 
     mock_api.router_get_status.side_effect = aiohttp.ClientOSError(
@@ -714,7 +714,7 @@ async def test_update_platform_os_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test OSError marks router unavailable and deduplicates warnings."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.available
 
     mock_api.router_get_status.side_effect = ConnectionResetError(
@@ -738,7 +738,7 @@ async def test_malformed_wan_interface_warning_deduplicated(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test malformed WAN interface warns once and deduplicates subsequent warnings."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     status = {
         "system": {"uptime": 1000},
         "network": [{"interface": "bad_wan"}],
@@ -761,7 +761,7 @@ async def test_update_device_trackers_empty_response_during_startup(
     mock_api: MagicMock,
 ) -> None:
     """Test empty payload from connected_clients exits cleanly without wiping known devices."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.devices
     mock_api.connected_clients.side_effect = None
     mock_api.connected_clients.return_value = {}
@@ -777,7 +777,7 @@ async def test_tailscale_unconfigured_and_connection_state_none(
     mock_api: MagicMock,
 ) -> None:
     """Test Tailscale state updates when unconfigured and when connection query fails."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.tailscale_configured is True
     assert router.tailscale_connection is True
     assert router.tailscale_config is not None
@@ -814,7 +814,7 @@ async def test_wireguard_state_empty_response(
     mock_api: MagicMock,
 ) -> None:
     """Test empty wireguard_client_state response returns early without changes."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.wireguard_clients
     mock_api.wireguard_client_state.side_effect = None
     mock_api.wireguard_client_state.return_value = []
@@ -830,7 +830,7 @@ async def test_wireguard_state_skips_unknown_peer(
     mock_api: MagicMock,
 ) -> None:
     """Test wireguard state skips entries with unknown peer ids."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     mock_api.wireguard_client_state.side_effect = None
     mock_api.wireguard_client_state.return_value = [
         WireguardStatusItem(
@@ -850,7 +850,7 @@ async def test_router_properties(
     init_integration: MockConfigEntry,
 ) -> None:
     """Test router properties return expected configuration values."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     assert router.host == init_integration.data[CONF_HOST]
     assert router.unique_id == init_integration.unique_id
     assert router.api is not None
@@ -898,7 +898,7 @@ async def test_renew_token_non_ssl_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test renew_token logs warning for non-SSL connection error."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     mock_api.login.side_effect = aiohttp.ClientConnectionError("Connection timeout")
 
     with pytest.raises(aiohttp.ClientConnectionError):
@@ -935,7 +935,7 @@ async def test_update_device_trackers_skips_unassigned_client(
     mock_api: MagicMock,
 ) -> None:
     """Test update_device_trackers skips unassigned new client with asterisk name."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     mock_api.connected_clients.side_effect = None
     mock_api.connected_clients.return_value = {
         "aa:bb:cc:dd:ee:99": {"name": "*", "ip": "192.168.8.199"}
@@ -951,7 +951,7 @@ async def test_update_system_status_registers_new_wan_interface(
     mock_api: MagicMock,
 ) -> None:
     """Test update_system_status registers newly discovered up WAN interface."""
-    router: GLinetRouter = init_integration.runtime_data
+    router: GLinetRouter = init_integration.runtime_data.router
     status = {
         "system": {"uptime": 1000},
         "network": [{"interface": "new_wan_iface", "up": True, "online": True}],

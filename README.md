@@ -10,6 +10,9 @@
 
 A Home Assistant custom component for **GL.iNet routers** powered by [their API version 4](https://dev.gl-inet.com/api/) via the [`gli4py`](https://github.com/HarvsG/gli4py) library.
 
+> [!IMPORTANT]
+> This integration requires **Python 3.14** or later (uses [PEP 758](https://peps.python.org/pep-0758/) exception syntax).
+
 > [!NOTE]
 > GL.iNet no longer publicly documents API v4, so the longevity of this integration relies on API reverse-engineering and may change across future firmware versions.
 > Contributions are warmly welcomed! See the [TODO list](#todo) or search for `#TODO` comments across the codebase.
@@ -65,7 +68,6 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
   - **Fast tier (30 seconds)**: System status, WAN interface states, and connected client presence.
   - **Slow tier (5 minutes)**: Wi-Fi interface configurations, WireGuard client list, LED configuration, and non-configured endpoint probes.
   - **Dynamic Entity Discovery**: Newly discovered client devices and WAN interfaces are registered automatically on poll without reloading.
-  - **Serial Reboot Protection**: The reboot button is debounced to ensure multiple presses in quick succession trigger only a single router reboot.
 - **Diagnostics**: Full diagnostic support with automatic redaction of passwords, MACs, and tokens.
 
 ---

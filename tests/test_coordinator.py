@@ -64,8 +64,8 @@ async def test_runtime_data_delegation_and_refresh(
     assert runtime_data.router is not None
     assert runtime_data.status_coordinator is runtime_data.coordinator
 
-    # Test attribute proxying to router
-    assert runtime_data.host == runtime_data.router.host
+    # Verify router is accessible
+    assert runtime_data.router.host is not None
 
     # Test combined refresh
     await runtime_data.async_refresh()

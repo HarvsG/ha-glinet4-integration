@@ -149,16 +149,12 @@ class WifiApSwitch(GliSwitchBase):
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the AP."""
-        # TODO since the state takes a while to change we may
-        # be optimistic
         self._attr_is_on = True
         self.async_write_ha_state()
         try:
             _LOGGER.debug("Enabling WiFi interface %s", self._iface_name)
             await self.router.api.wifi_iface_set_enabled(self._iface_name, True)
-            # fetch the state #TODO try block?
-            await self.router.update_wifi_ifaces_state()
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_request_refresh()
         except OSError, APIClientError:
             self._attr_is_on = False
             self.async_write_ha_state()
@@ -175,9 +171,7 @@ class WifiApSwitch(GliSwitchBase):
         try:
             _LOGGER.debug("Disabling WiFi interface %s", self._iface_name)
             await self.router.api.wifi_iface_set_enabled(self._iface_name, False)
-            # fetch the state #TODO try block?
-            await self.router.update_wifi_ifaces_state()
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_request_refresh()
         except OSError, APIClientError:
             self._attr_is_on = True
             self.async_write_ha_state()
@@ -230,14 +224,13 @@ class TailscaleSwitch(GliSwitchBase):
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
+        # be optimistic
+        self._attr_is_on = True
+        self.async_write_ha_state()
         try:
             _LOGGER.debug("Enabling tailscale")
-            # be optimistic
-            self._attr_is_on = True
-            self.async_write_ha_state()
             await self.router.api.tailscale_start()
-            await self.router.update_tailscale_state()
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_request_refresh()
         except OSError, APIClientError:
             self._attr_is_on = False
             self.async_write_ha_state()
@@ -245,14 +238,13 @@ class TailscaleSwitch(GliSwitchBase):
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
+        # be optimistic
+        self._attr_is_on = False
+        self.async_write_ha_state()
         try:
             _LOGGER.debug("Disabling tailscale")
-            # be optimistic
-            self._attr_is_on = False
-            self.async_write_ha_state()
             await self.router.api.tailscale_stop()
-            await self.router.update_tailscale_state()
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_request_refresh()
         except OSError, APIClientError:
             self._attr_is_on = True
             self.async_write_ha_state()
@@ -341,6 +333,9 @@ class WireGuardSwitch(GliSwitchBase):
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the service."""
+        # be optimistic
+        self._attr_is_on = True
+        self.async_write_ha_state()
         try:
             # TODO Verify that the API doesn't do this for us
             if (
@@ -353,14 +348,10 @@ class WireGuardSwitch(GliSwitchBase):
                     await self.router.api.wireguard_client_stop(client.peer_id)
                 # TODO may need to introduce a delay here, or await confirmation of the stop
 
-            # be optimistic
-            self._attr_is_on = True
-            self.async_write_ha_state()
             await self.router.api.wireguard_client_start(
                 self._client.group_id, self._client.tunnel_id or self._client.peer_id
             )
-            await self.router.update_wireguard_client_state()
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_request_refresh()
         except OSError, APIClientError:
             self._attr_is_on = False
             self.async_write_ha_state()
@@ -368,16 +359,15 @@ class WireGuardSwitch(GliSwitchBase):
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the service."""
+        # be optimistic
+        self._attr_is_on = False
+        self.async_write_ha_state()
         try:
-            # be optimistic
-            self._attr_is_on = False
-            self.async_write_ha_state()
             await self.router.api.wireguard_client_stop(
                 self._client.tunnel_id or self._client.peer_id
             )
             # TODO may need to introduce a delay here, or await confirmation of the stop
-            await self.router.update_wireguard_client_state()
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_request_refresh()
         except OSError, APIClientError:
             self._attr_is_on = True
             self.async_write_ha_state()
@@ -425,14 +415,13 @@ class LedSwitch(GliSwitchBase):
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the router LEDs."""
+        # be optimistic
+        self._attr_is_on = True
+        self.async_write_ha_state()
         try:
             _LOGGER.debug("Enabling router LEDs")
-            # be optimistic
-            self._attr_is_on = True
-            self.async_write_ha_state()
             await self.router.api.led_set(True)
-            await self.router.update_led_state()
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_request_refresh()
         except OSError, APIClientError:
             self._attr_is_on = False
             self.async_write_ha_state()
@@ -440,14 +429,13 @@ class LedSwitch(GliSwitchBase):
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the router LEDs."""
+        # be optimistic
+        self._attr_is_on = False
+        self.async_write_ha_state()
         try:
             _LOGGER.debug("Disabling router LEDs")
-            # be optimistic
-            self._attr_is_on = False
-            self.async_write_ha_state()
             await self.router.api.led_set(False)
-            await self.router.update_led_state()
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_request_refresh()
         except OSError, APIClientError:
             self._attr_is_on = True
             self.async_write_ha_state()
