@@ -21,7 +21,7 @@ from custom_components.glinet.const import (
     TRACK_RANDOMIZED_MAC_ENABLED,
 )
 from custom_components.glinet.router import GLinetRouter
-from homeassistant.const import STATE_HOME, STATE_NOT_HOME
+from homeassistant.const import STATE_HOME, STATE_NOT_HOME, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -86,14 +86,14 @@ async def test_tracker_entity_created_home(
     assert state_cable.attributes["interface_type"] == "LAN"
 
 
-async def test_tracker_goes_not_home_after_consider_home(
+async def test_tracker_goes_unavailable_after_consider_home(
     hass: HomeAssistant,
     freezer: FrozenDateTimeFactory,
     mock_config_entry: MockConfigEntry,
     mock_glinet: MagicMock,
     mock_api: MagicMock,
 ) -> None:
-    """Test a vanished device stays home for the consider_home window only."""
+    """Test a vanished device stays home for the consider_home window and then becomes unavailable."""
     await _setup_with_known_devices(
         hass, mock_config_entry, ["E8:DB:84:77:88:99", "B8:27:EB:44:55:66"]
     )
@@ -113,7 +113,7 @@ async def test_tracker_goes_not_home_after_consider_home(
     await _tick(hass, freezer, seconds=200)
     state = hass.states.get(entity_id)
     assert state is not None
-    assert state.state == STATE_NOT_HOME
+    assert state.state == STATE_UNAVAILABLE
 
 
 async def test_new_device_mid_poll_creates_entity(
@@ -160,7 +160,7 @@ async def test_restored_registry_entities_recreated(
     mock_config_entry: MockConfigEntry,
     mock_glinet: MagicMock,
 ) -> None:
-    """Test tracker entities from the registry are restored as not home."""
+    """Test tracker entities from the registry are restored as unavailable if omitted from router clients."""
     mock_config_entry.add_to_hass(hass)
     registry = er.async_get(hass)
     registry.async_get_or_create(
@@ -176,7 +176,7 @@ async def test_restored_registry_entities_recreated(
 
     state = hass.states.get(_entity_id(hass, "00:bb:cc:dd:ee:99"))
     assert state is not None
-    assert state.state == STATE_NOT_HOME
+    assert state.state == STATE_UNAVAILABLE
 
 
 @pytest.mark.parametrize(

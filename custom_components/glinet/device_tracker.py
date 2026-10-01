@@ -95,6 +95,11 @@ class GLinetDevice(CoordinatorEntity[GLinetStatusCoordinator], ScannerEntity):
         return self.hostname
 
     @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return super().available and self._device.available
+
+    @property
     def is_connected(self) -> bool:
         """Return true if the device is connected to the network."""
         return self._device.is_connected

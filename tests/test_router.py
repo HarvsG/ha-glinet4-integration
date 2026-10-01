@@ -395,21 +395,25 @@ def test_device_interface_type_map_is_complete() -> None:
 
 
 def test_client_dev_info_consider_home(freezer: FrozenDateTimeFactory) -> None:
-    """Test a disappeared device stays home for the consider_home window."""
+    """Test a disappeared device stays home for the consider_home window and then becomes unavailable."""
     device = ClientDevInfo("aa:bb:cc:dd:ee:ff")
     device.update(ClientEntry(name="dev", ip="192.168.8.2", online=True, type=1))
     assert device.is_connected
+    assert device.available
     assert device.ip_address == "192.168.8.2"
 
     # Device vanishes from the router's client list
     freezer.tick(timedelta(seconds=170))
     device.update(None, consider_home=180)
     assert device.is_connected
-    assert device.ip_address is None
+    assert device.available
+    assert device.ip_address == "192.168.8.2"
 
     freezer.tick(timedelta(seconds=30))
     device.update(None, consider_home=180)
     assert not device.is_connected
+    assert not device.available
+    assert device.ip_address is None
 
 
 async def test_router_create_api_verify_ssl(hass: HomeAssistant) -> None:

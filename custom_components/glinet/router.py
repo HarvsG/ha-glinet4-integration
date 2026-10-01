@@ -855,6 +855,7 @@ class ClientDevInfo:
         self._ip_address: str | None = None
         self._last_activity: datetime = dt_util.utcnow() - timedelta(days=1)
         self._connected: bool = False
+        self._available: bool = True
         self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN
 
     def update(
@@ -865,6 +866,7 @@ class ClientDevInfo:
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
         if dev_info:
+            self._available = True
             # Prefer the user-defined alias as a name
             alias = dev_info.alias
             if alias and alias.strip():
@@ -898,7 +900,18 @@ class ClientDevInfo:
             self._connected = (
                 now - self._last_activity
             ).total_seconds() < consider_home
+            self._available = self._connected
+            if not self._connected:
+                self._ip_address = None
+        else:
+            self._connected = False
+            self._available = False
             self._ip_address = None
+
+    @property
+    def available(self) -> bool:
+        """Return available status."""
+        return self._available
 
     @property
     def is_connected(self) -> bool:
