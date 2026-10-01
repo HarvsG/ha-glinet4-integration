@@ -313,7 +313,7 @@ async def test_reauth_flow_aborted_when_router_recovers(
     mock_api.router_get_status.return_value = deepcopy(MOCK_STATUS)
     mock_api.login.side_effect = None
 
-    coordinator = init_integration.runtime_data
+    coordinator = init_integration.runtime_data.coordinator
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 

@@ -141,7 +141,7 @@ async def test_wan_sensor_integration(
     hass: HomeAssistant, mock_api: MagicMock, init_integration: MockConfigEntry
 ) -> None:
     """Test WAN sensors registration and state updates."""
-    router = init_integration.runtime_data
+    router = init_integration.runtime_data.router
     assert router is not None
 
     # Update router network status with active WAN interfaces
@@ -155,7 +155,7 @@ async def test_wan_sensor_integration(
     mock_api.router_get_status.side_effect = None
     mock_api.router_get_status.return_value = mock_status
 
-    coordinator = init_integration.runtime_data
+    coordinator = init_integration.runtime_data.coordinator
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 

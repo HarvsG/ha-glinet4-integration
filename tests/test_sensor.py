@@ -333,8 +333,8 @@ async def test_wan_sensor_disconnected_state(
     init_integration: MockConfigEntry,
 ) -> None:
     """Test WanStatusSensor reports disconnected when interface is removed from router."""
-    router = init_integration.runtime_data
-    sensor = WanStatusSensor(router, "unplugged_modem")
+    coordinator = init_integration.runtime_data.coordinator
+    sensor = WanStatusSensor(coordinator, "unplugged_modem")
     assert sensor.native_value == STATE_DISCONNECTED
     assert sensor.extra_state_attributes == {
         "interface": "unplugged_modem",
