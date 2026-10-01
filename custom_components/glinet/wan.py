@@ -7,7 +7,7 @@ WanStatusSensor entity class lives in sensor.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 STATE_CONNECTED = "connected"
 STATE_FAILING = "failing"
@@ -57,3 +57,54 @@ class WanInterfaceState:
     name: str
     up: bool
     online: bool
+
+
+@dataclass(frozen=True)
+class ParseResult:
+    """Output of parse_network_array.
+
+    malformed_interfaces is the list of interface names whose entry was
+    missing one or both of the up / online fields. Callers should
+    log a one-time warning for each such name.
+    """
+
+    states: dict[str, WanInterfaceState]
+    malformed_interfaces: list[str] = field(default_factory=list)
+
+
+def parse_network_array(raw: object) -> ParseResult:
+    """Parse the network field of router_get_status into a state map.
+
+    Pure function with no logging or side effects.
+
+    Behaviour:
+    - Non-list input -> empty result.
+    - Entries that are not dicts -> silently dropped.
+    - Entries missing a non-empty string interface -> silently dropped.
+    - Entries with a name but missing up / online -> recorded, the
+      missing field defaults to False, and the name is added to
+      malformed_interfaces.
+    """
+    if not isinstance(raw, list):
+        return ParseResult(states={})
+
+    states: dict[str, WanInterfaceState] = {}
+    malformed: list[str] = []
+
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("interface")
+        if not isinstance(name, str) or not name:
+            continue
+        has_up = "up" in entry
+        has_online = "online" in entry
+        if not (has_up and has_online):
+            malformed.append(name)
+        states[name] = WanInterfaceState(
+            name=name,
+            up=bool(entry.get("up", False)),
+            online=bool(entry.get("online", False)),
+        )
+
+    return ParseResult(states=states, malformed_interfaces=malformed)
