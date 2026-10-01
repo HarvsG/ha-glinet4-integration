@@ -105,6 +105,15 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 
 ---
 
+## Removal
+
+1. In Home Assistant, navigate to **Settings** > **Devices & Services**.
+2. Find the **GL-iNet** integration card.
+3. Click the three dots menu icon (⋮) and select **Delete**.
+4. Confirm deletion when prompted.
+
+---
+
 ## Development Setup
 
 If you want to contribute to this integration:
