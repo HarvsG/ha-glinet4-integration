@@ -468,10 +468,12 @@ class GLinetRouter:
         )
         if not status:
             return
-        self._system_status = status.system
-        self._wan_status = {network.interface: network for network in status.network}
+        self._system_status = status.get("system")
+        self._wan_status = {
+            network.get("interface"): network for network in status.get("network", [])
+        }
         currently_up = {
-            name for name, network in self._wan_status.items() if network.up
+            name for name, network in self._wan_status.items() if network.get("up")
         }
         new_to_register = currently_up - self._known_wan_interfaces
         if new_to_register:

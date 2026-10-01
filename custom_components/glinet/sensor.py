@@ -226,7 +226,9 @@ async def _setup_wan_sensors(
         persisted_interfaces.add(reg_entry.unique_id[len(wan_unique_id_prefix) :])
 
     currently_up = {
-        name for name, network in coordinator.data.wan_status.items() if network.up
+        name
+        for name, network in coordinator.data.wan_status.items()
+        if network.get("up")
     }
 
     initial_interfaces = persisted_interfaces | currently_up
@@ -245,7 +247,7 @@ async def _setup_wan_sensors(
         new_interfaces = {
             name
             for name, network in coordinator.data.wan_status.items()
-            if network.up and network.interface not in initial_interfaces
+            if network.get("up") and network.get("interface") not in initial_interfaces
         }
         if new_interfaces:
             initial_interfaces.update(new_interfaces)
@@ -368,7 +370,7 @@ class WanStatusSensor(GLinetEntity[GLinetStatusCoordinator], SensorEntity):
         state = self.coordinator.data.wan_status.get(self._interface)
         if state is None:
             return STATE_DISCONNECTED
-        return state_for(up=state.up, online=state.online)
+        return state_for(up=state.get("up"), online=state.get("online"))
 
     @property
     def icon(self) -> str:
