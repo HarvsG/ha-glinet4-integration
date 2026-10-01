@@ -31,7 +31,7 @@ The **GL-iNet** integration allows you to monitor and control your [GL.iNet](htt
 Support is available for GL.iNet router models running GL.iNet firmware 4.x with API v4 enabled:
 
 - **GL-MT6000** (Flint 2)
-- **GL-MT3000** (Beryl AX)
+- **GL-MT1300** (Beryl)
 - **GL-B1300** (Convexa-B)
 - Other GL.iNet hardware models running firmware version 4.0 or newer.
 

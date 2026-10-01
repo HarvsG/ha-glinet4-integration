@@ -206,7 +206,7 @@ If you want to contribute to this integration:
 
 The integration is known to work on the following models:
 
-- **GL-MT3000** (Beryl AX)
+- **GL-MT1300** (Beryl)
 - **GL-B1300** (Convexa-B)
 - **GL-MT6000** (Flint 2)
 
