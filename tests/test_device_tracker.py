@@ -21,7 +21,7 @@ from custom_components.glinet.const import (
     TRACK_RANDOMIZED_MAC_ENABLED,
 )
 from custom_components.glinet.router import GLinetRouter
-from homeassistant.const import STATE_HOME, STATE_NOT_HOME
+from homeassistant.const import STATE_HOME, STATE_NOT_HOME, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -86,14 +86,14 @@ async def test_tracker_entity_created_home(
     assert state_cable.attributes["interface_type"] == "LAN"
 
 
-async def test_tracker_goes_not_home_after_consider_home(
+async def test_tracker_goes_unavailable_after_consider_home(
     hass: HomeAssistant,
     freezer: FrozenDateTimeFactory,
     mock_config_entry: MockConfigEntry,
     mock_glinet: MagicMock,
     mock_api: MagicMock,
 ) -> None:
-    """Test a vanished device stays home for the consider_home window only."""
+    """Test a vanished device stays home for the consider_home window and then becomes unavailable."""
     await _setup_with_known_devices(
         hass, mock_config_entry, ["E8:DB:84:77:88:99", "B8:27:EB:44:55:66"]
     )
@@ -113,7 +113,7 @@ async def test_tracker_goes_not_home_after_consider_home(
     await _tick(hass, freezer, seconds=200)
     state = hass.states.get(entity_id)
     assert state is not None
-    assert state.state == STATE_NOT_HOME
+    assert state.state == STATE_UNAVAILABLE
 
 
 async def test_new_device_mid_poll_creates_entity(
@@ -160,7 +160,7 @@ async def test_restored_registry_entities_recreated(
     mock_config_entry: MockConfigEntry,
     mock_glinet: MagicMock,
 ) -> None:
-    """Test tracker entities from the registry are restored as not home."""
+    """Test tracker entities from the registry are restored as unavailable if omitted from router clients."""
     mock_config_entry.add_to_hass(hass)
     registry = er.async_get(hass)
     registry.async_get_or_create(
@@ -176,7 +176,7 @@ async def test_restored_registry_entities_recreated(
 
     state = hass.states.get(_entity_id(hass, "00:bb:cc:dd:ee:99"))
     assert state is not None
-    assert state.state == STATE_NOT_HOME
+    assert state.state == STATE_UNAVAILABLE
 
 
 @pytest.mark.parametrize(
@@ -498,3 +498,122 @@ async def test_offline_device_retains_metadata_and_marked_not_home(
     assert state.state == STATE_NOT_HOME
     assert state.attributes.get("ip") == "192.168.1.20"
     assert mac in router.devices
+
+
+async def test_offline_device_with_uppercase_mac_is_not_home(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test that an offline device returned with uppercase MAC by clients.get_list remains not_home and available."""
+    mac = "00:1E:67:A1:B2:C3"
+    await _setup_with_known_devices(hass, mock_config_entry, [mac])
+
+    entity_id = _entity_id(hass, mac)
+    state = hass.states.get(entity_id)
+    assert state is not None
+
+    # Router API returns uppercase MAC with online: False (like clients.get_list)
+    clients = {
+        mac.upper(): ClientEntry.from_dict(
+            {
+                "mac": mac.upper(),
+                "name": "turntable-monitor",
+                "ip": "192.168.0.100",
+                "online": False,
+                "type": 2,
+            }
+        )
+    }
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
+    # Tick past consider_home (180s)
+    freezer.tick(timedelta(seconds=190))
+    await mock_config_entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    # Device is NOT_HOME (away), available == True (NOT unavailable)
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_NOT_HOME
+    assert state.attributes.get("ip") == "192.168.0.100"
+
+
+async def test_multiple_offline_restored_devices_tracked_on_setup(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test that multiple offline devices in entity registry are all initialized on setup."""
+    mac1 = "00:bb:cc:dd:ee:01"
+    mac2 = "00:bb:cc:dd:ee:02"
+    mock_config_entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "device_tracker", DOMAIN, mac1, config_entry=mock_config_entry
+    )
+    registry.async_get_or_create(
+        "device_tracker", DOMAIN, mac2, config_entry=mock_config_entry
+    )
+
+    clients = {
+        mac1: ClientEntry.from_dict(
+            {"mac": mac1, "name": "device-1", "online": False, "type": 2}
+        ),
+        mac2: ClientEntry.from_dict(
+            {"mac": mac2, "name": "device-2", "online": False, "type": 2}
+        ),
+    }
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state1 = hass.states.get(_entity_id(hass, mac1))
+    state2 = hass.states.get(_entity_id(hass, mac2))
+    assert state1 is not None
+    assert state2 is not None
+    assert state1.state == STATE_NOT_HOME
+    assert state2.state == STATE_NOT_HOME
+
+
+async def test_omitted_unavailable_device_ui_deletion_persistence(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test that an omitted device becomes unavailable and stays deleted when removed via UI."""
+    mac = "00:1E:67:A1:B2:C3"
+    await _setup_with_known_devices(hass, mock_config_entry, [mac])
+    entity_id = _entity_id(hass, mac)
+
+    state = hass.states.get(entity_id)
+    assert state is not None
+
+    # Router now omits this device completely
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: {}
+
+    # Tick past consider_home (180s)
+    await _tick(hass, freezer, seconds=200)
+
+    # State is UNAVAILABLE, enabling the Delete button on entity More Info page
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state == STATE_UNAVAILABLE
+
+    # User clicks Delete in HA UI (removes entity from entity registry)
+    registry = er.async_get(hass)
+    registry.async_remove(entity_id)
+    await hass.async_block_till_done()
+
+    # Entity state is removed from state machine
+    assert hass.states.get(entity_id) is None
+
+    # Subsequent poll does NOT re-create the deleted entity
+    await _tick(hass, freezer, seconds=31)
+    assert hass.states.get(entity_id) is None

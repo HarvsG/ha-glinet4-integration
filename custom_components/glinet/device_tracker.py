@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from homeassistant.components.device_tracker import ScannerEntity, SourceType
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -34,6 +35,7 @@ async def async_setup_entry(
     """Set up device tracker for GLinet component."""
     coordinator: GLinetStatusCoordinator = entry.runtime_data.coordinator
     tracked: set[str] = set()
+    initial_setup = True
 
     @callback
     def _check_new_devices() -> None:
@@ -44,7 +46,7 @@ async def async_setup_entry(
                 continue
 
             # Do not automatically re-track offline devices that were deleted by the user
-            if not device.is_connected and tracked:
+            if not initial_setup and not device.is_connected:
                 continue
 
             new_tracked.append(GLinetDevice(coordinator, device, tracked))
@@ -53,8 +55,9 @@ async def async_setup_entry(
         if new_tracked:
             async_add_entities(new_tracked)
 
-    entry.async_on_unload(coordinator.async_add_listener(_check_new_devices))
     _check_new_devices()
+    initial_setup = False
+    entry.async_on_unload(coordinator.async_add_listener(_check_new_devices))
 
 
 class GLinetDevice(CoordinatorEntity[GLinetStatusCoordinator], ScannerEntity):
@@ -82,7 +85,18 @@ class GLinetDevice(CoordinatorEntity[GLinetStatusCoordinator], ScannerEntity):
         """Handle entity addition to hass."""
         await super().async_added_to_hass()
         if (tracked := self._tracked) is not None:
-            self.async_on_remove(lambda: tracked.discard(self._attr_mac_address))
+
+            def _on_remove() -> None:
+                tracked.discard(self._attr_mac_address)
+                self.router.devices.pop(self._attr_mac_address, None)
+                self.router.devices.pop(self._attr_mac_address.lower(), None)
+
+            self.async_on_remove(_on_remove)
+
+    @property
+    def name(self) -> str:
+        """Return the name."""
+        return self.hostname
 
     @property
     def icon(self) -> str:
@@ -90,9 +104,16 @@ class GLinetDevice(CoordinatorEntity[GLinetStatusCoordinator], ScannerEntity):
         return self._icon
 
     @property
-    def name(self) -> str:
-        """Return the name."""
-        return self.hostname
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return super().available and self._device.available
+
+    @property
+    def state(self) -> str | None:
+        """Return the state of the device tracker."""
+        if not self.available:
+            return STATE_UNAVAILABLE
+        return super().state
 
     @property
     def is_connected(self) -> bool:

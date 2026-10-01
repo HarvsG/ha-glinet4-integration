@@ -490,6 +490,8 @@ class GLinetRouter:
         if all_clients is None:
             return
 
+        all_clients_by_mac = {mac.lower(): dev for mac, dev in all_clients.items()}
+
         uptime = self._system_status.uptime if self._system_status else None
         if (
             not all_clients
@@ -510,19 +512,25 @@ class GLinetRouter:
         )
 
         registry = er.async_get(self.hass)
+        devices_by_lower = {
+            mac.lower(): device for mac, device in self._devices.items()
+        }
         for device_mac, device in list(self._devices.items()):
-            dev_info = all_clients.get(device_mac)
+            dev_info = all_clients_by_mac.get(device_mac.lower())
             device.update(dev_info, self._consider_home)
             if (
                 dev_info is None
                 and not device.is_connected
-                and not registry.async_get_entity_id(TRACKER_DOMAIN, DOMAIN, device_mac)
+                and not device.available
+                and not registry.async_get_entity_id(
+                    TRACKER_DOMAIN, DOMAIN, device_mac.lower()
+                )
             ):
                 del self._devices[device_mac]
 
         for device_mac, dev_info in all_clients.items():
             # Skip if we already have this device
-            if device_mac in self._devices:
+            if device_mac.lower() in devices_by_lower or device_mac in self._devices:
                 continue
 
             # Optionally ignore clients using MAC randomization entirely
@@ -855,6 +863,7 @@ class ClientDevInfo:
         self._ip_address: str | None = None
         self._last_activity: datetime = dt_util.utcnow() - timedelta(days=1)
         self._connected: bool = False
+        self._available: bool = True
         self._if_type: DeviceInterfaceType = DeviceInterfaceType.UNKNOWN
 
     def update(
@@ -865,6 +874,7 @@ class ClientDevInfo:
         """Update connected device info."""
         now: datetime = dt_util.utcnow()
         if dev_info:
+            self._available = True
             # Prefer the user-defined alias as a name
             alias = dev_info.alias
             if alias and alias.strip():
@@ -898,7 +908,18 @@ class ClientDevInfo:
             self._connected = (
                 now - self._last_activity
             ).total_seconds() < consider_home
+            self._available = self._connected
+            if not self._connected:
+                self._ip_address = None
+        else:
+            self._connected = False
+            self._available = False
             self._ip_address = None
+
+    @property
+    def available(self) -> bool:
+        """Return available status."""
+        return self._available
 
     @property
     def is_connected(self) -> bool:
