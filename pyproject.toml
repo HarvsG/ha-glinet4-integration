@@ -29,9 +29,6 @@ dev = [
     "ruff>=0.16.9",
 ]
 
-[tool.uv.sources]
-gli4py = { path = "../gli4py", editable = true }
-
 [tool.hatch.version]
 source = "vcs"
 
