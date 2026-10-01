@@ -139,20 +139,10 @@ def _count_clients_by_type(
     """Group connected clients into wired / wireless / guest counts."""
     wired = wireless = guest = 0
     for client in clients.values():
-        is_online = (
-            client.get("online", True)
-            if isinstance(client, dict)
-            else getattr(client, "online", True)
-        )
-        if not is_online:
+        if not client.online:
             continue
-        iface_val = (
-            client.get("type", 5)
-            if isinstance(client, dict)
-            else getattr(client, "type", 5)
-        )
         iface_type = DEVICE_INTERFACE_TYPE_MAP.get(
-            iface_val, DeviceInterfaceType.UNKNOWN
+            client.type, DeviceInterfaceType.UNKNOWN
         )
         if iface_type == DeviceInterfaceType.LAN:
             wired += 1
@@ -484,12 +474,10 @@ class GLinetRouter:
         )
         if not status:
             return
-        self._system_status = status.get("system")
-        self._wan_status = {
-            network.get("interface"): network for network in status.get("network", [])
-        }
+        self._system_status = status.system
+        self._wan_status = {network.interface: network for network in status.network}
         currently_up = {
-            name for name, network in self._wan_status.items() if network.get("up")
+            name for name, network in self._wan_status.items() if network.up
         }
         new_to_register = currently_up - self._known_wan_interfaces
         if new_to_register:
@@ -502,7 +490,7 @@ class GLinetRouter:
         if all_clients is None:
             return
 
-        uptime = self._system_status.get("uptime")
+        uptime = self._system_status.uptime if self._system_status else None
         if (
             not all_clients
             and uptime is not None
@@ -550,12 +538,8 @@ class GLinetRouter:
             _LOGGER.debug(
                 "Discovered new tracked device %s (name=%r alias=%r)",
                 device_mac,
-                dev_info.get("name")
-                if isinstance(dev_info, dict)
-                else getattr(dev_info, "name", None),
-                dev_info.get("alias")
-                if isinstance(dev_info, dict)
-                else getattr(dev_info, "alias", None),
+                dev_info.name if dev_info else None,
+                dev_info.alias if dev_info else None,
             )
 
         self._client_counts = _count_clients_by_type(all_clients)
@@ -644,10 +628,10 @@ class GLinetRouter:
         if not response:
             return
         for config in response:
-            name = config.get("name")
-            peer_id = config.get("peer_id")
-            group_id = config.get("group_id")
-            raw_tunnel_id = config.get("tunnel_id")
+            name = config.name
+            peer_id = config.peer_id
+            group_id = config.group_id
+            raw_tunnel_id = config.tunnel_id
             tunnel_id = raw_tunnel_id if isinstance(raw_tunnel_id, int) else None
             if tunnel_id is not None:
                 _LOGGER.warning(
@@ -657,7 +641,7 @@ class GLinetRouter:
                     self.model,
                     self.sw_version,
                 )
-            if name is None or peer_id is None or group_id is None:
+            if not name or not peer_id or not group_id:
                 # Don't log the config values, they contain private key material
                 _LOGGER.debug(
                     "Skipping malformed WireGuard client config with keys: %s",
@@ -685,13 +669,13 @@ class GLinetRouter:
         # 0 is disconnted, 1 is connected, 2 is connecting
         self._wireguard_connections = []
         for status_item in status_response:
-            # if status_item["enabled"] is false then status does not exist
-            connected: bool = status_item.get("status", 0) != 0
+            # if status_item.enabled is false then status does not exist
+            connected: bool = status_item.status != 0
 
-            client = self._wireguard_clients.get(status_item["peer_id"])
+            client = self._wireguard_clients.get(status_item.peer_id)
             if client is None:
                 continue
-            client.tunnel_id = status_item.get("tunnel_id")
+            client.tunnel_id = status_item.tunnel_id
             client.connected = connected
             if connected:
                 # If more modern firmware supports more than 1 client being connected, we need to change this
@@ -882,39 +866,21 @@ class ClientDevInfo:
         now: datetime = dt_util.utcnow()
         if dev_info:
             # Prefer the user-defined alias as a name
-            alias = (
-                dev_info.get("alias")
-                if isinstance(dev_info, dict)
-                else getattr(dev_info, "alias", None)
-            )
+            alias = dev_info.alias
             if alias and alias.strip():
                 self._name = alias
             else:
                 # If no alias, fallback to auto-assigned name field
-                name = (
-                    dev_info.get("name", "")
-                    if isinstance(dev_info, dict)
-                    else getattr(dev_info, "name", "")
-                )
+                name = dev_info.name
                 if name and name.strip() and name != "*":
                     self._name = name
                 elif not self._name:
                     self._name = self._mac.replace(":", "_")
 
-            ip = (
-                dev_info.get("ip")
-                if isinstance(dev_info, dict)
-                else getattr(dev_info, "ip", None)
-            )
-            if ip:
-                self._ip_address = ip
+            if dev_info.ip:
+                self._ip_address = dev_info.ip
 
-            is_online = (
-                dev_info.get("online", False)
-                if isinstance(dev_info, dict)
-                else getattr(dev_info, "online", False)
-            )
-            if is_online:
+            if dev_info.online:
                 self._last_activity = now
                 self._connected = True
             elif self._connected:
@@ -924,13 +890,8 @@ class ClientDevInfo:
             else:
                 self._connected = False
 
-            iface_val = (
-                dev_info.get("type", 5)
-                if isinstance(dev_info, dict)
-                else getattr(dev_info, "type", 5)
-            )
             self._if_type = DEVICE_INTERFACE_TYPE_MAP.get(
-                iface_val, DeviceInterfaceType.UNKNOWN
+                dev_info.type, DeviceInterfaceType.UNKNOWN
             )
         elif self._connected:
             # dev_info is None (device completely omitted from router response)

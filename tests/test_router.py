@@ -15,7 +15,12 @@ from gli4py.error_handling import (
     NonZeroResponse,
     TokenError,
 )
-from gli4py.models import ClientEntry, WireguardStatusItem
+from gli4py.models import (
+    ClientEntry,
+    RouterStatusResponse,
+    WireguardClientListItem,
+    WireguardStatusItem,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -60,14 +65,14 @@ async def test_poll_updates_state(
 ) -> None:
     """Test the periodic poll refreshes the router state."""
     router: GLinetRouter = init_integration.runtime_data.router
-    assert router.system_status["uptime"] == 86400.0
+    assert router.system_status.uptime == 86400.0
 
     new_status = deepcopy(MOCK_STATUS)
-    new_status["system"]["uptime"] = 90000.0
+    new_status.system.uptime = 90000.0
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(new_status)
 
     await _tick(hass, freezer)
-    assert router.system_status["uptime"] == 90000.0
+    assert router.system_status.uptime == 90000.0
     assert router.available
 
 
@@ -91,7 +96,7 @@ async def test_token_error_triggers_renew(
 
     mock_api.router_get_status.side_effect = original
     await _tick(hass, freezer)
-    assert router.system_status["uptime"] == 86400.0
+    assert router.system_status.uptime == 86400.0
 
 
 async def test_token_error_immediate_retry_recovers_state_same_tick(
@@ -105,7 +110,7 @@ async def test_token_error_immediate_retry_recovers_state_same_tick(
     login_count = mock_api.login.await_count
 
     new_status = deepcopy(MOCK_STATUS)
-    new_status["system"]["uptime"] = 95000.0
+    new_status.system.uptime = 95000.0
 
     mock_api.router_get_status.side_effect = [
         TokenError("expired"),
@@ -114,7 +119,7 @@ async def test_token_error_immediate_retry_recovers_state_same_tick(
     await _tick(hass, freezer)
 
     assert mock_api.login.await_count == login_count + 1
-    assert router.system_status["uptime"] == 95000.0
+    assert router.system_status.uptime == 95000.0
     assert router.available
 
 
@@ -345,7 +350,9 @@ async def test_wireguard_malformed_config_skipped(
     mock_api: MagicMock,
 ) -> None:
     """Test malformed WireGuard client configs are skipped without errors."""
-    mock_api.wireguard_client_list.side_effect = lambda *_a, **_kw: [{"name": "broken"}]
+    mock_api.wireguard_client_list.side_effect = lambda *_a, **_kw: [
+        WireguardClientListItem.from_dict({"name": "broken"})
+    ]
     mock_config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
@@ -512,7 +519,7 @@ async def test_empty_client_list_ignored_during_reboot_grace(
     assert test_device.is_connected
 
     # Set router uptime to low value (within grace period)
-    router._system_status["uptime"] = 30
+    router._system_status.uptime = 30
     mock_api.all_clients.side_effect = None
     mock_api.all_clients.return_value = {}
 
@@ -534,7 +541,7 @@ async def test_empty_client_list_processed_after_reboot_grace(
     assert test_device.is_connected
 
     # Set router uptime beyond grace period
-    router._system_status["uptime"] = 1000
+    router._system_status.uptime = 1000
     mock_api.all_clients.side_effect = None
     mock_api.all_clients.return_value = {}
 
@@ -914,7 +921,9 @@ async def test_update_device_trackers_skips_unassigned_client(
     router: GLinetRouter = init_integration.runtime_data.router
     mock_api.all_clients.side_effect = None
     mock_api.all_clients.return_value = {
-        "aa:bb:cc:dd:ee:99": {"name": "*", "ip": "192.168.8.199"}
+        "aa:bb:cc:dd:ee:99": ClientEntry.from_dict(
+            {"mac": "aa:bb:cc:dd:ee:99", "name": "*", "ip": "192.168.8.199"}
+        )
     }
 
     await router.update_device_trackers()
@@ -928,10 +937,12 @@ async def test_update_system_status_registers_new_wan_interface(
 ) -> None:
     """Test update_system_status registers newly discovered up WAN interface."""
     router: GLinetRouter = init_integration.runtime_data.router
-    status = {
-        "system": {"uptime": 1000},
-        "network": [{"interface": "new_wan_iface", "up": True, "online": True}],
-    }
+    status = RouterStatusResponse.from_dict(
+        {
+            "system": {"uptime": 1000},
+            "network": [{"interface": "new_wan_iface", "up": True, "online": True}],
+        }
+    )
     mock_api.router_get_status.side_effect = None
     mock_api.router_get_status.return_value = status
 

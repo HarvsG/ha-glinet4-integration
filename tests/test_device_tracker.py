@@ -7,6 +7,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock
 
 from freezegun.api import FrozenDateTimeFactory
+from gli4py.models import ClientEntry
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -135,13 +136,16 @@ async def test_new_device_mid_poll_creates_entity(
     )
 
     clients = deepcopy(MOCK_CLIENTS)
-    clients["00:bb:cc:dd:ee:03"] = {
-        "alias": "Tablet",
-        "name": "tablet",
-        "ip": "192.168.1.102",
-        "online": True,
-        "type": 0,
-    }
+    clients["00:bb:cc:dd:ee:03"] = ClientEntry.from_dict(
+        {
+            "mac": "00:bb:cc:dd:ee:03",
+            "alias": "Tablet",
+            "name": "tablet",
+            "ip": "192.168.1.102",
+            "online": True,
+            "type": 0,
+        }
+    )
     mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     await _tick(hass, freezer)
@@ -193,13 +197,16 @@ async def test_device_with_no_name_tracked(
     """Test a client with neither alias nor valid name gets a tracker entity with MAC-derived name."""
     mac = "00:bb:cc:dd:ee:04"
     clients = deepcopy(MOCK_CLIENTS)
-    clients[mac] = {
-        "alias": "",
-        "name": empty_name,
-        "ip": "192.168.8.103",
-        "online": True,
-        "type": 0,
-    }
+    clients[mac] = ClientEntry.from_dict(
+        {
+            "mac": mac,
+            "alias": "",
+            "name": empty_name,
+            "ip": "192.168.8.103",
+            "online": True,
+            "type": 0,
+        }
+    )
     mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     await _setup_with_known_devices(
@@ -228,13 +235,16 @@ async def test_randomized_mac_ignored_by_default(
     """Test a client using a randomized MAC is ignored by default."""
     random_mac = "9a:bb:cc:dd:ee:99"
     clients = deepcopy(MOCK_CLIENTS)
-    clients[random_mac] = {
-        "alias": "Phone",
-        "name": "pixel",
-        "ip": "192.168.8.199",
-        "online": True,
-        "type": 1,
-    }
+    clients[random_mac] = ClientEntry.from_dict(
+        {
+            "mac": random_mac,
+            "alias": "Phone",
+            "name": "pixel",
+            "ip": "192.168.8.199",
+            "online": True,
+            "type": 1,
+        }
+    )
     mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     mock_config_entry.add_to_hass(hass)
@@ -254,13 +264,16 @@ async def test_randomized_mac_disabled_option(
     """Test a randomized-MAC client is registered as disabled when option is disabled."""
     random_mac = "9a:bb:cc:dd:ee:99"
     clients = deepcopy(MOCK_CLIENTS)
-    clients[random_mac] = {
-        "alias": "Phone",
-        "name": "pixel",
-        "ip": "192.168.8.199",
-        "online": True,
-        "type": 1,
-    }
+    clients[random_mac] = ClientEntry.from_dict(
+        {
+            "mac": random_mac,
+            "alias": "Phone",
+            "name": "pixel",
+            "ip": "192.168.8.199",
+            "online": True,
+            "type": 1,
+        }
+    )
     mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     mock_config_entry.add_to_hass(hass)
@@ -288,13 +301,16 @@ async def test_randomized_mac_enabled_option(
     """Test a randomized-MAC client is enabled when track_randomized_mac is enabled."""
     random_mac = "9a:bb:cc:dd:ee:99"
     clients = deepcopy(MOCK_CLIENTS)
-    clients[random_mac] = {
-        "alias": "Phone",
-        "name": "pixel",
-        "ip": "192.168.8.199",
-        "online": True,
-        "type": 1,
-    }
+    clients[random_mac] = ClientEntry.from_dict(
+        {
+            "mac": random_mac,
+            "alias": "Phone",
+            "name": "pixel",
+            "ip": "192.168.8.199",
+            "online": True,
+            "type": 1,
+        }
+    )
     mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     mock_config_entry.add_to_hass(hass)
@@ -328,8 +344,8 @@ async def test_device_tracker_live_attributes_update(
 
     # Simulate router poll returning an updated IP and alias
     updated_clients = deepcopy(MOCK_CLIENTS)
-    updated_clients[mac]["ip"] = "192.168.1.200"
-    updated_clients[mac]["alias"] = "New HA Name"
+    updated_clients[mac].ip = "192.168.1.200"
+    updated_clients[mac].alias = "New HA Name"
     mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(updated_clients)
 
     await _tick(hass, freezer)
@@ -359,13 +375,16 @@ async def test_restored_device_tracker_name_preserved_on_unassigned_update(
     )
 
     clients = deepcopy(MOCK_CLIENTS)
-    clients[mac] = {
-        "alias": "",
-        "name": "*",
-        "ip": "192.168.8.105",
-        "online": True,
-        "type": 2,
-    }
+    clients[mac] = ClientEntry.from_dict(
+        {
+            "mac": mac,
+            "alias": "",
+            "name": "*",
+            "ip": "192.168.8.105",
+            "online": True,
+            "type": 2,
+        }
+    )
     mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
 
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)

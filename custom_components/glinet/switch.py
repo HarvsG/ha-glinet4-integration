@@ -258,10 +258,7 @@ class TailscaleSwitch(GliSwitchBase):
         """Whether the router exposes the LAN as a subnet."""
         if not self.router.tailscale_config:
             return None
-        la = self.router.tailscale_config.get("lan_enabled")
-        if la is not None:
-            return bool(la)
-        return None
+        return bool(self.router.tailscale_config.lan_enabled)
 
     @property
     def entity_registry_enabled_default(self) -> bool:

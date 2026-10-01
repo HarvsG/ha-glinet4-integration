@@ -65,7 +65,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda system_status: (
-            cpu.get("temperature") if (cpu := system_status.get("cpu")) else None
+            system_status.cpu.temperature if system_status.cpu else None
         ),
     ),
     SystemStatusEntityDescription(
@@ -77,9 +77,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            la[0]
-            if isinstance(la := system_status.get("load_average"), list) and len(la) > 0
-            else None
+            la[0] if (la := system_status.load_average) and len(la) > 0 else None
         ),
     ),
     SystemStatusEntityDescription(
@@ -91,9 +89,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            la[1]
-            if isinstance(la := system_status.get("load_average"), list) and len(la) > 1
-            else None
+            la[1] if (la := system_status.load_average) and len(la) > 1 else None
         ),
     ),
     SystemStatusEntityDescription(
@@ -105,9 +101,7 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda system_status: (
-            la[2]
-            if isinstance(la := system_status.get("load_average"), list) and len(la) > 2
-            else None
+            la[2] if (la := system_status.load_average) and len(la) > 2 else None
         ),
     ),
     SystemStatusEntityDescription(
@@ -120,8 +114,8 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         native_unit_of_measurement=PERCENTAGE,
         value_fn=lambda system_status: (
             (
-                (memory_total := system_status.get("memory_total") or 0) > 0
-                and (memory_free := system_status.get("memory_free") or 0) >= 0
+                (memory_total := system_status.memory_total or 0) > 0
+                and (memory_free := system_status.memory_free or 0) >= 0
                 and (mu := 100 * (1 - memory_free / memory_total))
                 and isinstance(mu, float)
                 and 0 <= mu <= 100
@@ -130,8 +124,8 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
             or None
         ),
         extra_attributes_fn=lambda system_status: {
-            "memory_total": system_status.get("memory_total"),
-            "memory_free": system_status.get("memory_free"),
+            "memory_total": system_status.memory_total,
+            "memory_free": system_status.memory_free,
         },
     ),
     SystemStatusEntityDescription(
@@ -144,8 +138,8 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         native_unit_of_measurement=PERCENTAGE,
         value_fn=lambda system_status: (
             (
-                (flash_total := system_status.get("flash_total") or 0) > 0
-                and (flash_free := system_status.get("flash_free") or 0) >= 0
+                (flash_total := system_status.flash_total or 0) > 0
+                and (flash_free := system_status.flash_free or 0) >= 0
                 and (fu := 100 * (1 - flash_free / flash_total))
                 and isinstance(fu, float)
                 and 0 <= fu <= 100
@@ -154,8 +148,8 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
             or None
         ),
         extra_attributes_fn=lambda system_status: {
-            "flash_total": system_status.get("flash_total"),
-            "flash_free": system_status.get("flash_free"),
+            "flash_total": system_status.flash_total,
+            "flash_free": system_status.flash_free,
         },
     ),
 ]
@@ -193,7 +187,7 @@ async def async_setup_entry(
     # temperature), but only when we have status data to judge by: if the
     # first poll failed, dropping every sensor would leave them all missing
     # until the entry is reloaded.
-    if coordinator.data.system_status.get("uptime") is not None:
+    if coordinator.data.system_status.uptime is not None:
         sensors = [sensor for sensor in sensors if sensor.native_value is not None]
 
     async_add_entities(sensors)
@@ -229,9 +223,7 @@ async def _setup_wan_sensors(
         persisted_interfaces.add(reg_entry.unique_id[len(wan_unique_id_prefix) :])
 
     currently_up = {
-        name
-        for name, network in coordinator.data.wan_status.items()
-        if network.get("up")
+        name for name, network in coordinator.data.wan_status.items() if network.up
     }
 
     initial_interfaces = persisted_interfaces | currently_up
@@ -250,7 +242,7 @@ async def _setup_wan_sensors(
         new_interfaces = {
             name
             for name, network in coordinator.data.wan_status.items()
-            if network.get("up") and network.get("interface") not in initial_interfaces
+            if network.up and network.interface not in initial_interfaces
         }
         if new_interfaces:
             initial_interfaces.update(new_interfaces)
@@ -332,7 +324,7 @@ class SystemUptimeSensor(GliSensorBase):
     @property
     def native_value(self) -> datetime | None:
         """Return the cached boot timestamp, recomputing only on fresh data."""
-        if (uptime := self.coordinator.data.system_status.get("uptime")) is None:
+        if (uptime := self.coordinator.data.system_status.uptime) is None:
             return self._attr_native_value
 
         if uptime != self._last_uptime:
@@ -373,7 +365,7 @@ class WanStatusSensor(GLinetEntity[GLinetStatusCoordinator], SensorEntity):
         state = self.coordinator.data.wan_status.get(self._interface)
         if state is None:
             return STATE_DISCONNECTED
-        return state_for(up=state.get("up"), online=state.get("online"))
+        return state_for(up=state.up, online=state.online)
 
     @property
     def icon(self) -> str:
