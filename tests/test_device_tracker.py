@@ -539,3 +539,42 @@ async def test_offline_device_with_uppercase_mac_is_not_home(
     assert state is not None
     assert state.state == STATE_NOT_HOME
     assert state.attributes.get("ip") == "192.168.0.100"
+
+
+async def test_multiple_offline_restored_devices_tracked_on_setup(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test that multiple offline devices in entity registry are all initialized on setup."""
+    mac1 = "00:bb:cc:dd:ee:01"
+    mac2 = "00:bb:cc:dd:ee:02"
+    mock_config_entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "device_tracker", DOMAIN, mac1, config_entry=mock_config_entry
+    )
+    registry.async_get_or_create(
+        "device_tracker", DOMAIN, mac2, config_entry=mock_config_entry
+    )
+
+    clients = {
+        mac1: ClientEntry.from_dict(
+            {"mac": mac1, "name": "device-1", "online": False, "type": 2}
+        ),
+        mac2: ClientEntry.from_dict(
+            {"mac": mac2, "name": "device-2", "online": False, "type": 2}
+        ),
+    }
+    mock_api.all_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state1 = hass.states.get(_entity_id(hass, mac1))
+    state2 = hass.states.get(_entity_id(hass, mac2))
+    assert state1 is not None
+    assert state2 is not None
+    assert state1.state == STATE_NOT_HOME
+    assert state2.state == STATE_NOT_HOME

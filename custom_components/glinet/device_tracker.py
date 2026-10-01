@@ -35,6 +35,7 @@ async def async_setup_entry(
     """Set up device tracker for GLinet component."""
     coordinator: GLinetStatusCoordinator = entry.runtime_data.coordinator
     tracked: set[str] = set()
+    initial_setup = True
 
     @callback
     def _check_new_devices() -> None:
@@ -45,7 +46,7 @@ async def async_setup_entry(
                 continue
 
             # Do not automatically re-track offline devices that were deleted by the user
-            if not device.is_connected and tracked:
+            if not initial_setup and not device.is_connected:
                 continue
 
             new_tracked.append(GLinetDevice(coordinator, device, tracked))
@@ -54,8 +55,9 @@ async def async_setup_entry(
         if new_tracked:
             async_add_entities(new_tracked)
 
-    entry.async_on_unload(coordinator.async_add_listener(_check_new_devices))
     _check_new_devices()
+    initial_setup = False
+    entry.async_on_unload(coordinator.async_add_listener(_check_new_devices))
 
 
 class GLinetDevice(CoordinatorEntity[GLinetStatusCoordinator], ScannerEntity):
