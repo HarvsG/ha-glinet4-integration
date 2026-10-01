@@ -21,6 +21,7 @@ ICONS_PATH = (
 QUALITY_SCALE_PATH = (
     Path(__file__).parent.parent / "custom_components" / "glinet" / "quality_scale.yaml"
 )
+DOCS_GLINET_PATH = Path(__file__).parent.parent / "docs" / "glinet.markdown"
 
 
 def test_strings_and_en_files_exist() -> None:
@@ -87,17 +88,24 @@ def test_icons_json_exists_and_valid() -> None:
     assert "entity" in icons, "icons.json missing 'entity' root section"
 
 
-def test_quality_scale_translation_rules() -> None:
-    """Test that translation rules in quality_scale.yaml are no longer marked as todo."""
+def test_quality_scale_zero_todos() -> None:
+    """Test that quality_scale.yaml has zero remaining todo rules across all tiers."""
     assert QUALITY_SCALE_PATH.is_file(), "quality_scale.yaml is missing"
     with QUALITY_SCALE_PATH.open("r", encoding="utf-8") as file:
         qs = yaml.safe_load(file)
 
     rules = qs.get("rules", {})
-    for rule in ("entity-translations", "exception-translations", "icon-translations"):
-        status = rules.get(rule)
-        if isinstance(status, dict):
-            status = status.get("status")
-        assert status != "todo", (
-            f"Rule '{rule}' in quality_scale.yaml is still marked as todo"
-        )
+    todos = [
+        rule
+        for rule, val in rules.items()
+        if (val.get("status") if isinstance(val, dict) else val) == "todo"
+    ]
+    assert not todos, f"quality_scale.yaml still contains todo rules: {todos}"
+
+
+def test_glinet_markdown_documentation_exists() -> None:
+    """Test that docs/glinet.markdown exists and is non-empty."""
+    assert DOCS_GLINET_PATH.is_file(), "docs/glinet.markdown is missing"
+    assert DOCS_GLINET_PATH.stat().st_size > 100, (
+        "docs/glinet.markdown is empty or too short"
+    )

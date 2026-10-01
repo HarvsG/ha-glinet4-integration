@@ -103,6 +103,8 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
    - **Password**: The administrator password used to log in to the GL.iNet web admin panel.
    - **Consider Home**: Number of seconds to consider a device still connected after it was last reachable (default: `180`).
 
+For full integration documentation, supported device lists, automation examples, and troubleshooting guides, see [`docs/glinet.markdown`](docs/glinet.markdown).
+
 ---
 
 ## Removal
@@ -165,23 +167,24 @@ If you want to contribute to this integration:
 
 ### 🏗️ Architecture & Core
 
-- [ ] **Home Assistant Code Quality**: Build towards gold and platinum [code-quality](https://developers.home-assistant.io/docs/core/integration-quality-scale/) by comparing against their [checklist](https://developers.home-assistant.io/docs/core/integration-quality-scale/checklist/) and a [similar integration](https://github.com/home-assistant/core/tree/dev/homeassistant/components/fritz)
-- [ ] **Switch from `.get()` to attributes**: Build on the new strongly types responses from gli4py and replace `.get()` methods with accessing attributes - this will require using the types in many tests instead of the mock dictionaries - it may be appropriate to switch these tests to use gli4py's mock api instead.
 - [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
-- [ ] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
 
 ### 💡 Features Under Consideration
 
-- [ ] **Network & Bandwidth Sensors**: Real-time upload and download rate sensors.
-- [ ] **WAN & Public IP Sensors**: Internet reachability sensor (handling offline API timeouts) and external/public IP sensor.
+- [ ] **WAN Access control**: Implement a WAN on/off switch for each client device to enable control of IoT and parental controls
+- [ ] **Port Forwarding**: Implement switches to enable/disable port-forwarding rules
+- [ ] **Network & Bandwidth Sensors**: Real-time upload and download rate sensors for devices.
 - [ ] **VPN Policy Routing**: Automate switching VPN client routing policies per device (e.g. for bypassing geofilters in automations).
 - [ ] **Cellular & Tethering**: USB tethering and cellular modem control for failover internet automations.
 - [ ] **SMS Notifications**: Expose router cellular modem SMS support via a notify platform.
 - [ ] **Firmware Management**: Firmware update status sensor and upgrade trigger (with safety warnings).
-- [ ] **Smart Home BLE**: Explore integration with GL.iNet smart home Bluetooth LE endpoints.
+- [ ] **Smart Home Protocols**: Explore integration with GL.iNet smart home Bluetooth LE and OpenThread border router endpoints.
 
 ### ✅ Completed
 
+- [x] **Home Assistant Quality Scale**: Reached **Platinum** quality scale tier with full documentation ([`docs/glinet.markdown`](docs/glinet.markdown)).
+- [x] **Switch from `.get()` to Attributes**: Replaced dictionary `.get()` calls with strongly-typed `gli4py` class attributes across router, sensors, switches, and diagnostics.
+- [x] **Device Registry Pruning**: Implemented `async_remove_config_entry_device` and device cleanup logic to support removing stale device tracker entities in Home Assistant ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
 - [x] Comprehensive automated test suite with real router hardware fixtures and upstream mock router (`pytest`, `gli4py[mock]`).
 - [x] Strict typing (`mypy --strict`) enforced in CI across integration and tests.
 - [x] Multi-WAN interface connection status sensors.
@@ -203,7 +206,7 @@ If you want to contribute to this integration:
 
 The integration is known to work on the following models:
 
-- **GL-MT3000** (Beryl AX)
+- **GL-MT1300** (Beryl)
 - **GL-B1300** (Convexa-B)
 - **GL-MT6000** (Flint 2)
 
