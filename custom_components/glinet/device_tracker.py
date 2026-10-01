@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import TRACK_RANDOMIZED_MAC_DISABLED, TRACK_RANDOMIZED_MAC_ENABLED
-from .coordinator import GLinetConfigEntry, GLinetDataUpdateCoordinator
+from .coordinator import GLinetConfigEntry, GLinetStatusCoordinator
 from .utils import is_randomized_mac
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up device tracker for GLinet component."""
-    coordinator: GLinetDataUpdateCoordinator = entry.runtime_data
+    coordinator: GLinetStatusCoordinator = entry.runtime_data.coordinator
     tracked: set[str] = set()
 
     @callback
@@ -53,13 +53,13 @@ async def async_setup_entry(
     _check_new_devices()
 
 
-class GLinetDevice(CoordinatorEntity[GLinetDataUpdateCoordinator], ScannerEntity):
+class GLinetDevice(CoordinatorEntity[GLinetStatusCoordinator], ScannerEntity):
     """Representation of a GLinet tracked device."""
 
     _attr_source_type: SourceType = SourceType.ROUTER
 
     def __init__(
-        self, coordinator: GLinetDataUpdateCoordinator, device: ClientDevInfo
+        self, coordinator: GLinetStatusCoordinator, device: ClientDevInfo
     ) -> None:
         """Initialize a GLinet device."""
         super().__init__(coordinator)

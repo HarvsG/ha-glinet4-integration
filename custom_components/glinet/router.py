@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
-from time import monotonic
 from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 import aiohttp
@@ -37,7 +36,6 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, format_mac
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -46,10 +44,8 @@ from .const import (
     DEFAULT_TRACK_RANDOMIZED_MAC,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
-    SLOW_SCAN_INTERVAL,
     TRACK_RANDOMIZED_MAC_IGNORE,
 )
-from .coordinator import GLinetConfigEntry, GLinetData
 from .utils import adjust_mac, is_randomized_mac, is_ssl_error
 from .wan import WanInterfaceState, parse_network_array
 
@@ -60,6 +56,8 @@ if TYPE_CHECKING:
 
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_registry import RegistryEntry
+
+    from .coordinator import GLinetConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 REBOOT_GRACE_PERIOD: int = 90
@@ -237,27 +235,8 @@ class GLinetRouter:
         # Flow control
         self._late_init_complete: bool = False
         self._connect_error: bool = False
+        self._auth_failed: bool = False
         self._consecutive_auth_errors: int = 0
-
-        # Polling tiers
-        self._last_slow_update: float = 0.0
-        self.slow_scan_interval: timedelta = SLOW_SCAN_INTERVAL
-
-        # Reboot debouncing
-        self._last_reboot: float = -float(REBOOT_GRACE_PERIOD)
-
-    async def async_reboot(self) -> bool:
-        """Send reboot command to router, guarding against serial reboots."""
-        now = monotonic()
-        if now - self._last_reboot < REBOOT_GRACE_PERIOD:
-            _LOGGER.warning(
-                "Ignoring duplicate reboot request for %s; router reboot was requested recently",
-                self._host,
-            )
-            return False
-        self._last_reboot = now
-        await self._api.router_reboot()
-        return True
 
     async def async_init(self) -> None:
         """Set up a GL-iNet router.
@@ -356,6 +335,7 @@ class GLinetRouter:
                 "GL-iNet router %s token was renewed",
                 self._host,
             )
+            self._auth_failed = False
             self._consecutive_auth_errors = 0
             self.async_dismiss_reauth_flow()
         except TokenError as exc:
@@ -367,6 +347,7 @@ class GLinetRouter:
             self._connect_error = True
             raise
         except AuthenticationError as exc:
+            self._auth_failed = True
             _LOGGER.exception(
                 "GL-iNet %s failed to renew the token with an authentication error, have you changed your router password?",
                 self._host,
@@ -385,72 +366,12 @@ class GLinetRouter:
                 )
             raise  # Let generic network/timeout exceptions bubble up normally
 
-    async def update_all(self, _: datetime | None = None) -> None:
-        """Update all Gl-inet platforms."""
-        await self.update_system_status()
-        await self.update_device_trackers()
-        await self.update_wifi_ifaces_state()
-        await self.update_wireguard_client_state()
-        await self.update_tailscale_state()
-        if self._led_supported:
-            await self.update_led_state()
-        self._last_slow_update = monotonic()
-
-    async def async_fetch_all(self, full_update: bool = False) -> GLinetData:
-        """Fetch router state according to tiered polling intervals and return snapshot."""
-        now = monotonic()
-        is_slow_tick = (
-            full_update
-            or self._last_slow_update == 0.0
-            or (now - self._last_slow_update >= self.slow_scan_interval.total_seconds())
-        )
-
-        # Fast tier: Real-time system metrics, WAN state, and client presence
-        await self.update_system_status()
-        await self.update_device_trackers()
-
-        # Slow tier: Configuration that changes infrequently and non-configured endpoints
-        # TODO here we ask this to update all on the same scan interval
-        # but in future some sensors e.g WANip need to update less regularly than
-        # others
-        if is_slow_tick:
-            # If a user may have many switches, best to update in bulk
-            await self.update_wifi_ifaces_state()
-            # TODO detect all configured wireguard, openvpn, shadowsocks and
-            # TOR clients & servers with router/vpn/status? and gen a switch for each
-            await self.update_wireguard_client_list()
-            if self._led_supported:
-                await self.update_led_state()
-            # Ensure non-configured endpoints are not polled frequently:
-            # Tailscale configuration probe only runs on slow tier
-            await self.update_tailscale_config()
-            self._last_slow_update = now
-
-        # Active connection states for configured services (polled each cycle if configured)
-        if len(self._wireguard_clients) > 0:
-            await self.update_wireguard_connection_state()
-
-        if self.tailscale_configured:
-            await self.update_tailscale_connection_state()
-
-        if self._connect_error:
-            raise UpdateFailed(f"Communication error with GL-iNet router {self._host}")
-        return GLinetData(
-            system_status=self._system_status,
-            wan_status=self._wan_status,
-            client_counts=self._client_counts,
-            wifi_ifaces=self._wifi_ifaces,
-            wireguard_clients=self._wireguard_clients,
-            wireguard_connections=self._wireguard_connections,
-            tailscale_config=self._tailscale_config,
-            tailscale_connection=self._tailscale_connection,
-            led_enabled=self._led_enable if self._led_supported else None,
-        )
-
     async def _update_platform(
         self, api_callable: Callable[[], Awaitable[T]]
     ) -> T | None:
         """Boilerplate to make update requests to api and handle errors."""
+        if self._auth_failed:
+            await self.renew_token()
 
         try:
             _LOGGER.debug(
@@ -526,6 +447,8 @@ class GLinetRouter:
         if self._connect_error:
             self._connect_error = False
             _LOGGER.info("Reconnected to Gl-inet router %s", self._host)
+        if response is not None:
+            self._auth_failed = False
         _LOGGER.debug(
             "_update_platform() completed without error for callable %s, returning response: %s",
             api_callable.__name__,
@@ -822,6 +745,11 @@ class GLinetRouter:
     def available(self) -> bool:
         """Return True when the last poll of the router succeeded."""
         return not self._connect_error
+
+    @property
+    def auth_failed(self) -> bool:
+        """Return True when authentication with the router has failed."""
+        return self._auth_failed
 
     @property
     def connected_devices_count(self) -> int:

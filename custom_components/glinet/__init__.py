@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING
 
 from homeassistant.const import Platform
 
-from .coordinator import GLinetDataUpdateCoordinator
+from .coordinator import (
+    GLinetRuntimeData,
+    GLinetStatusCoordinator,
+    GLinetSwitchCoordinator,
+)
 from .router import GLinetRouter
 
 if TYPE_CHECKING:
@@ -31,10 +35,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: GLinetConfigEntry) -> bo
     router = GLinetRouter(hass, entry)
     await router.setup()
 
-    coordinator = GLinetDataUpdateCoordinator(hass, entry, router)
-    await coordinator.async_config_entry_first_refresh()
+    status_coordinator = GLinetStatusCoordinator(hass, entry, router)
+    switch_coordinator = GLinetSwitchCoordinator(hass, entry, router)
 
-    entry.runtime_data = coordinator
+    entry.runtime_data = GLinetRuntimeData(
+        router=router,
+        coordinator=status_coordinator,
+        switch_coordinator=switch_coordinator,
+    )
+
+    await status_coordinator.async_config_entry_first_refresh()
+    await switch_coordinator.async_config_entry_first_refresh()
+
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

@@ -11,6 +11,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import callback
 
+from .coordinator import GLinetSwitchCoordinator
 from .entity import GLinetEntity
 
 if TYPE_CHECKING:
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
     from homeassistant.helpers.typing import StateType
 
-    from .coordinator import GLinetConfigEntry, GLinetDataUpdateCoordinator
+    from .coordinator import GLinetConfigEntry
     from .router import GLinetRouter, WireGuardClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ async def async_setup_entry(
     _: HomeAssistant, entry: GLinetConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up GL-iNet switches."""
-    coordinator: GLinetDataUpdateCoordinator = entry.runtime_data
+    coordinator: GLinetSwitchCoordinator = entry.runtime_data.switch_coordinator
     router: GLinetRouter = coordinator.router
     switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch | LedSwitch] = []
     if router.wireguard_clients:
@@ -50,10 +51,10 @@ async def async_setup_entry(
         async_add_entities(switches)
 
 
-class GliSwitchBase(GLinetEntity, SwitchEntity):
+class GliSwitchBase(GLinetEntity[GLinetSwitchCoordinator], SwitchEntity):
     """GL-inet switch base class."""
 
-    def __init__(self, coordinator: GLinetDataUpdateCoordinator) -> None:
+    def __init__(self, coordinator: GLinetSwitchCoordinator) -> None:
         """Initialize a GLinet switch."""
         super().__init__(coordinator)
         self._attr_is_on: bool | None = None
@@ -74,7 +75,7 @@ class WifiApSwitch(GliSwitchBase):
 
     def __init__(
         self,
-        coordinator: GLinetDataUpdateCoordinator,
+        coordinator: GLinetSwitchCoordinator,
         iface_name: str,
         iface: WifiInterface,
     ) -> None:
@@ -192,7 +193,7 @@ class TailscaleSwitch(GliSwitchBase):
     _attr_icon = "mdi:vpn"
     _attr_translation_key = "tailscale"
 
-    def __init__(self, coordinator: GLinetDataUpdateCoordinator) -> None:
+    def __init__(self, coordinator: GLinetSwitchCoordinator) -> None:
         """Initialize Tailscale switch."""
         super().__init__(coordinator)
         if self.coordinator.data:
@@ -294,7 +295,7 @@ class WireGuardSwitch(GliSwitchBase):
     """Representation of a VPN switch."""
 
     def __init__(
-        self, coordinator: GLinetDataUpdateCoordinator, client: WireGuardClient
+        self, coordinator: GLinetSwitchCoordinator, client: WireGuardClient
     ) -> None:
         """Initialize a WireGuard switch."""
         super().__init__(coordinator)
@@ -388,7 +389,7 @@ class LedSwitch(GliSwitchBase):
 
     _attr_translation_key = "led"
 
-    def __init__(self, coordinator: GLinetDataUpdateCoordinator) -> None:
+    def __init__(self, coordinator: GLinetSwitchCoordinator) -> None:
         """Initialize LED switch."""
         super().__init__(coordinator)
         if self.coordinator.data and self.coordinator.data.led_enabled is not None:

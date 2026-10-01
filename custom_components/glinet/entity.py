@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import GLinetDataUpdateCoordinator
+from .coordinator import GLinetBaseCoordinator
 
 if TYPE_CHECKING:
     from .router import GLinetRouter
 
 
-class GLinetEntity(CoordinatorEntity[GLinetDataUpdateCoordinator]):
+class GLinetEntity[T: GLinetBaseCoordinator[Any]](CoordinatorEntity[T]):
     """Base class for GL-iNet entities."""
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: GLinetDataUpdateCoordinator) -> None:
+    def __init__(self, coordinator: T) -> None:
         """Initialize the entity."""
         super().__init__(coordinator)
         self.router: GLinetRouter = coordinator.router

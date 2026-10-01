@@ -18,6 +18,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
+from .coordinator import GLinetStatusCoordinator
 from .entity import GLinetEntity
 from .wan import (
     STATE_CONNECTED,
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
     from homeassistant.helpers.typing import StateType
 
-    from .coordinator import GLinetConfigEntry, GLinetDataUpdateCoordinator
+    from .coordinator import GLinetConfigEntry
     from .router import ClientCounts
 
 _LOGGER = logging.getLogger(__name__)
@@ -165,7 +166,7 @@ async def async_setup_entry(
     """Set up sensors."""
     _LOGGER.debug("Setting up GL-iNet Sensors")
 
-    coordinator: GLinetDataUpdateCoordinator = entry.runtime_data
+    coordinator: GLinetStatusCoordinator = entry.runtime_data.coordinator
     sensors: list[SystemStatusSensor | SystemUptimeSensor] = [
         SystemStatusSensor(coordinator=coordinator, entity_description=description)
         for description in SYSTEM_SENSORS
@@ -205,7 +206,7 @@ async def async_setup_entry(
 async def _setup_wan_sensors(
     hass: HomeAssistant,
     entry: GLinetConfigEntry,
-    coordinator: GLinetDataUpdateCoordinator,
+    coordinator: GLinetStatusCoordinator,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Register WAN sensors from registry + currently-up interfaces, then subscribe."""
@@ -274,12 +275,12 @@ def _boot_time_changed(old: datetime | None, new: datetime) -> bool:
     return old is None or abs(new - old) > UPTIME_DEVIATION
 
 
-class GliSensorBase(GLinetEntity, SensorEntity):
+class GliSensorBase(GLinetEntity[GLinetStatusCoordinator], SensorEntity):
     """GL-iNet sensor base class."""
 
     def __init__(
         self,
-        coordinator: GLinetDataUpdateCoordinator,
+        coordinator: GLinetStatusCoordinator,
         entity_description: SystemStatusEntityDescription,
     ) -> None:
         """Initialize the sensor class."""
@@ -344,7 +345,7 @@ _ICON_FOR_WAN_STATE: dict[str, str] = {
 }
 
 
-class WanStatusSensor(GLinetEntity, SensorEntity):
+class WanStatusSensor(GLinetEntity[GLinetStatusCoordinator], SensorEntity):
     """Sensor showing the connectivity state of one WAN interface."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -352,9 +353,7 @@ class WanStatusSensor(GLinetEntity, SensorEntity):
     _attr_options = [STATE_CONNECTED, STATE_FAILING, STATE_DISCONNECTED]
     _attr_translation_key = "wan_status"
 
-    def __init__(
-        self, coordinator: GLinetDataUpdateCoordinator, interface: str
-    ) -> None:
+    def __init__(self, coordinator: GLinetStatusCoordinator, interface: str) -> None:
         """Initialise a WAN status sensor for the given interface name."""
         super().__init__(coordinator)
         self._interface = interface
@@ -434,14 +433,14 @@ CLIENT_COUNT_SENSORS: tuple[ClientCountEntityDescription, ...] = (
 )
 
 
-class ClientCountSensor(GLinetEntity, SensorEntity):
+class ClientCountSensor(GLinetEntity[GLinetStatusCoordinator], SensorEntity):
     """A count of connected clients (total, or by connection type)."""
 
     entity_description: ClientCountEntityDescription
 
     def __init__(
         self,
-        coordinator: GLinetDataUpdateCoordinator,
+        coordinator: GLinetStatusCoordinator,
         description: ClientCountEntityDescription,
     ) -> None:
         """Initialise the client-count sensor."""

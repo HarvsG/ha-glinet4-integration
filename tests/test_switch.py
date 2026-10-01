@@ -365,7 +365,7 @@ async def test_tailscale_switch_lan_access(
     init_integration: MockConfigEntry,
 ) -> None:
     """Test Tailscale switch lan_access property evaluates router config."""
-    coordinator = init_integration.runtime_data
+    coordinator = init_integration.runtime_data.switch_coordinator
     router = coordinator.router
     switch = TailscaleSwitch(coordinator)
 

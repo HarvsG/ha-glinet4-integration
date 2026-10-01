@@ -16,7 +16,7 @@ CONF_TITLE = "title"
 DEFAULT_VERIFY_SSL = True
 
 SCAN_INTERVAL = timedelta(seconds=30)
-SLOW_SCAN_INTERVAL = timedelta(seconds=300)
+SWITCH_SCAN_INTERVAL = timedelta(seconds=60)
 
 CONF_TRACK_RANDOMIZED_MAC = "track_randomized_mac"
 TRACK_RANDOMIZED_MAC_IGNORE = "ignore"
