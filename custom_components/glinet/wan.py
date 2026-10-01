@@ -7,8 +7,6 @@ WanStatusSensor entity class lives in sensor.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 STATE_CONNECTED = "connected"
 STATE_FAILING = "failing"
 STATE_DISCONNECTED = "disconnected"
@@ -48,12 +46,3 @@ def friendly_name(interface: str) -> str:
             return f"USB Modem IPv6 ({interface})"
         return f"USB Modem ({interface})"
     return interface
-
-
-@dataclass(frozen=True)
-class WanInterfaceState:
-    """Latest known state of one WAN interface, as reported by the router."""
-
-    name: str
-    up: bool
-    online: bool
