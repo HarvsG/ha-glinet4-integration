@@ -60,11 +60,6 @@ class GliSwitchBase(GLinetEntity[GLinetSwitchCoordinator], SwitchEntity):
         self._attr_is_on: bool | None = None
 
     @property
-    def is_on(self) -> bool | None:
-        """Return if the service is on."""
-        return self._attr_is_on
-
-    @property
     def entity_category(self) -> EntityCategory:
         """A config entity."""
         return EntityCategory.CONFIG

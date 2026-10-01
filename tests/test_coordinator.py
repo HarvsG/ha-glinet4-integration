@@ -181,3 +181,23 @@ async def test_switch_coordinator_unconfigured_endpoints_not_polled(
         mock_wg.assert_not_awaited()
         mock_ts.assert_not_awaited()
         mock_led.assert_not_awaited()
+
+
+async def test_coordinator_force_full_refresh(
+    hass: HomeAssistant, init_integration: MockConfigEntry
+) -> None:
+    """Test async_force_full_refresh sets _initial_fetch to True."""
+    coordinator: GLinetSwitchCoordinator = (
+        init_integration.runtime_data.switch_coordinator
+    )
+    coordinator._initial_fetch = False
+    coordinator.async_force_full_refresh()
+    assert coordinator._initial_fetch is True
+
+
+async def test_runtime_data_property(
+    hass: HomeAssistant, init_integration: MockConfigEntry
+) -> None:
+    """Test GLinetRuntimeData.data property returns coordinator.data."""
+    runtime_data: GLinetRuntimeData = init_integration.runtime_data
+    assert runtime_data.data is runtime_data.coordinator.data

@@ -22,7 +22,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.glinet.const import DOMAIN
-from custom_components.glinet.switch import TailscaleSwitch
+from custom_components.glinet.switch import LedSwitch, TailscaleSwitch
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import (
@@ -488,3 +488,110 @@ async def test_wireguard_switch_api_client_error_handling(
         SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
     assert "Unable to enable WG client" in caplog.text
+
+
+async def test_wifi_switch_is_on_and_name_fallbacks(
+    hass: HomeAssistant, init_integration: MockConfigEntry, mock_api: MagicMock
+) -> None:
+    """Test WifiApSwitch is_on and name fallback paths."""
+    entity_id = _entity_id(hass, "iface_default_radio0")
+    switch = hass.data["entity_components"]["switch"].get_entity(entity_id)
+
+    # is_on fallback: _attr_is_on = None -> reads coordinator data
+    switch._attr_is_on = None
+    assert switch.is_on is True
+
+    # is_on None fallback: no matching iface in data -> returns None
+    original_ifaces = switch.coordinator.data.wifi_ifaces
+    switch.coordinator.data.wifi_ifaces = {}
+    assert switch.is_on is None
+
+    # name fallback: ssid empty -> falls to iface.name
+    mock_iface = MagicMock(
+        enabled=True, ssid="", guest=False, hidden=False, encryption="psk2"
+    )
+    mock_iface.name = "test_name"
+    switch.coordinator.data.wifi_ifaces = {"default_radio0": mock_iface}
+    assert switch.name == "test_name"
+
+    # name fallback: ssid and name both empty -> falls to iface_name
+    mock_iface.name = ""
+    assert switch.name == "default_radio0"
+
+    switch.coordinator.data.wifi_ifaces = original_ifaces
+
+
+async def test_tailscale_switch_init_and_is_on_fallbacks(
+    hass: HomeAssistant, init_integration: MockConfigEntry
+) -> None:
+    """Test TailscaleSwitch init branch and is_on fallbacks."""
+    coordinator = init_integration.runtime_data.switch_coordinator
+
+    # is_on fallback: _attr_is_on = None with valid coordinator data
+    entity_id = _entity_id(hass, "tailscale")
+    switch = hass.data["entity_components"]["switch"].get_entity(entity_id)
+    switch._attr_is_on = None
+    result = switch.is_on
+    assert isinstance(result, bool)
+
+    # is_on None fallback: tailscale_connection is None -> returns None
+    original_conn = switch.coordinator.data.tailscale_connection
+    switch.coordinator.data.tailscale_connection = None
+    assert switch.is_on is None
+    switch.coordinator.data.tailscale_connection = original_conn
+
+    # Init fallback: coordinator.data is None -> reads from router
+    coordinator_data = coordinator.data
+    coordinator.data = None
+    new_switch = TailscaleSwitch(coordinator)
+    # Exercises the else branch in __init__
+    assert new_switch._attr_is_on == coordinator.router.tailscale_connection
+    coordinator.data = coordinator_data
+
+
+async def test_wireguard_switch_is_on_fallbacks(
+    hass: HomeAssistant, init_integration: MockConfigEntry
+) -> None:
+    """Test WireGuardSwitch is_on fallbacks."""
+    entity_id = _entity_id(hass, "MockVPN/MockTunnel/wireguard_client")
+    switch = hass.data["entity_components"]["switch"].get_entity(entity_id)
+
+    # is_on fallback: _attr_is_on = None with coordinator data
+    switch._attr_is_on = None
+    result = switch.is_on
+    assert isinstance(result, bool)
+
+    # is_on fallback: wireguard_connections is None -> falls to router
+    original_conns = switch.coordinator.data.wireguard_connections
+    switch.coordinator.data.wireguard_connections = None
+    result = switch.is_on
+    assert isinstance(result, bool)
+    switch.coordinator.data.wireguard_connections = original_conns
+
+
+async def test_led_switch_init_and_is_on_fallbacks(
+    hass: HomeAssistant, init_integration: MockConfigEntry
+) -> None:
+    """Test LedSwitch init branch and is_on fallbacks."""
+    coordinator = init_integration.runtime_data.switch_coordinator
+
+    # is_on fallback: _attr_is_on = None with valid coordinator data
+    entity_id = _entity_id(hass, "led")
+    switch = hass.data["entity_components"]["switch"].get_entity(entity_id)
+    switch._attr_is_on = None
+    result = switch.is_on
+    assert isinstance(result, bool)
+
+    # is_on None fallback: led_enabled is None -> returns None
+    original_led = switch.coordinator.data.led_enabled
+    switch.coordinator.data.led_enabled = None
+    assert switch.is_on is None
+    switch.coordinator.data.led_enabled = original_led
+
+    # Init fallback: coordinator.data is None -> reads from router
+    coordinator_data = coordinator.data
+    coordinator.data = None
+    new_switch = LedSwitch(coordinator)
+    # Exercises the else branch in __init__
+    assert new_switch._attr_is_on == coordinator.router.led_enabled
+    coordinator.data = coordinator_data

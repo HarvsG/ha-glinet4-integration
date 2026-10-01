@@ -50,8 +50,6 @@ class GLinetSwitchData:
     led_enabled: bool | None
 
 
-
-
 class GLinetBaseCoordinator[T](DataUpdateCoordinator[T]):
     """Base coordinator for GL-iNet."""
 

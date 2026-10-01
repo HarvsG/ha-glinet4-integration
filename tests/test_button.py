@@ -37,4 +37,3 @@ async def test_reboot_button_press(
         BUTTON_DOMAIN, SERVICE_PRESS, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
     mock_api.router_reboot.assert_awaited_once()
-
