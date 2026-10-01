@@ -16,7 +16,13 @@ from gli4py.error_handling import (
     NonZeroResponse,
     TokenError,
 )
-from gli4py.models import LedConfigResponse, SystemStatusMetrics, TailscaleConnection
+from gli4py.models import (
+    LedConfigResponse,
+    RouterStatusResponse,
+    SystemStatusMetrics,
+    SystemStatusNetwork,
+    TailscaleConnection,
+)
 from uplink import AiohttpClient
 
 from homeassistant.components.device_tracker import (
@@ -47,7 +53,6 @@ from .const import (
     TRACK_RANDOMIZED_MAC_IGNORE,
 )
 from .utils import adjust_mac, is_randomized_mac, is_ssl_error
-from .wan import WanInterfaceState, parse_network_array
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -228,7 +233,7 @@ class GLinetRouter:
         self._tailscale_connection: bool | None = None
         self._led_enable: bool | None = None
         self._led_supported: bool = False
-        self._wan_status: dict[str, WanInterfaceState] = {}
+        self._wan_status: dict[str, SystemStatusNetwork] = {}
         self._known_wan_interfaces: set[str] = set()
         self._warned_wan_interfaces: set[str] = set()
 
@@ -458,24 +463,16 @@ class GLinetRouter:
 
     async def update_system_status(self) -> None:
         """Update the system status and WAN interface states from the API."""
-        status = await self._update_platform(self._api.router_get_status)
+        status: RouterStatusResponse | None = await self._update_platform(
+            self._api.router_get_status
+        )
         if not status:
             return
-        self._system_status = status["system"]
-        result = parse_network_array(status.get("network", []))
-        self._wan_status = result.states
-
-        for iface in result.malformed_interfaces:
-            if iface not in self._warned_wan_interfaces:
-                _LOGGER.warning(
-                    "GL-iNet router %s returned a malformed entry for WAN interface %s; "
-                    "missing up/online field defaulted to False",
-                    self._host,
-                    iface,
-                )
-                self._warned_wan_interfaces.add(iface)
-
-        currently_up = {name for name, state in result.states.items() if state.up}
+        self._system_status = status.system
+        self._wan_status = {network.interface: network for network in status.network}
+        currently_up = {
+            name for name, network in self._wan_status.items() if network.up
+        }
         new_to_register = currently_up - self._known_wan_interfaces
         if new_to_register:
             self._known_wan_interfaces.update(new_to_register)
@@ -814,7 +811,7 @@ class GLinetRouter:
         return self._system_status
 
     @property
-    def wan_status(self) -> dict[str, WanInterfaceState]:
+    def wan_status(self) -> dict[str, SystemStatusNetwork]:
         """Return the latest WAN interface states keyed by interface name."""
         return self._wan_status
 

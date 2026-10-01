@@ -19,12 +19,11 @@ from .const import DOMAIN, SCAN_INTERVAL, SWITCH_SCAN_INTERVAL
 if TYPE_CHECKING:
     from datetime import timedelta
 
-    from gli4py.models import SystemStatusMetrics, WifiInterface
+    from gli4py.models import SystemStatusMetrics, SystemStatusNetwork, WifiInterface
 
     from homeassistant.core import HomeAssistant
 
     from .router import ClientCounts, GLinetRouter, WireGuardClient
-    from .wan import WanInterfaceState
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ class GLinetStatusData:
     """Status and client data fetched from the GL-iNet router."""
 
     system_status: SystemStatusMetrics
-    wan_status: dict[str, WanInterfaceState]
+    wan_status: dict[str, SystemStatusNetwork]
     client_counts: ClientCounts
 
 
