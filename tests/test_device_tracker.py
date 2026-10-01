@@ -19,6 +19,7 @@ from custom_components.glinet.const import (
     TRACK_RANDOMIZED_MAC_DISABLED,
     TRACK_RANDOMIZED_MAC_ENABLED,
 )
+from custom_components.glinet.router import GLinetRouter
 from homeassistant.const import STATE_HOME, STATE_NOT_HOME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -405,3 +406,43 @@ async def test_device_retracked_after_removal(
 
     # Verify device tracker entity is re-created
     assert entity_reg.async_get_entity_id("device_tracker", DOMAIN, mac) is not None
+
+
+async def test_stale_device_omitted_from_clients_is_pruned_and_deleted(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test that a device omitted from connected_clients is pruned after consider_home expires and stays deleted."""
+    mac = "00:1E:67:A1:B2:C3"
+    await _setup_with_known_devices(hass, mock_config_entry, [mac])
+
+    router: GLinetRouter = mock_config_entry.runtime_data.router
+    entity_reg = er.async_get(hass)
+    entity_id = _entity_id(hass, mac)
+    assert hass.states.get(entity_id) is not None
+
+    # Omit mac from connected_clients response
+    clients = deepcopy(MOCK_CLIENTS)
+    clients.pop(mac, None)
+    mock_api.connected_clients.side_effect = lambda *_a, **_kw: deepcopy(clients)
+
+    # User deletes the entity from entity registry
+    entity_reg.async_remove(entity_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id) is None
+
+    # Tick past consider_home (180s) and refresh
+    freezer.tick(timedelta(seconds=190))
+    await mock_config_entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    # Device is pruned from router.devices once omitted and deleted from registry
+    assert mac not in router.devices
+
+    # Subsequent refresh does NOT re-create the entity
+    await mock_config_entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert entity_reg.async_get_entity_id("device_tracker", DOMAIN, mac) is None

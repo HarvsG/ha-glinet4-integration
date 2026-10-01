@@ -43,6 +43,10 @@ async def async_setup_entry(
             if mac in tracked:
                 continue
 
+            # Do not automatically re-track offline devices that were deleted by the user
+            if not device.is_connected and tracked:
+                continue
+
             new_tracked.append(GLinetDevice(coordinator, device, tracked))
             tracked.add(mac)
 

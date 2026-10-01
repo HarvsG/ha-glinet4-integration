@@ -67,7 +67,7 @@ async def test_wan_sensor_integration(
     assert router is not None
 
     # Update router network status with active WAN interfaces
-    mock_status: RouterStatusResponse = RouterStatusResponse(
+    mock_status = RouterStatusResponse(
         system=SystemStatusMetrics(uptime=1000),
         network=[
             SystemStatusNetwork(interface="wan", up=True, online=True),

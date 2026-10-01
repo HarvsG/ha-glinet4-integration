@@ -505,9 +505,16 @@ class GLinetRouter:
             list(wrt_devices.keys()),
         )
 
-        for device_mac, device in self._devices.items():
+        registry = er.async_get(self.hass)
+        for device_mac, device in list(self._devices.items()):
             dev_info = wrt_devices.get(device_mac)
             device.update(dev_info, self._consider_home)
+            if (
+                dev_info is None
+                and not device.is_connected
+                and not registry.async_get_entity_id(TRACKER_DOMAIN, DOMAIN, device_mac)
+            ):
+                del self._devices[device_mac]
 
         for device_mac, dev_info in wrt_devices.items():
             # Skip if we already have this device
