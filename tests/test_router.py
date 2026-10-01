@@ -927,7 +927,6 @@ async def test_setup_restores_persisted_devices(
     await router.setup()
     assert "aa:bb:cc:11:22:33" in router.devices
     assert router.devices["aa:bb:cc:11:22:33"].name == "Saved Device"
-    router.unload()
 
 
 async def test_update_device_trackers_skips_unassigned_client(

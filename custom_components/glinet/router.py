@@ -324,16 +324,10 @@ class GLinetRouter:
                 )
 
     @callback
-    def unload(self) -> None:
-        """Unload router resources if needed."""
-
-    @callback
     def async_dismiss_reauth_flow(self) -> None:
         """Dismiss any active reauth flow for this entry if communication recovered."""
         for flow in self._entry.async_get_active_flows(self.hass, {SOURCE_REAUTH}):
             self.hass.config_entries.flow.async_abort(flow["flow_id"])
-
-    _async_dismiss_reauth_flow = async_dismiss_reauth_flow
 
     def _create_api(self) -> GLinet:
         """Optimistically return a GLinet object for connection to the API, no test included."""
@@ -363,7 +357,7 @@ class GLinetRouter:
                 self._host,
             )
             self._consecutive_auth_errors = 0
-            self._async_dismiss_reauth_flow()
+            self.async_dismiss_reauth_flow()
         except TokenError as exc:
             _LOGGER.warning(
                 "GL-iNet %s session token was refused or expired: %s; will retry",

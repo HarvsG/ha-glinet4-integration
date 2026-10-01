@@ -100,7 +100,7 @@ class GLinetDataUpdateCoordinator(DataUpdateCoordinator[GLinetData]):
                 raise UpdateFailed(
                     f"Authentication failed for {self.router.host} (attempt {self._consecutive_auth_errors}/{MAX_CONSECUTIVE_AUTH_FAILURES})"
                 ) from exc
-            _LOGGER.exception(
+            _LOGGER.error(  # noqa: TRY400
                 "GL-iNet router %s failed authentication %d consecutive times; requesting re-authentication",
                 self.router.host,
                 self._consecutive_auth_errors,
