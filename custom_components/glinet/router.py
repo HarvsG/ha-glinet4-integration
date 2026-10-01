@@ -498,13 +498,13 @@ class GLinetRouter:
     async def update_device_trackers(self) -> None:
         """Update the device trackers."""
 
-        wrt_devices = await self._update_platform(self._api.all_clients)
-        if wrt_devices is None:
+        all_clients = await self._update_platform(self._api.all_clients)
+        if all_clients is None:
             return
 
         uptime = self._system_status.get("uptime")
         if (
-            not wrt_devices
+            not all_clients
             and uptime is not None
             and uptime < REBOOT_GRACE_PERIOD
             and self._devices
@@ -517,13 +517,13 @@ class GLinetRouter:
 
         _LOGGER.debug(
             "update_device_trackers returned %d device(s): %s",
-            len(wrt_devices),
-            list(wrt_devices.keys()),
+            len(all_clients),
+            list(all_clients.keys()),
         )
 
         registry = er.async_get(self.hass)
         for device_mac, device in list(self._devices.items()):
-            dev_info = wrt_devices.get(device_mac)
+            dev_info = all_clients.get(device_mac)
             device.update(dev_info, self._consider_home)
             if (
                 dev_info is None
@@ -532,7 +532,7 @@ class GLinetRouter:
             ):
                 del self._devices[device_mac]
 
-        for device_mac, dev_info in wrt_devices.items():
+        for device_mac, dev_info in all_clients.items():
             # Skip if we already have this device
             if device_mac in self._devices:
                 continue
@@ -558,7 +558,7 @@ class GLinetRouter:
                 else getattr(dev_info, "alias", None),
             )
 
-        self._client_counts = _count_clients_by_type(wrt_devices)
+        self._client_counts = _count_clients_by_type(all_clients)
 
     async def update_wifi_ifaces_state(self) -> None:
         """Make a call to the API to get the WiFi ifaces config state."""
