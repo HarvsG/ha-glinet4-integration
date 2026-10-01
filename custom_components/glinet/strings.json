@@ -110,5 +110,11 @@
         "enabled": "Track (enabled by default)"
       }
     }
+  },
+  "issues": {
+    "default_password": {
+      "title": "Default router password in use",
+      "description": "Your GL-iNet router at {host} is currently using the factory default admin password ('goodlife').\n\nUsing the default password poses a significant security risk. Anyone on your local network (or connected via Wi-Fi) can log into your router's administrative web interface or API with full root access. This allows unauthorized users to view connected devices, modify firewall and network settings, intercept traffic, or reconfigure VPNs.\n\nPlease log into your router's web interface ({host}) and change the admin password immediately."
+    }
   }
 }

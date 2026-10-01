@@ -62,11 +62,8 @@ async def _tick(
 async def test_sensor_values(
     hass: HomeAssistant, init_integration: MockConfigEntry
 ) -> None:
-    """Test each system sensor reports the value from the API."""
+    """Test enabled system sensors report the value from the API."""
     expected = {
-        "load_avg1": 0.15,
-        "load_avg5": 0.2,
-        "load_avg15": 0.18,
         "memory_use": 45.97,
         "flash_use": 57.87,
     }
@@ -84,6 +81,20 @@ async def test_sensor_values(
     assert flash_state is not None
     assert flash_state.attributes["flash_total"] == 33554432
     assert flash_state.attributes["flash_free"] == 14135296
+
+
+async def test_load_average_sensors_disabled_by_default(
+    hass: HomeAssistant, init_integration: MockConfigEntry
+) -> None:
+    """Test load average sensors are disabled by default."""
+    registry = er.async_get(hass)
+    for key in ("load_avg1", "load_avg5", "load_avg15"):
+        unique_id = f"glinet_sensor/{MOCK_MAC}/system_{key}"
+        entry = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+        assert entry is not None
+        reg_entry = registry.async_get(entry)
+        assert reg_entry is not None
+        assert reg_entry.disabled_by == er.RegistryEntryDisabler.INTEGRATION
 
 
 async def test_connected_clients_sensor(
@@ -206,9 +217,13 @@ async def test_empty_first_status_keeps_all_sensors(
     await hass.async_block_till_done()
 
     for key in SENSOR_KEYS:
-        state = hass.states.get(_entity_id(hass, key))
-        assert state is not None
-        assert state.state == STATE_UNKNOWN
+        entity_id = _entity_id(hass, key)
+        state = hass.states.get(entity_id)
+        if key in ("load_avg1", "load_avg5", "load_avg15"):
+            assert state is None
+        else:
+            assert state is not None
+            assert state.state == STATE_UNKNOWN
 
 
 def test_uptime_calculation_smoothing(freezer: FrozenDateTimeFactory) -> None:
@@ -269,7 +284,7 @@ async def test_sensor_unavailable_on_connect_error(
     mock_api: MagicMock,
 ) -> None:
     """Test sensors become unavailable when the router is unreachable."""
-    entity_id = _entity_id(hass, "load_avg1")
+    entity_id = _entity_id(hass, "memory_use")
 
     originals = {name: getattr(mock_api, name).side_effect for name in POLLED_METHODS}
     for name in POLLED_METHODS:
@@ -288,7 +303,7 @@ async def test_sensor_unavailable_on_connect_error(
     await _tick(hass, freezer)
     state = hass.states.get(entity_id)
     assert state is not None
-    assert float(state.state) == pytest.approx(0.15)
+    assert float(state.state) == pytest.approx(45.97, rel=1e-2)
 
 
 async def test_wan_sensor_setup_from_registry_and_initial_up(

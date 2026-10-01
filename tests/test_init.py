@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.glinet.const import DOMAIN
 from custom_components.glinet.coordinator import (
     GLinetRuntimeData,
     GLinetStatusCoordinator,
@@ -21,8 +22,9 @@ from custom_components.glinet.coordinator import (
 from custom_components.glinet.router import GLinetRouter
 from homeassistant.components.device_tracker import CONF_CONSIDER_HOME
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
+from homeassistant.const import CONF_PASSWORD
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import entity_registry as er, issue_registry as ir
 
 
 async def test_setup_entry_ok(
@@ -131,3 +133,39 @@ async def test_update_listener_reloads_entry(
     assert mock_glinet.call_count == 2
     router: GLinetRouter = init_integration.runtime_data.router
     assert router._consider_home == pytest.approx(60)
+
+
+async def test_default_password_creates_repair_issue(
+    hass: HomeAssistant, init_integration: MockConfigEntry
+) -> None:
+    """Test using default password creates a repair issue."""
+    issue_reg = ir.async_get(hass)
+    issue = issue_reg.async_get_issue(DOMAIN, "default_password")
+    assert issue is not None
+    assert issue.severity == ir.IssueSeverity.WARNING
+
+
+async def test_custom_password_clears_repair_issue(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_glinet: MagicMock,
+    mock_api: MagicMock,
+) -> None:
+    """Test using non-default password does not create a repair issue."""
+    orig_login = mock_api.login._mock_wraps
+
+    async def _fake_login(user: str, pwd: str) -> None:
+        await orig_login(user, "goodlife")
+
+    mock_api.login.side_effect = _fake_login
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        data={**mock_config_entry.data, CONF_PASSWORD: "custompassword"},
+    )
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    issue_reg = ir.async_get(hass)
+    issue = issue_reg.async_get_issue(DOMAIN, "default_password")
+    assert issue is None
