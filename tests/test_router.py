@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import aiohttp
 from freezegun.api import FrozenDateTimeFactory
 from gli4py.error_handling import (
+    APIClientError,
     AuthenticationError,
     LockoutError,
     NonZeroResponse,
@@ -17,6 +18,8 @@ from gli4py.error_handling import (
 )
 from gli4py.models import (
     ClientEntry,
+    PortForwardListResponse,
+    PortForwardRule,
     RouterStatusResponse,
     WireguardClientListItem,
     WireguardStatusItem,
@@ -42,10 +45,11 @@ from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
     ConfigEntryNotReady,
+    HomeAssistantError,
 )
 from homeassistant.helpers import entity_registry as er
 
-from .const import MOCK_STATUS, POLLED_METHODS
+from .const import MOCK_PORT_FORWARD_RULES, MOCK_STATUS, POLLED_METHODS
 
 
 async def _tick(
@@ -952,3 +956,159 @@ async def test_update_system_status_registers_new_wan_interface(
 
     await router.update_system_status()
     assert "new_wan_iface" in router._known_wan_interfaces
+
+
+async def test_update_port_forward_rules_success(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test update_port_forward_rules successfully populates port_forward_rules."""
+    router: GLinetRouter = init_integration.runtime_data.router
+    mock_api.get_port_forward_list.side_effect = None
+    mock_api.get_port_forward_list.return_value = PortForwardListResponse(
+        res=MOCK_PORT_FORWARD_RULES
+    )
+
+    await router.update_port_forward_rules()
+    assert len(router.port_forward_rules) == 2
+    assert "test" in router.port_forward_rules
+    assert router.port_forward_rules["test"].name == "test"
+    assert router.port_forward_rules["test"].enabled is True
+    assert "test2" in router.port_forward_rules
+    assert router.port_forward_rules["test2"].name == "test2"
+    assert router.port_forward_rules["test2"].enabled is False
+
+
+async def test_update_port_forward_rules_api_error_preserves_state(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test update_port_forward_rules retains existing rules on API error."""
+    router: GLinetRouter = init_integration.runtime_data.router
+    router._port_forward_rules = {"cfg2a3837": MOCK_PORT_FORWARD_RULES[0]}
+    mock_api.get_port_forward_list.side_effect = aiohttp.ClientError("Network error")
+
+    await router.update_port_forward_rules()
+    assert len(router.port_forward_rules) == 1
+    assert "cfg2a3837" in router.port_forward_rules
+
+
+async def test_update_port_forward_rules_unsupported_skips(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test update_port_forward_rules does nothing when router does not support port forwarding."""
+    router: GLinetRouter = init_integration.runtime_data.router
+    router._port_forward_supported = False
+    mock_api.get_port_forward_list.reset_mock()
+
+    await router.update_port_forward_rules()
+    mock_api.get_port_forward_list.assert_not_called()
+
+
+async def test_detect_port_forward_support_api_error(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test detect port forward support handles APIClientError by marking unsupported."""
+    router: GLinetRouter = init_integration.runtime_data.router
+    mock_api.get_port_forward_list.side_effect = APIClientError("Method not found")
+
+    await router._async_detect_port_forward_support()
+    assert router.port_forward_supported is False
+
+
+async def test_detect_port_forward_support_network_error(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test detect port forward support raises ConfigEntryNotReady on network error."""
+    router: GLinetRouter = init_integration.runtime_data.router
+    mock_api.get_port_forward_list.side_effect = aiohttp.ClientError(
+        "Connection refused"
+    )
+
+    with pytest.raises(ConfigEntryNotReady):
+        await router._async_detect_port_forward_support()
+
+
+async def test_update_port_forward_rules_none_response(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test update_port_forward_rules handles None response from _update_platform."""
+    router: GLinetRouter = init_integration.runtime_data.router
+    router._port_forward_rules = {"test": MOCK_PORT_FORWARD_RULES[0]}
+    with patch.object(router, "_update_platform", return_value=None):
+        await router.update_port_forward_rules()
+    assert len(router.port_forward_rules) == 1
+
+
+async def test_index_port_forward_rules_disambiguation() -> None:
+    """Test _index_port_forward_rules disambiguates duplicate rule names."""
+    rule1 = PortForwardRule(
+        id="cfg2a3837",
+        name="web",
+        enabled=True,
+        src="wan",
+        dest="lan",
+        src_dport="80",
+        dest_ip="192.168.0.10",
+        dest_port=80,
+        proto="tcp",
+    )
+    rule2 = PortForwardRule(
+        id="cfg2b3837",
+        name="web",
+        enabled=True,
+        src="wan",
+        dest="lan",
+        src_dport="443",
+        dest_ip="192.168.0.10",
+        dest_port=443,
+        proto="tcp",
+    )
+    rule3 = PortForwardRule(
+        id="cfg2c3837",
+        name="",
+        enabled=True,
+        src="wan",
+        dest="lan",
+        src_dport="22",
+        dest_ip="192.168.0.10",
+        dest_port=22,
+        proto="tcp",
+    )
+    indexed = GLinetRouter._index_port_forward_rules([rule1, rule2, rule3])
+    assert "web_tcp_80" in indexed
+    assert "web_tcp_443" in indexed
+    assert "cfg2c3837" in indexed
+
+
+async def test_async_set_port_forward_state(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_api: MagicMock,
+) -> None:
+    """Test async_set_port_forward_state success and not-found error."""
+    router: GLinetRouter = init_integration.runtime_data.router
+    mock_api.get_port_forward_list.return_value = PortForwardListResponse(
+        res=MOCK_PORT_FORWARD_RULES
+    )
+
+    # Success case
+    await router.async_set_port_forward_state("test", False)
+    mock_api.set_port_forward.assert_awaited_once()
+    called_rule = mock_api.set_port_forward.call_args[0][0]
+    assert called_rule.id == "cfg2a3837"
+    assert called_rule.enabled is False
+
+    # Not found case
+    with pytest.raises(HomeAssistantError, match="no longer exists on the router"):
+        await router.async_set_port_forward_state("nonexistent", True)

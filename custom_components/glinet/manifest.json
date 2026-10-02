@@ -12,7 +12,7 @@
   "issue_tracker": "https://github.com/HarvsG/ha-glinet4-integration/issues",
   "loggers": ["gli4py"],
   "quality_scale": "platinum",
-  "requirements": ["gli4py==0.1.0-beta.7"],
+  "requirements": ["gli4py==0.1.0-beta.8"],
   "ssdp": [],
   "version": "1.0.0-beta.1"
 }

@@ -6,10 +6,12 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from gli4py.error_handling import APIClientError
+from gli4py.models import PortForwardRule
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 
 from .coordinator import GLinetSwitchCoordinator
 from .entity import GLinetEntity
@@ -35,7 +37,9 @@ async def async_setup_entry(
     """Set up GL-iNet switches."""
     coordinator: GLinetSwitchCoordinator = entry.runtime_data.switch_coordinator
     router: GLinetRouter = coordinator.router
-    switches: list[WifiApSwitch | WireGuardSwitch | TailscaleSwitch | LedSwitch] = []
+    switches: list[
+        WifiApSwitch | WireGuardSwitch | TailscaleSwitch | LedSwitch | PortForwardSwitch
+    ] = []
     if router.wireguard_clients:
         switches.extend(
             WireGuardSwitch(coordinator, client)
@@ -49,6 +53,23 @@ async def async_setup_entry(
         switches.append(LedSwitch(coordinator))
     if switches:
         async_add_entities(switches)
+
+    tracked_port_forward_rules: set[str] = set()
+
+    @callback
+    def _check_port_forward_rules() -> None:
+        """Add any new port forwarding rule switches."""
+        new_switches = []
+        for rule_key in router.port_forward_rules:
+            if rule_key in tracked_port_forward_rules:
+                continue
+            new_switches.append(PortForwardSwitch(coordinator, rule_key))
+            tracked_port_forward_rules.add(rule_key)
+        if new_switches:
+            async_add_entities(new_switches)
+
+    _check_port_forward_rules()
+    entry.async_on_unload(coordinator.async_add_listener(_check_port_forward_rules))
 
 
 class GliSwitchBase(GLinetEntity[GLinetSwitchCoordinator], SwitchEntity):
@@ -432,3 +453,116 @@ class LedSwitch(GliSwitchBase):
             self._attr_is_on = True
             self.async_write_ha_state()
             _LOGGER.exception("Unable to disable router LEDs")
+
+
+class PortForwardSwitch(GliSwitchBase):
+    """Representation of a router port forwarding switch."""
+
+    _attr_translation_key = "port_forwarding"
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: GLinetSwitchCoordinator, rule_key: str) -> None:
+        """Initialize a PortForward switch."""
+        super().__init__(coordinator)
+        self._rule_key = rule_key
+        rule = self.rule
+        self._rule_name = rule.name if rule and rule.name else rule_key
+        self._attr_translation_placeholders = {"rule_name": self._rule_name}
+        self._attr_is_on = rule.enabled if rule else None
+
+    @property
+    def rule(self) -> PortForwardRule | None:
+        """Return the port forwarding rule from coordinator data or router."""
+        if (
+            self.coordinator.data is not None
+            and self.coordinator.data.port_forward_rules is not None
+        ):
+            rule = self.coordinator.data.port_forward_rules.get(self._rule_key)
+            if isinstance(rule, PortForwardRule):
+                return rule
+        return self.router.port_forward_rules.get(self._rule_key)
+
+    @property
+    def unique_id(self) -> str:
+        """Return the unique id of the switch."""
+        return f"glinet_switch/{self.router.factory_mac}/port_forward/{self._rule_key}/"
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return super().available and self.rule is not None
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return if port forwarding rule is enabled."""
+        if self._attr_is_on is not None:
+            return self._attr_is_on
+        if rule := self.rule:
+            return rule.enabled
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        if rule := self.rule:
+            self._attr_is_on = rule.enabled
+        super()._handle_coordinator_update()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, StateType | bool]:
+        """Return the switch attributes."""
+        rule = self.rule
+        if rule is None:
+            return {}
+        proto = rule.proto.upper().replace(" ", "/") if rule.proto else ""
+        return {
+            "rule_name": rule.name,
+            "protocol": proto,
+            "external_port": str(rule.src_dport) if rule.src_dport is not None else "",
+            "internal_ip": rule.dest_ip,
+            "internal_port": str(rule.dest_port) if rule.dest_port is not None else "",
+        }
+
+    async def async_turn_on(self, **_: Any) -> None:
+        """Turn on the port forwarding rule."""
+        if self.rule is None:
+            return
+        previous_state = self._attr_is_on
+        self._attr_is_on = True
+        self.async_write_ha_state()
+        try:
+            _LOGGER.debug("Enabling port forwarding rule %s", self._rule_key)
+            await self.router.async_set_port_forward_state(self._rule_key, True)
+            await self.coordinator.async_request_refresh()
+        except OSError, APIClientError:
+            self._attr_is_on = previous_state
+            self.async_write_ha_state()
+            _LOGGER.exception(
+                "Unable to enable port forwarding rule %s", self._rule_key
+            )
+        except HomeAssistantError:
+            self._attr_is_on = previous_state
+            self.async_write_ha_state()
+            raise
+
+    async def async_turn_off(self, **_: Any) -> None:
+        """Turn off the port forwarding rule."""
+        if self.rule is None:
+            return
+        previous_state = self._attr_is_on
+        self._attr_is_on = False
+        self.async_write_ha_state()
+        try:
+            _LOGGER.debug("Disabling port forwarding rule %s", self._rule_key)
+            await self.router.async_set_port_forward_state(self._rule_key, False)
+            await self.coordinator.async_request_refresh()
+        except OSError, APIClientError:
+            self._attr_is_on = previous_state
+            self.async_write_ha_state()
+            _LOGGER.exception(
+                "Unable to disable port forwarding rule %s", self._rule_key
+            )
+        except HomeAssistantError:
+            self._attr_is_on = previous_state
+            self.async_write_ha_state()
+            raise

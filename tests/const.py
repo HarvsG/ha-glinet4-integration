@@ -6,6 +6,7 @@ from typing import Any
 
 from gli4py.models import (
     ClientEntry,
+    PortForwardRule,
     RouterStatusResponse,
     TailscaleConfigResponse,
     WifiInterface,
@@ -145,6 +146,34 @@ MOCK_TAILSCALE_CONFIG: TailscaleConfigResponse = TailscaleConfigResponse.from_di
     _MOCK_TAILSCALE_CONFIG_RAW
 )
 
+_MOCK_PORT_FORWARD_RULES_RAW: list[dict[str, Any]] = [
+    {
+        "enabled": True,
+        "src_dport": "1234",
+        "id": "cfg2a3837",
+        "dest_ip": "192.168.0.160",
+        "dest_port": 1234,
+        "name": "test",
+        "src": "wan",
+        "dest": "lan",
+        "proto": "tcp udp",
+    },
+    {
+        "enabled": False,
+        "src_dport": "5000",
+        "id": "cfg2b3837",
+        "dest_ip": "192.168.0.161",
+        "dest_port": 5000,
+        "name": "test2",
+        "src": "wan",
+        "dest": "lan",
+        "proto": "tcp",
+    },
+]
+MOCK_PORT_FORWARD_RULES: list[PortForwardRule] = [
+    PortForwardRule.from_dict(item) for item in _MOCK_PORT_FORWARD_RULES_RAW
+]
+
 # Everything polled each cycle: four methods by the router's own interval
 # plus tailscale_configured and led_get_config via the Tailscale and LED switch
 # entities' async_update. A single succeeding call clears the connect-error
@@ -158,4 +187,5 @@ POLLED_METHODS = (
     "tailscale_configured",
     "tailscale_connection_state",
     "led_get_config",
+    "get_port_forward_list",
 )

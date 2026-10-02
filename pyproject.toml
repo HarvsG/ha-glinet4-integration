@@ -17,7 +17,7 @@ dependencies = [
 dev = [
     "codespell>=2.4.3",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
-    "gli4py[mock]==0.1.0-beta.7",
+    "gli4py[mock]==0.1.0-beta.8",
     "homeassistant-stubs==2026.9.4",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
@@ -181,6 +181,7 @@ disable = [
     "too-many-arguments",
     "too-many-branches",
     "too-many-instance-attributes",
+    "too-many-lines",
     "too-many-locals",
     "too-many-positional-arguments",
     "too-many-public-methods",

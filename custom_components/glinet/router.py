@@ -18,6 +18,7 @@ from gli4py.error_handling import (
 )
 from gli4py.models import (
     LedConfigResponse,
+    PortForwardRule,
     RouterStatusResponse,
     SystemStatusMetrics,
     SystemStatusNetwork,
@@ -37,6 +38,7 @@ from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
     ConfigEntryNotReady,
+    HomeAssistantError,
 )
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -239,6 +241,8 @@ class GLinetRouter:
         self._tailscale_connection: bool | None = None
         self._led_enable: bool | None = None
         self._led_supported: bool = False
+        self._port_forward_rules: dict[str, PortForwardRule] = {}
+        self._port_forward_supported: bool = True
         self._wan_status: dict[str, SystemStatusNetwork] = {}
         self._known_wan_interfaces: set[str] = set()
         self._warned_wan_interfaces: set[str] = set()
@@ -290,6 +294,7 @@ class GLinetRouter:
         self._factory_mac = router_info["mac"]
 
         await self._async_detect_led_support()
+        await self._async_detect_port_forward_support()
 
         self._late_init_complete = True
 
@@ -589,6 +594,88 @@ class GLinetRouter:
         self._led_supported = True
         self._led_enable = config.led_enable
 
+    async def _async_detect_port_forward_support(self) -> None:
+        """Probe the port forward endpoint once to decide whether to expose port forward switches.
+
+        An unsupported endpoint (APIClientError) simply omits the switches. A
+        network-level failure is treated as a setup failure so Home Assistant
+        retries, rather than permanently marking the router as unsupported.
+        """
+        try:
+            response = await self._api.get_port_forward_list()
+        except APIClientError:
+            _LOGGER.debug("Router %s does not report port forward support", self._host)
+            self._port_forward_supported = False
+            return
+        except (OSError, aiohttp.ClientError, TimeoutError) as exc:
+            raise ConfigEntryNotReady(
+                f"Error probing port forward support on {self._host}"
+            ) from exc
+        self._port_forward_supported = True
+        self._port_forward_rules = self._index_port_forward_rules(response.rules)
+
+    @staticmethod
+    def _index_port_forward_rules(
+        rules: list[PortForwardRule],
+    ) -> dict[str, PortForwardRule]:
+        """Index port forwarding rules by stable rule name with collision fallback.
+
+        OpenWrt anonymous section IDs (e.g. cfg2a3837) shift whenever rules are added or
+        deleted. Indexing by rule name ensures stable entity tracking across deletions.
+        """
+        name_counts: dict[str, int] = {}
+        for r in rules:
+            base_key = r.name or r.id
+            name_counts[base_key] = name_counts.get(base_key, 0) + 1
+
+        indexed: dict[str, PortForwardRule] = {}
+        for r in rules:
+            base_key = r.name or r.id
+            key = (
+                f"{base_key}_{r.proto}_{r.src_dport}"
+                if name_counts[base_key] > 1
+                else base_key
+            )
+            indexed[key] = r
+        return indexed
+
+    async def update_port_forward_rules(self) -> None:
+        """Fetch port forwarding rules from the router."""
+        if not self._port_forward_supported:
+            return
+        response = await self._update_platform(self._api.get_port_forward_list)
+        if response is None:
+            return
+        self._port_forward_rules = self._index_port_forward_rules(response.rules)
+
+    async def async_set_port_forward_state(self, rule_key: str, enabled: bool) -> None:
+        """Safely set the enabled state of a port forwarding rule on the router.
+
+        Fetches fresh rules from the router to resolve the rule's current dynamic section ID.
+        If the rule was deleted on the router prior to this call, raises HomeAssistantError
+        and refuses to mutate, protecting any shifted rules from being overwritten.
+        """
+        response = await self._api.get_port_forward_list()
+        self._port_forward_rules = self._index_port_forward_rules(response.rules)
+        target_rule = self._port_forward_rules.get(rule_key)
+        if target_rule is None:
+            raise HomeAssistantError(
+                f"Port forwarding rule '{rule_key}' no longer exists on the router"
+            )
+        new_rule = PortForwardRule(
+            id=target_rule.id,
+            name=target_rule.name,
+            enabled=enabled,
+            src=target_rule.src,
+            dest=target_rule.dest,
+            src_dport=target_rule.src_dport,
+            dest_ip=target_rule.dest_ip,
+            dest_port=target_rule.dest_port,
+            proto=target_rule.proto,
+        )
+        await self._api.set_port_forward(new_rule)
+        target_rule.enabled = enabled
+
     async def update_tailscale_config(self) -> None:
         """Make a call to the API to check tailscale configuration and details."""
         configured = await self._update_platform(self._api.tailscale_configured)
@@ -796,6 +883,16 @@ class GLinetRouter:
     def led_supported(self) -> bool:
         """Return whether the router supports LED control."""
         return self._led_supported
+
+    @property
+    def port_forward_supported(self) -> bool:
+        """Return whether the router supports port forwarding."""
+        return self._port_forward_supported
+
+    @property
+    def port_forward_rules(self) -> dict[str, PortForwardRule]:
+        """Return router port forwarding rules."""
+        return self._port_forward_rules
 
     @property
     def wireguard_clients(self) -> dict[int, WireGuardClient]:
