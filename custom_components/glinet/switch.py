@@ -457,7 +457,7 @@ class LedSwitch(GliSwitchBase):
 class PortForwardSwitch(GliSwitchBase):
     """Representation of a router port forwarding switch."""
 
-    _attr_translation_key = "port_forward"
+    _attr_translation_key = "port_forwarding"
     _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator: GLinetSwitchCoordinator, rule_id: str) -> None:
@@ -484,7 +484,7 @@ class PortForwardSwitch(GliSwitchBase):
     @property
     def unique_id(self) -> str:
         """Return the unique id of the switch."""
-        return f"glinet_switch/{self.router.factory_mac}/{self._rule_name}/port_forward"
+        return f"glinet_switch/{self.router.factory_mac}/port_forward/{self._rule_id}/"
 
     @property
     def available(self) -> bool:

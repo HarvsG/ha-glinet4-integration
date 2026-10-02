@@ -57,7 +57,7 @@
           "on": "mdi:led-on"
         }
       },
-      "port_forward": {
+      "port_forwarding": {
         "default": "mdi:arrow-decision",
         "state": {
           "off": "mdi:arrow-decision-outline",

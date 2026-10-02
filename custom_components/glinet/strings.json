@@ -98,7 +98,7 @@
       "tailscale": { "name": "Tailscale" },
       "wireguard_client": { "name": "WG Client {client_name}" },
       "led": { "name": "LED" },
-      "port_forward": { "name": "Port forward {rule_name}" }
+      "port_forwarding": { "name": "Port forwarding {rule_name}" }
     },
     "button": {
       "reboot": { "name": "Reboot" }

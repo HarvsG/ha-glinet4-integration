@@ -604,8 +604,11 @@ async def test_port_forward_switch_state_and_attributes(
 ) -> None:
     """Test port forward switch setup, disabled-by-default status, and state attributes."""
     registry = er.async_get(hass)
-    entity_id1 = _entity_id(hass, "test/port_forward")
-    entity_id2 = _entity_id(hass, "test2/port_forward")
+    entity_id1 = _entity_id(hass, "port_forward/cfg2a3837/")
+    entity_id2 = _entity_id(hass, "port_forward/cfg2b3837/")
+
+    assert entity_id1 == "switch.gl_inet_b1300_port_forwarding_test"
+    assert entity_id2 == "switch.gl_inet_b1300_port_forwarding_test2"
 
     entry1 = registry.async_get(entity_id1)
     entry2 = registry.async_get(entity_id2)
@@ -643,7 +646,7 @@ async def test_port_forward_switch_turn_on_and_off(
 ) -> None:
     """Test toggling a port forward switch calls set_port_forward with updated rule."""
     registry = er.async_get(hass)
-    entity_id1 = _entity_id(hass, "test/port_forward")
+    entity_id1 = _entity_id(hass, "port_forward/cfg2a3837/")
     registry.async_update_entity(entity_id1, disabled_by=None)
     await hass.config_entries.async_reload(init_integration.entry_id)
     await hass.async_block_till_done()
@@ -673,7 +676,7 @@ async def test_port_forward_switch_turn_on_failure(
 ) -> None:
     """Test turn_on rolls back optimistic state when API call fails."""
     registry = er.async_get(hass)
-    entity_id2 = _entity_id(hass, "test2/port_forward")
+    entity_id2 = _entity_id(hass, "port_forward/cfg2b3837/")
     registry.async_update_entity(entity_id2, disabled_by=None)
     await hass.config_entries.async_reload(init_integration.entry_id)
     await hass.async_block_till_done()
@@ -691,7 +694,7 @@ async def test_port_forward_switch_coordinator_update(
 ) -> None:
     """Test switch updates state when coordinator fetches updated rule from router."""
     registry = er.async_get(hass)
-    entity_id1 = _entity_id(hass, "test/port_forward")
+    entity_id1 = _entity_id(hass, "port_forward/cfg2a3837/")
     registry.async_update_entity(entity_id1, disabled_by=None)
     await hass.config_entries.async_reload(init_integration.entry_id)
     await hass.async_block_till_done()
@@ -724,7 +727,7 @@ async def test_port_forward_switch_rule_edited_on_router(
 ) -> None:
     """Test router stored rule and switch entity attributes update when rule is edited on router."""
     registry = er.async_get(hass)
-    entity_id = _entity_id(hass, "test/port_forward")
+    entity_id = _entity_id(hass, "port_forward/cfg2a3837/")
     registry.async_update_entity(entity_id, disabled_by=None)
     await hass.config_entries.async_reload(init_integration.entry_id)
     await hass.async_block_till_done()
@@ -809,7 +812,8 @@ async def test_port_forward_switch_dynamic_addition(
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
-    entity_id3 = _entity_id(hass, "test3/port_forward")
+    entity_id3 = _entity_id(hass, "port_forward/cfg2c3837/")
+    assert entity_id3 == "switch.gl_inet_b1300_port_forwarding_test3"
     registry = er.async_get(hass)
     entry3 = registry.async_get(entity_id3)
     assert entry3 is not None
@@ -821,7 +825,7 @@ async def test_port_forward_switch_deleted_rule_becomes_unavailable(
 ) -> None:
     """Test switch becomes unavailable when rule is deleted, and orphaned on reload."""
     registry = er.async_get(hass)
-    entity_id1 = _entity_id(hass, "test/port_forward")
+    entity_id1 = _entity_id(hass, "port_forward/cfg2a3837/")
     registry.async_update_entity(entity_id1, disabled_by=None)
     await hass.config_entries.async_reload(init_integration.entry_id)
     await hass.async_block_till_done()
@@ -856,7 +860,7 @@ async def test_port_forward_switch_turn_off_failure(
 ) -> None:
     """Test turn_off rolls back optimistic state when API call fails."""
     registry = er.async_get(hass)
-    entity_id1 = _entity_id(hass, "test/port_forward")
+    entity_id1 = _entity_id(hass, "port_forward/cfg2a3837/")
     registry.async_update_entity(entity_id1, disabled_by=None)
     await hass.config_entries.async_reload(init_integration.entry_id)
     await hass.async_block_till_done()
@@ -874,7 +878,7 @@ async def test_port_forward_switch_fallbacks(
 ) -> None:
     """Test PortForwardSwitch fallback branches for is_on, attributes, and actions."""
     registry = er.async_get(hass)
-    entity_id1 = _entity_id(hass, "test/port_forward")
+    entity_id1 = _entity_id(hass, "port_forward/cfg2a3837/")
     registry.async_update_entity(entity_id1, disabled_by=None)
     await hass.config_entries.async_reload(init_integration.entry_id)
     await hass.async_block_till_done()
@@ -926,5 +930,5 @@ async def test_port_forward_switch_fallbacks(
     switch_unnamed = PortForwardSwitch(switch.coordinator, "cfg_unnamed")
     assert (
         switch_unnamed.unique_id
-        == f"glinet_switch/{switch.router.factory_mac}/cfg_unnamed/port_forward"
+        == f"glinet_switch/{switch.router.factory_mac}/port_forward/cfg_unnamed/"
     )
