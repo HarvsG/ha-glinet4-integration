@@ -54,6 +54,24 @@ class SystemStatusEntityDescription(SensorEntityDescription, frozen_or_thawed=Tr
     ) = None
 
 
+def _memory_extra_attributes(
+    system_status: SystemStatusMetrics,
+) -> dict[str, StateType | bool]:
+    """Return memory attributes with cache/buffers considered."""
+    total = system_status.memory_total
+    free = system_status.memory_free
+    buff_cache = system_status.memory_buff_cache
+    available = (free + (buff_cache or 0)) if free is not None else None
+    used = (total - available) if total is not None and available is not None else None
+    return {
+        "memory_total": total,
+        "memory_free": free,
+        "memory_buff_cache": buff_cache,
+        "memory_available": available,
+        "memory_used": used,
+    }
+
+
 SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
     SystemStatusEntityDescription(
         key="cpu_temp",
@@ -115,18 +133,20 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
         value_fn=lambda system_status: (
             (
                 (memory_total := system_status.memory_total or 0) > 0
-                and (memory_free := system_status.memory_free or 0) >= 0
+                and (
+                    (
+                        memory_free := (system_status.memory_free or 0)
+                        + (system_status.memory_buff_cache or 0)
+                    )
+                    >= 0
+                )
                 and (mu := 100 * (1 - memory_free / memory_total))
-                and isinstance(mu, float)
                 and 0 <= mu <= 100
                 and mu
             )
             or None
         ),
-        extra_attributes_fn=lambda system_status: {
-            "memory_total": system_status.memory_total,
-            "memory_free": system_status.memory_free,
-        },
+        extra_attributes_fn=_memory_extra_attributes,
     ),
     SystemStatusEntityDescription(
         key="flash_use",
@@ -141,7 +161,6 @@ SYSTEM_SENSORS: list[SystemStatusEntityDescription] = [
                 (flash_total := system_status.flash_total or 0) > 0
                 and (flash_free := system_status.flash_free or 0) >= 0
                 and (fu := 100 * (1 - flash_free / flash_total))
-                and isinstance(fu, float)
                 and 0 <= fu <= 100
                 and fu
             )

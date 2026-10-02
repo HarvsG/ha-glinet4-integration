@@ -8,7 +8,12 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from freezegun.api import FrozenDateTimeFactory
-from gli4py.models import RouterStatusResponse, SystemStatusCpu, SystemStatusNetwork
+from gli4py.models import (
+    RouterStatusResponse,
+    SystemStatusCpu,
+    SystemStatusMetrics,
+    SystemStatusNetwork,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -20,6 +25,7 @@ from custom_components.glinet.sensor import (
     WanStatusSensor,
     _boot_time_changed,
     _derive_boot_time,
+    _memory_extra_attributes,
 )
 from custom_components.glinet.wan import STATE_DISCONNECTED
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
@@ -64,7 +70,7 @@ async def test_sensor_values(
 ) -> None:
     """Test enabled system sensors report the value from the API."""
     expected = {
-        "memory_use": 45.97,
+        "memory_use": 32.80,
         "flash_use": 57.87,
     }
     for key, value in expected.items():
@@ -76,11 +82,32 @@ async def test_sensor_values(
     assert memory_state is not None
     assert memory_state.attributes["memory_total"] == 254586880
     assert memory_state.attributes["memory_free"] == 137543680
+    assert memory_state.attributes["memory_buff_cache"] == 33550336
+    assert memory_state.attributes["memory_available"] == 171094016
+    assert memory_state.attributes["memory_used"] == 83492864
 
     flash_state = hass.states.get(_entity_id(hass, "flash_use"))
     assert flash_state is not None
     assert flash_state.attributes["flash_total"] == 33554432
     assert flash_state.attributes["flash_free"] == 14135296
+
+
+def test_memory_extra_attributes_none_handling() -> None:
+    """Test memory extra attributes safely handles missing or None fields."""
+    attrs = _memory_extra_attributes(
+        SystemStatusMetrics(memory_total=100, memory_free=50)
+    )
+    assert attrs["memory_buff_cache"] is None
+    assert attrs["memory_available"] == 50
+    assert attrs["memory_used"] == 50
+
+    attrs = _memory_extra_attributes(SystemStatusMetrics(memory_total=100))
+    assert attrs["memory_available"] is None
+    assert attrs["memory_used"] is None
+
+    attrs = _memory_extra_attributes(SystemStatusMetrics(memory_free=50))
+    assert attrs["memory_available"] == 50
+    assert attrs["memory_used"] is None
 
 
 async def test_load_average_sensors_disabled_by_default(
@@ -303,7 +330,7 @@ async def test_sensor_unavailable_on_connect_error(
     await _tick(hass, freezer)
     state = hass.states.get(entity_id)
     assert state is not None
-    assert float(state.state) == pytest.approx(45.97, rel=1e-2)
+    assert float(state.state) == pytest.approx(32.80, rel=1e-2)
 
 
 async def test_wan_sensor_setup_from_registry_and_initial_up(

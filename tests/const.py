@@ -29,7 +29,8 @@ _MOCK_STATUS_RAW: dict[str, Any] = {
         "uptime": 86400.0,
         "load_average": [0.15, 0.2, 0.18],
         "memory_total": 254586880,
-        "memory_free": 137543680,  # -> memory usage ~45.97%
+        "memory_free": 137543680,
+        "memory_buff_cache": 33550336,  # -> memory usage ~32.80%
         "flash_total": 33554432,
         "flash_free": 14135296,  # -> flash usage ~57.87%
     }
