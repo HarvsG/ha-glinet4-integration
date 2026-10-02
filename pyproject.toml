@@ -17,11 +17,11 @@ dependencies = [
 dev = [
     "codespell>=2.4.3",
     # Must match the requirement pinned in custom_components/glinet/manifest.json
-    "gli4py[mock]==0.1.0-beta.5",
+    "gli4py[mock]==0.1.0-beta.7",
     "homeassistant-stubs==2026.9.4",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
-    "prek>=0.5.3",
+    "prek>=0.5.4",
     "pylint>=4.0.9",
     # Pins homeassistant==2026.9.4 exactly; bump in lockstep with homeassistant-stubs.
     # Also provides pytest, pytest-cov, pytest-asyncio, etc. NOTE: 0.13.317+ requires Python >= 3.14.

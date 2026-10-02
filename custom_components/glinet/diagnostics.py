@@ -10,7 +10,7 @@ from homeassistant.const import CONF_API_TOKEN, CONF_MAC, CONF_PASSWORD
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from .router import GLinetConfigEntry
+    from .coordinator import GLinetConfigEntry
 
 # Entries created before 0.2.0 may still carry a stale api_token
 TO_REDACT = {CONF_PASSWORD, CONF_API_TOKEN, CONF_MAC}
@@ -20,7 +20,7 @@ async def async_get_config_entry_diagnostics(
     _: HomeAssistant, entry: GLinetConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
-    router = entry.runtime_data
+    router = entry.runtime_data.router
     return {
         "entry": {
             "data": async_redact_data(dict(entry.data), TO_REDACT),
@@ -33,11 +33,11 @@ async def async_get_config_entry_diagnostics(
             "connected_devices_count": router.connected_devices_count,
             "wifi_ifaces": [
                 {
-                    "name": iface.get("name", ""),
-                    "enabled": iface.get("enabled", False),
-                    "guest": iface.get("guest", False),
-                    "hidden": iface.get("hidden", False),
-                    "encryption": iface.get("encryption", ""),
+                    "name": iface.name,
+                    "enabled": iface.enabled,
+                    "guest": iface.guest,
+                    "hidden": iface.hidden,
+                    "encryption": iface.encryption,
                     "ssid": REDACTED,
                 }
                 for iface in router.wifi_ifaces.values()

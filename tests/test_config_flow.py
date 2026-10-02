@@ -187,7 +187,7 @@ async def test_dhcp_flow_already_configured_aborts(
     mock_setup_entry: AsyncMock,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Test DHCP discovery of an already configured router aborts."""
+    """Test DHCP discovery of an already configured router aborts and updates host."""
     mock_config_entry.add_to_hass(hass)
 
     result = await hass.config_entries.flow.async_init(
@@ -195,6 +195,7 @@ async def test_dhcp_flow_already_configured_aborts(
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+    assert mock_config_entry.data[CONF_HOST] == f"http://{DHCP_SERVICE_INFO.ip}"
 
 
 async def test_reauth_flow_success(

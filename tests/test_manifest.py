@@ -40,6 +40,7 @@ def test_manifest_structure() -> None:
     assert isinstance(manifest["codeowners"], list)
     assert len(manifest["codeowners"]) > 0
     assert manifest["config_flow"] is True
+    assert manifest.get("quality_scale") == "platinum"
 
 
 def test_manifest_version_format() -> None:

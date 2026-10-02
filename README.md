@@ -10,6 +10,9 @@
 
 A Home Assistant custom component for **GL.iNet routers** powered by [their API version 4](https://dev.gl-inet.com/api/) via the [`gli4py`](https://github.com/HarvsG/gli4py) library.
 
+> [!IMPORTANT]
+> This integration requires **Python 3.14** or later (uses [PEP 758](https://peps.python.org/pep-0758/) exception syntax).
+
 > [!NOTE]
 > GL.iNet no longer publicly documents API v4, so the longevity of this integration relies on API reverse-engineering and may change across future firmware versions.
 > Contributions are warmly welcomed! See the [TODO list](#todo) or search for `#TODO` comments across the codebase.
@@ -61,6 +64,10 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
 - **Re-authentication**: Automatic notification and re-auth flow when the router's login password changes.
 - **Reconfiguration**: Easily modify host URL or connection parameters without re-creating entities.
 - **Options Flow**: Adjust the "Consider Home" presence threshold and configure "Randomized-MAC devices" handling anytime without restarting Home Assistant.
+- **Data Updates & Polling**: Uses Home Assistant's standard `DataUpdateCoordinator` with tiered polling:
+  - **Fast tier (30 seconds)**: System status, WAN interface states, and connected client presence.
+  - **Slow tier (60 seconds)**: Wi-Fi interface configurations, VPN connection states, LED state, and non-configured endpoint probes (probed at startup only).
+  - **Dynamic Entity Discovery**: Newly discovered client devices and WAN interfaces are registered automatically on poll without reloading.
 - **Diagnostics**: Full diagnostic support with automatic redaction of passwords, MACs, and tokens.
 
 ---
@@ -95,6 +102,17 @@ A Home Assistant custom component for **GL.iNet routers** powered by [their API 
    - **Username**: Router admin username (default: `root`).
    - **Password**: The administrator password used to log in to the GL.iNet web admin panel.
    - **Consider Home**: Number of seconds to consider a device still connected after it was last reachable (default: `180`).
+
+For full integration documentation, supported device lists, automation examples, and troubleshooting guides, see [`docs/glinet.markdown`](docs/glinet.markdown).
+
+---
+
+## Removal
+
+1. In Home Assistant, navigate to **Settings** > **Devices & Services**.
+2. Find the **GL-iNet** integration card.
+3. Click the three dots menu icon (⋮) and select **Delete**.
+4. Confirm deletion when prompted.
 
 ---
 
@@ -149,25 +167,24 @@ If you want to contribute to this integration:
 
 ### 🏗️ Architecture & Core
 
-- [ ] **Migrate to `DataUpdateCoordinator`**: Refactor `GLinetRouter` away from custom `async_track_time_interval` polling and manual dispatcher signals to Home Assistant's standard `DataUpdateCoordinator` pattern (including tiered polling rates for high-frequency device trackers vs low-frequency status endpoints).
-- [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
-- [ ] **Device Registry Pruning**: Allow removing stale or unhelpful device tracker entities from the Home Assistant device registry ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
-- [x] **Strict Typing**: Add complete typing to upstream [`gli4py`](https://github.com/HarvsG/gli4py) and enforce strict typing with `mypy --strict` in CI.
-- [x] **Error Recovery**: Further refine error recovery to handle transient empty client lists immediately following a router reboot.
-- [x] **HTTPS Support**: Add support for `https://` router communication with optional handling for local self-signed certificates.
+- [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `system.get_status['service']`).
 
 ### 💡 Features Under Consideration
 
-- [ ] **Network & Bandwidth Sensors**: Real-time upload and download rate sensors.
-- [ ] **WAN & Public IP Sensors**: Internet reachability sensor (handling offline API timeouts) and external/public IP sensor.
+- [ ] **WAN Access control**: Implement a WAN on/off switch for each client device to enable control of IoT and parental controls
+- [ ] **Port Forwarding**: Implement switches to enable/disable port-forwarding rules
+- [ ] **Network & Bandwidth Sensors**: Real-time upload and download rate sensors for devices.
 - [ ] **VPN Policy Routing**: Automate switching VPN client routing policies per device (e.g. for bypassing geofilters in automations).
 - [ ] **Cellular & Tethering**: USB tethering and cellular modem control for failover internet automations.
 - [ ] **SMS Notifications**: Expose router cellular modem SMS support via a notify platform.
 - [ ] **Firmware Management**: Firmware update status sensor and upgrade trigger (with safety warnings).
-- [ ] **Smart Home BLE**: Explore integration with GL.iNet smart home Bluetooth LE endpoints.
+- [ ] **Smart Home Protocols**: Explore integration with GL.iNet smart home Bluetooth LE and OpenThread border router endpoints.
 
 ### ✅ Completed
 
+- [x] **Home Assistant Quality Scale**: Reached **Platinum** quality scale tier with full documentation ([`docs/glinet.markdown`](docs/glinet.markdown)).
+- [x] **Switch from `.get()` to Attributes**: Replaced dictionary `.get()` calls with strongly-typed `gli4py` class attributes across router, sensors, switches, and diagnostics.
+- [x] **Device Registry Pruning**: Implemented `async_remove_config_entry_device` and device cleanup logic to support removing stale device tracker entities in Home Assistant ([documentation](https://developers.home-assistant.io/docs/device_registry_index/#removing-devices)).
 - [x] Comprehensive automated test suite with real router hardware fixtures and upstream mock router (`pytest`, `gli4py[mock]`).
 - [x] Strict typing (`mypy --strict`) enforced in CI across integration and tests.
 - [x] Multi-WAN interface connection status sensors.
@@ -178,6 +195,10 @@ If you want to contribute to this integration:
 - [x] LED indicator control switch.
 - [x] System diagnostic sensors (CPU temp/load, memory, flash, uptime) & reboot button.
 - [x] Connected clients sensors (total plus wired / wireless / guest breakdown).
+- [x] **Strict Typing**: Add complete typing to upstream [`gli4py`](https://github.com/HarvsG/gli4py) and enforce strict typing with `mypy --strict` in CI.
+- [x] **Error Recovery**: Further refine error recovery to handle transient empty client lists immediately following a router reboot.
+- [x] **HTTPS Support**: Add support for `https://` router communication with optional handling for local self-signed certificates.
+- [x] **Migrate to `DataUpdateCoordinator`**: Refactor `GLinetRouter` away from custom `async_track_time_interval` polling and manual dispatcher signals to Home Assistant's standard `DataUpdateCoordinator` pattern
 
 ---
 
@@ -185,7 +206,7 @@ If you want to contribute to this integration:
 
 The integration is known to work on the following models:
 
-- **GL-MT3000** (Beryl AX)
+- **GL-MT1300** (Beryl)
 - **GL-B1300** (Convexa-B)
 - **GL-MT6000** (Flint 2)
 

@@ -4,6 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from gli4py.models import (
+    ClientEntry,
+    RouterStatusResponse,
+    TailscaleConfigResponse,
+    WifiInterface,
+    WireguardClientListItem,
+    WireguardStatusItem,
+)
+
 MOCK_MAC = "94:83:C4:11:22:33"
 # DHCP discovery reports the LAN MAC (factory MAC + 1) without separators
 MOCK_LAN_MAC = "9483c4112234"
@@ -15,7 +24,7 @@ MOCK_ROUTER_INFO: dict[str, Any] = {
     "mac": MOCK_MAC,
 }
 
-MOCK_STATUS: dict[str, Any] = {
+_MOCK_STATUS_RAW: dict[str, Any] = {
     "system": {
         "uptime": 86400.0,
         "load_average": [0.15, 0.2, 0.18],
@@ -26,8 +35,9 @@ MOCK_STATUS: dict[str, Any] = {
         "flash_free": 14135296,  # -> flash usage ~57.87%
     }
 }
+MOCK_STATUS: RouterStatusResponse = RouterStatusResponse.from_dict(_MOCK_STATUS_RAW)
 
-MOCK_CLIENTS: dict[str, Any] = {
+_MOCK_CLIENTS_RAW: dict[str, dict[str, Any]] = {
     "B8:27:EB:44:55:66": {
         "alias": "HomeAssistant-Yellow",
         "name": "homeassistant",
@@ -57,8 +67,12 @@ MOCK_CLIENTS: dict[str, Any] = {
         "type": 0,
     },
 }
+MOCK_CLIENTS: dict[str, ClientEntry] = {
+    mac: ClientEntry.from_dict({"mac": mac, **data})
+    for mac, data in _MOCK_CLIENTS_RAW.items()
+}
 
-MOCK_WIFI_IFACES: dict[str, Any] = {
+_MOCK_WIFI_IFACES_RAW: dict[str, dict[str, Any]] = {
     "default_radio0": {
         "enabled": True,
         "ssid": "GL-MOCK-2G",
@@ -88,13 +102,20 @@ MOCK_WIFI_IFACES: dict[str, Any] = {
         "encryption": "psk2",
     },
 }
+MOCK_WIFI_IFACES: dict[str, WifiInterface] = {
+    name: WifiInterface.from_dict({"name": name, **data})
+    for name, data in _MOCK_WIFI_IFACES_RAW.items()
+}
 
-MOCK_WG_CLIENTS: list[dict[str, Any]] = [
+_MOCK_WG_CLIENTS_RAW: list[dict[str, Any]] = [
     {"name": "MockVPN/MockTunnel", "group_id": 7707, "peer_id": 2001},
     {"name": "MockVPN/MockSplitTunnel", "group_id": 7707, "peer_id": 2002},
 ]
+MOCK_WG_CLIENTS: list[WireguardClientListItem] = [
+    WireguardClientListItem.from_dict(item) for item in _MOCK_WG_CLIENTS_RAW
+]
 
-MOCK_WG_STATE: list[dict[str, Any]] = [
+_MOCK_WG_STATE_RAW: list[dict[str, Any]] = [
     {
         "domain": "vpn.mock.example.com",
         "enabled": False,
@@ -111,13 +132,19 @@ MOCK_WG_STATE: list[dict[str, Any]] = [
         "tx_bytes": 0,
     }
 ]
+MOCK_WG_STATE: list[WireguardStatusItem] = [
+    WireguardStatusItem.from_dict(item) for item in _MOCK_WG_STATE_RAW
+]
 
-MOCK_TAILSCALE_CONFIG: dict[str, Any] = {
+_MOCK_TAILSCALE_CONFIG_RAW: dict[str, Any] = {
     "enabled": False,
     "lan_enabled": True,
     "lan_ip": "192.168.8.0/24",
     "wan_enabled": False,
 }
+MOCK_TAILSCALE_CONFIG: TailscaleConfigResponse = TailscaleConfigResponse.from_dict(
+    _MOCK_TAILSCALE_CONFIG_RAW
+)
 
 # Everything polled each cycle: four methods by the router's own interval
 # plus tailscale_configured and led_get_config via the Tailscale and LED switch
@@ -125,9 +152,11 @@ MOCK_TAILSCALE_CONFIG: dict[str, Any] = {
 # latch, so unavailability tests must fail them all.
 POLLED_METHODS = (
     "router_get_status",
-    "connected_clients",
+    "all_clients",
     "wifi_ifaces_get",
     "wireguard_client_list",
+    "wireguard_client_state",
     "tailscale_configured",
+    "tailscale_connection_state",
     "led_get_config",
 )

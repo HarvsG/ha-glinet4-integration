@@ -8,7 +8,12 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from freezegun.api import FrozenDateTimeFactory
-from gli4py.models import RouterStatusResponse, SystemStatusMetrics
+from gli4py.models import (
+    RouterStatusResponse,
+    SystemStatusCpu,
+    SystemStatusMetrics,
+    SystemStatusNetwork,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -63,11 +68,8 @@ async def _tick(
 async def test_sensor_values(
     hass: HomeAssistant, init_integration: MockConfigEntry
 ) -> None:
-    """Test each system sensor reports the value from the API."""
+    """Test enabled system sensors report the value from the API."""
     expected = {
-        "load_avg1": 0.15,
-        "load_avg5": 0.2,
-        "load_avg15": 0.18,
         "memory_use": 32.80,
         "flash_use": 57.87,
     }
@@ -106,6 +108,20 @@ def test_memory_extra_attributes_none_handling() -> None:
     attrs = _memory_extra_attributes(SystemStatusMetrics(memory_free=50))
     assert attrs["memory_available"] == 50
     assert attrs["memory_used"] is None
+
+
+async def test_load_average_sensors_disabled_by_default(
+    hass: HomeAssistant, init_integration: MockConfigEntry
+) -> None:
+    """Test load average sensors are disabled by default."""
+    registry = er.async_get(hass)
+    for key in ("load_avg1", "load_avg5", "load_avg15"):
+        unique_id = f"glinet_sensor/{MOCK_MAC}/system_{key}"
+        entry = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+        assert entry is not None
+        reg_entry = registry.async_get(entry)
+        assert reg_entry is not None
+        assert reg_entry.disabled_by == er.RegistryEntryDisabler.INTEGRATION
 
 
 async def test_connected_clients_sensor(
@@ -158,8 +174,8 @@ async def test_cpu_temp_sensor_when_reported(
     mock_api: MagicMock,
 ) -> None:
     """Test cpu_temp sensor is created and reports value when router reports cpu."""
-    status: dict[str, Any] = deepcopy(MOCK_STATUS)
-    status["system"]["cpu"] = {"temperature": 42.5}
+    status = deepcopy(MOCK_STATUS)
+    status.system.cpu = SystemStatusCpu(temperature=42.5)
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(status)
 
     mock_config_entry.add_to_hass(hass)
@@ -191,8 +207,8 @@ async def test_missing_cpu_temp_filters_sensor(
     mock_api: MagicMock,
 ) -> None:
     """Test a sensor the router does not report is not created."""
-    status: dict[str, Any] = deepcopy(MOCK_STATUS)
-    status["system"].pop("cpu", None)
+    status = deepcopy(MOCK_STATUS)
+    status.system.cpu = None
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(status)
 
     mock_config_entry.add_to_hass(hass)
@@ -228,9 +244,13 @@ async def test_empty_first_status_keeps_all_sensors(
     await hass.async_block_till_done()
 
     for key in SENSOR_KEYS:
-        state = hass.states.get(_entity_id(hass, key))
-        assert state is not None
-        assert state.state == STATE_UNKNOWN
+        entity_id = _entity_id(hass, key)
+        state = hass.states.get(entity_id)
+        if key in ("load_avg1", "load_avg5", "load_avg15"):
+            assert state is None
+        else:
+            assert state is not None
+            assert state.state == STATE_UNKNOWN
 
 
 def test_uptime_calculation_smoothing(freezer: FrozenDateTimeFactory) -> None:
@@ -262,14 +282,14 @@ async def test_uptime_moves_after_reboot(
     initial = state.state
 
     reboot_boot_time = dt_util.utcnow() - timedelta(seconds=5)
-    status: dict[str, Any] = deepcopy(MOCK_STATUS)
-    mock_api.router_get_status.side_effect = lambda *_a, **_kw: {
-        **status,
-        "system": {
-            **status["system"],
-            "uptime": (dt_util.utcnow() - reboot_boot_time).total_seconds(),
-        },
-    }
+    status = deepcopy(MOCK_STATUS)
+
+    def _status_with_reboot(*_a: Any, **_kw: Any) -> RouterStatusResponse:
+        s = deepcopy(status)
+        s.system.uptime = (dt_util.utcnow() - reboot_boot_time).total_seconds()
+        return s
+
+    mock_api.router_get_status.side_effect = _status_with_reboot
 
     # Two ticks guarantee that both the router poll and entity poll fire
     await _tick(hass, freezer)
@@ -291,7 +311,7 @@ async def test_sensor_unavailable_on_connect_error(
     mock_api: MagicMock,
 ) -> None:
     """Test sensors become unavailable when the router is unreachable."""
-    entity_id = _entity_id(hass, "load_avg1")
+    entity_id = _entity_id(hass, "memory_use")
 
     originals = {name: getattr(mock_api, name).side_effect for name in POLLED_METHODS}
     for name in POLLED_METHODS:
@@ -310,7 +330,7 @@ async def test_sensor_unavailable_on_connect_error(
     await _tick(hass, freezer)
     state = hass.states.get(entity_id)
     assert state is not None
-    assert float(state.state) == pytest.approx(0.15)
+    assert float(state.state) == pytest.approx(32.80, rel=1e-2)
 
 
 async def test_wan_sensor_setup_from_registry_and_initial_up(
@@ -330,7 +350,9 @@ async def test_wan_sensor_setup_from_registry_and_initial_up(
     )
 
     mock_status = deepcopy(MOCK_STATUS)
-    mock_status["network"] = [{"interface": "wan", "up": True, "online": True}]
+    mock_status.network = [
+        SystemStatusNetwork.from_dict({"interface": "wan", "up": True, "online": True})
+    ]
     mock_api.router_get_status.side_effect = lambda *_a, **_kw: deepcopy(mock_status)
 
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
@@ -355,8 +377,8 @@ async def test_wan_sensor_disconnected_state(
     init_integration: MockConfigEntry,
 ) -> None:
     """Test WanStatusSensor reports disconnected when interface is removed from router."""
-    router = init_integration.runtime_data
-    sensor = WanStatusSensor(router, "unplugged_modem")
+    coordinator = init_integration.runtime_data.coordinator
+    sensor = WanStatusSensor(coordinator, "unplugged_modem")
     assert sensor.native_value == STATE_DISCONNECTED
     assert sensor.extra_state_attributes == {
         "interface": "unplugged_modem",
