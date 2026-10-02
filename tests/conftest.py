@@ -87,6 +87,8 @@ async def mock_api(hass: HomeAssistant, mock_router: MockRouter) -> MockGLinet:
         "led_get_config",
         "led_set",
         "router_reboot",
+        "get_port_forward_list",
+        "set_port_forward",
     )
     for name in spied_methods:
         orig = getattr(api, name)

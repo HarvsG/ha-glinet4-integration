@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING
 
@@ -19,7 +19,12 @@ from .const import DOMAIN, SCAN_INTERVAL, SWITCH_SCAN_INTERVAL
 if TYPE_CHECKING:
     from datetime import timedelta
 
-    from gli4py.models import SystemStatusMetrics, SystemStatusNetwork, WifiInterface
+    from gli4py.models import (
+        PortForwardRule,
+        SystemStatusMetrics,
+        SystemStatusNetwork,
+        WifiInterface,
+    )
 
     from homeassistant.core import HomeAssistant
 
@@ -47,6 +52,7 @@ class GLinetSwitchData:
     wireguard_connections: list[WireGuardClient] | None
     tailscale_connection: bool | None
     led_enabled: bool | None
+    port_forward_rules: dict[str, PortForwardRule] = field(default_factory=dict)
 
 
 class GLinetBaseCoordinator[T](DataUpdateCoordinator[T]):
@@ -196,11 +202,15 @@ class GLinetSwitchCoordinator(GLinetBaseCoordinator[GLinetSwitchData]):
         if self.router.led_supported:
             await self.router.update_led_state()
 
+        if self.router.port_forward_supported:
+            await self.router.update_port_forward_rules()
+
         return GLinetSwitchData(
             wifi_ifaces=self.router.wifi_ifaces,
             wireguard_connections=self.router.connected_wireguard_clients,
             tailscale_connection=self.router.tailscale_connection,
             led_enabled=self.router.led_enabled,
+            port_forward_rules=self.router.port_forward_rules,
         )
 
 

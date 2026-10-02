@@ -56,6 +56,13 @@
           "off": "mdi:led-off",
           "on": "mdi:led-on"
         }
+      },
+      "port_forward": {
+        "default": "mdi:arrow-decision",
+        "state": {
+          "off": "mdi:arrow-decision-outline",
+          "on": "mdi:arrow-decision"
+        }
       }
     },
     "button": {

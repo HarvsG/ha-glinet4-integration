@@ -18,6 +18,7 @@ from gli4py.error_handling import (
 )
 from gli4py.models import (
     LedConfigResponse,
+    PortForwardRule,
     RouterStatusResponse,
     SystemStatusMetrics,
     SystemStatusNetwork,
@@ -239,6 +240,8 @@ class GLinetRouter:
         self._tailscale_connection: bool | None = None
         self._led_enable: bool | None = None
         self._led_supported: bool = False
+        self._port_forward_rules: dict[str, PortForwardRule] = {}
+        self._port_forward_supported: bool = True
         self._wan_status: dict[str, SystemStatusNetwork] = {}
         self._known_wan_interfaces: set[str] = set()
         self._warned_wan_interfaces: set[str] = set()
@@ -290,6 +293,7 @@ class GLinetRouter:
         self._factory_mac = router_info["mac"]
 
         await self._async_detect_led_support()
+        await self._async_detect_port_forward_support()
 
         self._late_init_complete = True
 
@@ -589,6 +593,35 @@ class GLinetRouter:
         self._led_supported = True
         self._led_enable = config.led_enable
 
+    async def _async_detect_port_forward_support(self) -> None:
+        """Probe the port forward endpoint once to decide whether to expose port forward switches.
+
+        An unsupported endpoint (APIClientError) simply omits the switches. A
+        network-level failure is treated as a setup failure so Home Assistant
+        retries, rather than permanently marking the router as unsupported.
+        """
+        try:
+            response = await self._api.get_port_forward_list()
+        except APIClientError:
+            _LOGGER.debug("Router %s does not report port forward support", self._host)
+            self._port_forward_supported = False
+            return
+        except (OSError, aiohttp.ClientError, TimeoutError) as exc:
+            raise ConfigEntryNotReady(
+                f"Error probing port forward support on {self._host}"
+            ) from exc
+        self._port_forward_supported = True
+        self._port_forward_rules = {rule.id: rule for rule in response.rules}
+
+    async def update_port_forward_rules(self) -> None:
+        """Fetch port forwarding rules from the router."""
+        if not self._port_forward_supported:
+            return
+        response = await self._update_platform(self._api.get_port_forward_list)
+        if response is None:
+            return
+        self._port_forward_rules = {rule.id: rule for rule in response.rules}
+
     async def update_tailscale_config(self) -> None:
         """Make a call to the API to check tailscale configuration and details."""
         configured = await self._update_platform(self._api.tailscale_configured)
@@ -796,6 +829,16 @@ class GLinetRouter:
     def led_supported(self) -> bool:
         """Return whether the router supports LED control."""
         return self._led_supported
+
+    @property
+    def port_forward_supported(self) -> bool:
+        """Return whether the router supports port forwarding."""
+        return self._port_forward_supported
+
+    @property
+    def port_forward_rules(self) -> dict[str, PortForwardRule]:
+        """Return router port forwarding rules."""
+        return self._port_forward_rules
 
     @property
     def wireguard_clients(self) -> dict[int, WireGuardClient]:
