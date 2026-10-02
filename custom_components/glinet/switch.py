@@ -465,9 +465,8 @@ class PortForwardSwitch(GliSwitchBase):
         super().__init__(coordinator)
         self._rule_id = rule_id
         rule = self.rule
-        self._attr_translation_placeholders = {
-            "rule_name": (rule.name if rule and rule.name else rule_id)
-        }
+        self._rule_name = rule.name if rule and rule.name else rule_id
+        self._attr_translation_placeholders = {"rule_name": self._rule_name}
         self._attr_is_on = rule.enabled if rule else None
 
     @property
@@ -485,7 +484,7 @@ class PortForwardSwitch(GliSwitchBase):
     @property
     def unique_id(self) -> str:
         """Return the unique id of the switch."""
-        return f"glinet_switch/{self.router.factory_mac}/port_forward_{self._rule_id}"
+        return f"glinet_switch/{self.router.factory_mac}/{self._rule_name}/port_forward"
 
     @property
     def available(self) -> bool:
