@@ -167,7 +167,7 @@ If you want to contribute to this integration:
 
 ### 🏗️ Architecture & Core
 
-- [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `router/vpn/status`).
+- [ ] **Unified VPN Switch Architecture**: Abstract VPN switches to be platform and protocol-agnostic, supporting WireGuard, OpenVPN, Shadowsocks, and Tor clients & servers programmatically (e.g., via `system.get_status['service']`).
 
 ### 💡 Features Under Consideration
 
