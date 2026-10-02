@@ -513,17 +513,13 @@ class PortForwardSwitch(GliSwitchBase):
         rule = self.rule
         if rule is None:
             return {}
-        src_port: int | str = rule.src_dport
-        if isinstance(src_port, str) and src_port.isdigit():
-            src_port = int(src_port)
-        dst_port: int | str = rule.dest_port
-        if isinstance(dst_port, str) and dst_port.isdigit():
-            dst_port = int(dst_port)
+        proto = rule.proto.upper().replace(" ", "/") if rule.proto else ""
         return {
-            "protocol": rule.proto,
-            "external_port": src_port,
+            "rule_name": rule.name,
+            "protocol": proto,
+            "external_port": str(rule.src_dport) if rule.src_dport is not None else "",
             "internal_ip": rule.dest_ip,
-            "internal_port": dst_port,
+            "internal_port": str(rule.dest_port) if rule.dest_port is not None else "",
         }
 
     async def async_turn_on(self, **_: Any) -> None:

@@ -626,19 +626,21 @@ async def test_port_forward_switch_state_and_attributes(
     state1 = hass.states.get(entity_id1)
     assert state1 is not None
     assert state1.state == STATE_ON
-    assert state1.attributes["protocol"] == "tcp udp"
-    assert state1.attributes["external_port"] == 1234
+    assert state1.attributes["rule_name"] == "test"
+    assert state1.attributes["protocol"] == "TCP/UDP"
+    assert state1.attributes["external_port"] == "1234"
     assert state1.attributes["internal_ip"] == "192.168.0.160"
-    assert state1.attributes["internal_port"] == 1234
+    assert state1.attributes["internal_port"] == "1234"
     assert "rule_id" not in state1.attributes
 
     state2 = hass.states.get(entity_id2)
     assert state2 is not None
     assert state2.state == STATE_OFF
-    assert state2.attributes["protocol"] == "tcp"
-    assert state2.attributes["external_port"] == 5000
+    assert state2.attributes["rule_name"] == "test2"
+    assert state2.attributes["protocol"] == "TCP"
+    assert state2.attributes["external_port"] == "5000"
     assert state2.attributes["internal_ip"] == "192.168.0.161"
-    assert state2.attributes["internal_port"] == 5000
+    assert state2.attributes["internal_port"] == "5000"
 
 
 async def test_port_forward_switch_turn_on_and_off(
@@ -738,15 +740,16 @@ async def test_port_forward_switch_rule_edited_on_router(
     assert router.port_forward_rules["cfg2a3837"].dest_ip == "192.168.0.160"
     state = hass.states.get(entity_id)
     assert state is not None
-    assert state.attributes["protocol"] == "tcp udp"
-    assert state.attributes["external_port"] == 1234
+    assert state.attributes["rule_name"] == "test"
+    assert state.attributes["protocol"] == "TCP/UDP"
+    assert state.attributes["external_port"] == "1234"
     assert state.attributes["internal_ip"] == "192.168.0.160"
-    assert state.attributes["internal_port"] == 1234
+    assert state.attributes["internal_port"] == "1234"
 
-    # Rule is edited on the router (e.g. port, destination IP, protocol)
+    # Rule is edited on the router (e.g. name, port, destination IP, protocol)
     edited_rule = PortForwardRule(
         id="cfg2a3837",
-        name="test",
+        name="renamed_test",
         enabled=True,
         src="wan",
         dest="lan",
@@ -763,6 +766,7 @@ async def test_port_forward_switch_rule_edited_on_router(
     await hass.async_block_till_done()
 
     # Router stored rule updated
+    assert router.port_forward_rules["cfg2a3837"].name == "renamed_test"
     assert router.port_forward_rules["cfg2a3837"].dest_port == 8443
     assert router.port_forward_rules["cfg2a3837"].dest_ip == "192.168.0.170"
     assert router.port_forward_rules["cfg2a3837"].src_dport == "8443"
@@ -771,10 +775,11 @@ async def test_port_forward_switch_rule_edited_on_router(
     # Entity attributes updated
     updated_state = hass.states.get(entity_id)
     assert updated_state is not None
-    assert updated_state.attributes["protocol"] == "tcp"
-    assert updated_state.attributes["external_port"] == 8443
+    assert updated_state.attributes["rule_name"] == "renamed_test"
+    assert updated_state.attributes["protocol"] == "TCP"
+    assert updated_state.attributes["external_port"] == "8443"
     assert updated_state.attributes["internal_ip"] == "192.168.0.170"
-    assert updated_state.attributes["internal_port"] == 8443
+    assert updated_state.attributes["internal_port"] == "8443"
 
     # Toggling switch acts on the updated rule
     await hass.services.async_call(
@@ -784,6 +789,7 @@ async def test_port_forward_switch_rule_edited_on_router(
     called_rule = mock_api.set_port_forward.call_args[0][0]
     assert called_rule.id == "cfg2a3837"
     assert called_rule.enabled is False
+    assert called_rule.name == "renamed_test"
     assert called_rule.dest_port == 8443
     assert called_rule.dest_ip == "192.168.0.170"
 
@@ -924,7 +930,23 @@ async def test_port_forward_switch_fallbacks(
     switch.router._port_forward_rules["cfg2d3837"] = rule_str
     switch._rule_id = "cfg2d3837"
     switch.coordinator.data = None
-    assert switch.extra_state_attributes["internal_port"] == 80
+    assert switch.extra_state_attributes["internal_port"] == "80"
+
+    # When proto is empty
+    rule_no_proto = PortForwardRule(
+        id="cfg2e3837",
+        name="test_no_proto",
+        enabled=True,
+        src="wan",
+        dest="lan",
+        src_dport="80",
+        dest_ip="192.168.0.10",
+        dest_port="80",
+        proto="",
+    )
+    switch.router._port_forward_rules["cfg2e3837"] = rule_no_proto
+    switch._rule_id = "cfg2e3837"
+    assert switch.extra_state_attributes["protocol"] == ""
 
     # Rule with empty name falls back to rule_id in unique_id
     switch_unnamed = PortForwardSwitch(switch.coordinator, "cfg_unnamed")
