@@ -38,6 +38,7 @@ from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
     ConfigEntryNotReady,
+    HomeAssistantError,
 )
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -611,7 +612,32 @@ class GLinetRouter:
                 f"Error probing port forward support on {self._host}"
             ) from exc
         self._port_forward_supported = True
-        self._port_forward_rules = {rule.id: rule for rule in response.rules}
+        self._port_forward_rules = self._index_port_forward_rules(response.rules)
+
+    @staticmethod
+    def _index_port_forward_rules(
+        rules: list[PortForwardRule],
+    ) -> dict[str, PortForwardRule]:
+        """Index port forwarding rules by stable rule name with collision fallback.
+
+        OpenWrt anonymous section IDs (e.g. cfg2a3837) shift whenever rules are added or
+        deleted. Indexing by rule name ensures stable entity tracking across deletions.
+        """
+        name_counts: dict[str, int] = {}
+        for r in rules:
+            base_key = r.name or r.id
+            name_counts[base_key] = name_counts.get(base_key, 0) + 1
+
+        indexed: dict[str, PortForwardRule] = {}
+        for r in rules:
+            base_key = r.name or r.id
+            key = (
+                f"{base_key}_{r.proto}_{r.src_dport}"
+                if name_counts[base_key] > 1
+                else base_key
+            )
+            indexed[key] = r
+        return indexed
 
     async def update_port_forward_rules(self) -> None:
         """Fetch port forwarding rules from the router."""
@@ -620,7 +646,35 @@ class GLinetRouter:
         response = await self._update_platform(self._api.get_port_forward_list)
         if response is None:
             return
-        self._port_forward_rules = {rule.id: rule for rule in response.rules}
+        self._port_forward_rules = self._index_port_forward_rules(response.rules)
+
+    async def async_set_port_forward_state(self, rule_key: str, enabled: bool) -> None:
+        """Safely set the enabled state of a port forwarding rule on the router.
+
+        Fetches fresh rules from the router to resolve the rule's current dynamic section ID.
+        If the rule was deleted on the router prior to this call, raises HomeAssistantError
+        and refuses to mutate, protecting any shifted rules from being overwritten.
+        """
+        response = await self._api.get_port_forward_list()
+        self._port_forward_rules = self._index_port_forward_rules(response.rules)
+        target_rule = self._port_forward_rules.get(rule_key)
+        if target_rule is None:
+            raise HomeAssistantError(
+                f"Port forwarding rule '{rule_key}' no longer exists on the router"
+            )
+        new_rule = PortForwardRule(
+            id=target_rule.id,
+            name=target_rule.name,
+            enabled=enabled,
+            src=target_rule.src,
+            dest=target_rule.dest,
+            src_dport=target_rule.src_dport,
+            dest_ip=target_rule.dest_ip,
+            dest_port=target_rule.dest_port,
+            proto=target_rule.proto,
+        )
+        await self._api.set_port_forward(new_rule)
+        target_rule.enabled = enabled
 
     async def update_tailscale_config(self) -> None:
         """Make a call to the API to check tailscale configuration and details."""
