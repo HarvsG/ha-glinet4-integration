@@ -244,4 +244,4 @@ skip = "uv.lock,./.git/*,./.mypy_cache/*,*.json"
 ignore-words-list = "hass"
 
 [tool.poetry.group.dev.dependencies]
-gli4py = { version = "==0.1.0-beta.3", extras = ["mock"] }
+gli4py = { version = "==0.1.0b8", extras = ["mock"] }
